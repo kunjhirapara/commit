@@ -23,12 +23,22 @@ export const syncUser = mutation({
   },
 });
 
-export const getUser = query({
+export const getUsers = query({
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("User is not authenticated");
+    const users = await ctx.db.query("users").collect();
+    return users;
+  },
+});
+export const getUserByClerkId = query({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
-    return await ctx.db
+    const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .first();
+    if (!user) throw new Error("User not found");
+    return user;
   },
 });
