@@ -37,7 +37,7 @@ export const getInterviewByStreamCallId = query({
         q.eq("streamCallId", args.streamCallId),
       )
       .first();
-    if (!interview) throw new Error("Interview not found");
+
     return interview;
   },
 });
@@ -50,7 +50,7 @@ export const createInterview = mutation({
     status: v.string(),
     streamCallId: v.string(),
     candidateId: v.string(),
-    interviewerIds: v.array(v.id("users")),
+    interviewerIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
