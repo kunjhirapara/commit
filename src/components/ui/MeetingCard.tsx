@@ -40,7 +40,7 @@ function MeetingCard({ interview }: { interview: Interview }) {
                 ? "default"
                 : status === "upcoming"
                   ? "secondary"
-                  : "outline"
+                  : "outline-solid"
             }>
             {status === "live"
               ? "Live Now"
