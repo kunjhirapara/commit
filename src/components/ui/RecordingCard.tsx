@@ -1,12 +1,17 @@
+"use client";
+
 import { CallRecording } from "@stream-io/video-react-sdk";
 import toast from "react-hot-toast";
 import { format } from "date-fns";
 import { calculateRecordingDuration } from "@/lib/utils";
 import { CalendarIcon, ClockIcon, CopyIcon, PlayIcon } from "lucide-react";
+import { useState } from "react";
 import { Button } from "./button";
 import { Card, CardContent, CardFooter, CardHeader } from "./card";
 
 function RecordingCard({ recording }: { recording: CallRecording }) {
+  const [isPlaying, setIsPlaying] = useState(false);
+
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(recording.url);
@@ -44,19 +49,26 @@ function RecordingCard({ recording }: { recording: CallRecording }) {
 
       <CardContent>
         <div
-          className="w-full aspect-video bg-muted/50 rounded-lg flex items-center justify-center cursor-pointer group"
-          onClick={() => window.open(recording.url, "_blank")}>
-          <div className="size-12 rounded-full bg-background/90 flex items-center justify-center group-hover:bg-primary transition-colors">
-            <PlayIcon className="size-6 text-muted-foreground group-hover:text-primary-foreground transition-colors" />
-          </div>
+          className="w-full aspect-video bg-muted/50 rounded-lg flex items-center justify-center cursor-pointer group relative overflow-hidden"
+          onClick={() => !isPlaying && setIsPlaying(true)}>
+          {isPlaying ? (
+            <video
+              src={recording.url}
+              controls
+              autoPlay
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="size-12 rounded-full bg-background/90 flex items-center justify-center group-hover:bg-primary transition-colors">
+              <PlayIcon className="size-6 text-muted-foreground group-hover:text-primary-foreground transition-colors" />
+            </div>
+          )}
         </div>
       </CardContent>
       <CardFooter className="gap-2">
-        <Button
-          className="flex-1"
-          onClick={() => window.open(recording.url, "_blank")}>
+        <Button className="flex-1" onClick={() => setIsPlaying(!isPlaying)}>
           <PlayIcon className="size-4 mr-2" />
-          Play Recording
+          {isPlaying ? "Stop Playing" : "Play Recording"}
         </Button>
         <Button variant="secondary" onClick={handleCopyLink}>
           <CopyIcon className="size-4" />
