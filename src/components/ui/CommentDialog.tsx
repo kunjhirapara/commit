@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import { Label } from "./label";
 
 import { Textarea } from "./textarea";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,7 +49,10 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
       setRating(0);
       setIsOpen(false);
     } catch (error) {
-      toast.error("Failed to submit comment");
+      logError("CommentDialog.handleSubmit", error, { interviewId });
+      toast.error(
+        getDisplayErrorMessage(error, "Failed to submit comment."),
+      );
     }
   };
 

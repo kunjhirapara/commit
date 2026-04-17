@@ -1,10 +1,10 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { createServerError, requireIdentity } from "./errorUtils";
 // get all interviews
 export const getAllInterviews = query({
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    await requireIdentity(ctx);
     const interviews = await ctx.db.query("interviews").collect();
     return interviews;
   },
@@ -13,8 +13,7 @@ export const getAllInterviews = query({
 // get interviews for a candidate
 export const getMyInterviews = query({
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    const identity = await requireIdentity(ctx);
     const interviews = await ctx.db
       .query("interviews")
       .withIndex("by_candidate_id", (q) =>
@@ -29,8 +28,7 @@ export const getMyInterviews = query({
 export const getInterviewByStreamCallId = query({
   args: { streamCallId: v.string() },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    await requireIdentity(ctx);
     const interview = await ctx.db
       .query("interviews")
       .withIndex("by_stream_call_id", (q) =>
@@ -53,8 +51,7 @@ export const createInterview = mutation({
     interviewerIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    await requireIdentity(ctx);
     return await ctx.db.insert("interviews", {
       ...args,
     });
@@ -67,6 +64,25 @@ export const updateInterviewStatus = mutation({
     status: v.string(),
   },
   handler: async (ctx, args) => {
+    const identity = await requireIdentity(ctx);
+    const interview = await ctx.db.get(args.interviewId);
+
+    if (!interview) {
+      throw createServerError(
+        new Error(`Interview not found: ${args.interviewId}`),
+        "Interview not found.",
+      );
+    }
+
+    if (!interview.interviewerIds.includes(identity.subject)) {
+      throw createServerError(
+        new Error(
+          `User ${identity.subject} is not allowed to update interview ${args.interviewId}`,
+        ),
+        "You are not allowed to update this interview.",
+      );
+    }
+
     return await ctx.db.patch(args.interviewId, {
       status: args.status,
       ...(args.status === "completed" ? { endTime: Date.now() } : {}),

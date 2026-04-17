@@ -1,6 +1,7 @@
 import { useRouter } from "next/navigation";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import toast from "react-hot-toast";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 const useMeetingActions = () => {
   const router = useRouter();
@@ -24,8 +25,10 @@ const useMeetingActions = () => {
       router.push(`/meeting/${call.id}`);
       toast.success("Meeting Created");
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to create meeting");
+      logError("useMeetingActions.createInstantMeeting", error);
+      toast.error(
+        getDisplayErrorMessage(error, "Failed to create meeting."),
+      );
     }
   };
 

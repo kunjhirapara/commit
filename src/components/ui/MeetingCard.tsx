@@ -16,7 +16,6 @@ import { Button } from "./button";
 type Interview = Doc<"interviews">;
 
 function MeetingCard({ interview }: { interview: Interview }) {
-  console.log("🚀 ~ MeetingCard.tsx:19 ~ MeetingCard ~ interview:", interview);
   const { joinMeeting } = useMeetingActions();
 
   const status = getMeetingStatus(interview);
@@ -40,7 +39,7 @@ function MeetingCard({ interview }: { interview: Interview }) {
                 ? "default"
                 : status === "upcoming"
                   ? "secondary"
-                  : "outline-solid"
+                  : "outline"
             }>
             {status === "live"
               ? "Live Now"

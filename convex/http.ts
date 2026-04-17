@@ -3,6 +3,7 @@ import { httpAction } from "./_generated/server";
 import { api } from "./_generated/api";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { Webhook } from "svix";
+import { createServerError, logServerError } from "./errorUtils";
 
 const http = httpRouter();
 
@@ -12,7 +13,11 @@ http.route({
   handler: httpAction(async (ctx, req) => {
     const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      throw new Error("Webhook secret not configured");
+      logServerError(
+        "clerk-webhook.config",
+        new Error("Webhook secret not configured"),
+      );
+      return new Response("Webhook unavailable", { status: 503 });
     }
 
     const svix_id = req.headers.get("svix-id");
@@ -20,7 +25,11 @@ http.route({
     const svix_signature = req.headers.get("svix-signature");
 
     if (!svix_id || !svix_timestamp || !svix_signature) {
-      throw new Error("Missing Svix headers");
+      logServerError(
+        "clerk-webhook.headers",
+        new Error("Missing Svix headers"),
+      );
+      return new Response("Invalid webhook request", { status: 400 });
     }
 
     const payload = await req.json();
@@ -36,7 +45,7 @@ http.route({
         svix_signature: svix_signature,
       }) as WebhookEvent;
     } catch (err) {
-      console.error("Webhook verification failed:", err);
+      logServerError("clerk-webhook.verify", err);
       return new Response("Invalid signature", { status: 400 });
     }
 
@@ -56,8 +65,14 @@ http.route({
           image: image_url || undefined,
         });
       } catch (error) {
-        console.error("Error syncing user:", error);
-        return new Response("Error syncing user", { status: 500 });
+        logServerError("clerk-webhook.syncUser", error, {
+          clerkId: id,
+          eventType,
+        });
+        throw createServerError(
+          error,
+          "Unable to process the webhook payload.",
+        );
       }
     }
     return new Response("Webhook processed successfully", { status: 200 });

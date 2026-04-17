@@ -1,5 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
+import { requireIdentity } from "./errorUtils";
 
 export const syncUser = mutation({
   args: {
@@ -25,8 +26,7 @@ export const syncUser = mutation({
 
 export const getUsers = query({
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    await requireIdentity(ctx);
     const users = await ctx.db.query("users").collect();
     return users;
   },
@@ -34,11 +34,13 @@ export const getUsers = query({
 export const getUserByClerkId = query({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
+    if (!args.clerkId) return null;
+
     const user = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .first();
-    if (!user) throw new Error("User not found");
+
     return user;
   },
 });

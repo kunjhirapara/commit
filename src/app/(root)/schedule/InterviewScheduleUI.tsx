@@ -26,6 +26,7 @@ import { Loader2Icon, XIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { TIME_SLOTS } from "@/constants";
 import MeetingCard from "@/components/ui/MeetingCard";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 function InterviewScheduleUI() {
   const client = useStreamVideoClient();
@@ -34,19 +35,11 @@ function InterviewScheduleUI() {
   const [isCreating, setIsCreating] = useState(false);
 
   const interviews = useQuery(api.interviews.getAllInterviews, {}) ?? [];
-  console.log(
-    "🚀 ~ InterviewScheduleUI.tsx:37 ~ InterviewScheduleUI ~ interviews:",
-    interviews,
-  );
   const users = useQuery(api.users.getUsers, {}) ?? [];
   const createInterview = useMutation(api.interviews.createInterview);
 
   const candidates = users?.filter((u) => u.role === "candidate");
   const interviewers = users?.filter((u) => u.role === "interviewer");
-  console.log(
-    "🚀 ~ InterviewScheduleUI.tsx:42 ~ InterviewScheduleUI ~ interviewers:",
-    interviewers,
-  );
 
   const [formData, setFormData] = useState({
     title: "",
@@ -109,8 +102,16 @@ function InterviewScheduleUI() {
         interviewerIds: user?.id ? [user.id] : [],
       });
     } catch (error) {
-      console.error("Error scheduling interview:", error);
-      toast.error("Failed to schedule the interview. Please try again.");
+      logError("InterviewScheduleUI.scheduleMeeting", error, {
+        candidateId: formData.candidateId,
+        interviewerCount: formData.interviewerIds.length,
+      });
+      toast.error(
+        getDisplayErrorMessage(
+          error,
+          "Failed to schedule the interview. Please try again.",
+        ),
+      );
     } finally {
       setIsCreating(false);
     }

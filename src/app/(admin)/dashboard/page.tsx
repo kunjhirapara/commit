@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import CommentDialog from "@/components/ui/CommentDialog";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 type Interview = Doc<"interviews">;
 
@@ -42,17 +43,19 @@ function DashboardPage() {
       await updateStatus({ interviewId, status });
       toast.success(`Interview marked as ${status}`);
     } catch (error) {
-      toast.error("Failed to update status");
+      logError("DashboardPage.handleStatusUpdate", error, {
+        interviewId,
+        status,
+      });
+      toast.error(
+        getDisplayErrorMessage(error, "Failed to update interview status."),
+      );
     }
   };
 
   if (!interviews || !users) return <LoaderUI />;
 
   const groupedInterviews = groupInterviews(interviews);
-  console.log(
-    "🚀 ~ page.tsx:52 ~ DashboardPage ~ groupedInterviews:",
-    groupedInterviews,
-  );
 
   return (
     <div className="container mx-auto py-10">

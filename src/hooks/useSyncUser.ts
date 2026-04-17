@@ -4,6 +4,7 @@ import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect } from "react";
+import { logError } from "@/lib/errors";
 
 /**
  * Hook to sync the currently signed-in Clerk user to Convex.
@@ -25,7 +26,7 @@ export function useSyncUser() {
           image: user.imageUrl ?? undefined,
         });
       } catch (error) {
-        console.error("Error syncing user to Convex:", error);
+        logError("useSyncUser", error, { userId: user.id });
       }
     };
 

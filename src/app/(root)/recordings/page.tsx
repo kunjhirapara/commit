@@ -1,19 +1,28 @@
 "use client";
 
+import ErrorState from "@/components/ui/ErrorState";
 import LoaderUI from "@/components/ui/LoaderUI";
 import RecordingCard from "@/components/ui/RecordingCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import useGetCalls from "@/hooks/useGetCalls";
 import { CallRecording } from "@stream-io/video-react-sdk";
 import { useEffect, useState } from "react";
+import { getDisplayErrorMessage, getErrorDetails, logError } from "@/lib/errors";
 
 function RecordingsPage() {
-  const { calls, isLoading } = useGetCalls();
+  const { calls, isLoading, error, errorDetails } = useGetCalls();
   const [recordings, setRecordings] = useState<CallRecording[]>([]);
+  const [recordingsError, setRecordingsError] = useState<string | null>(null);
+  const [recordingsErrorDetails, setRecordingsErrorDetails] = useState<
+    string | undefined
+  >();
 
   useEffect(() => {
     const fetchRecordings = async () => {
       if (!calls) return;
+
+      setRecordingsError(null);
+      setRecordingsErrorDetails(undefined);
 
       try {
         const callData = await Promise.all(
@@ -25,13 +34,31 @@ function RecordingsPage() {
         const allRecordings = callData.flat();
         setRecordings(allRecordings);
       } catch (error) {
-        console.log("Error fetching recordings:", error);
+        logError("RecordingsPage.fetchRecordings", error);
+        setRecordings([]);
+        setRecordingsError(
+          getDisplayErrorMessage(
+            error,
+            "We couldn't load recordings right now.",
+          ),
+        );
+        setRecordingsErrorDetails(getErrorDetails(error));
       }
     };
     fetchRecordings();
   }, [calls]);
 
   if (isLoading) return <LoaderUI />;
+
+  if (error || recordingsError) {
+    return (
+      <ErrorState
+        title="Unable to load recordings"
+        message={recordingsError ?? error ?? "Recordings are unavailable."}
+        details={recordingsErrorDetails ?? errorDetails}
+      />
+    );
+  }
 
   return (
     <div className="container max-w-7xl mx-auto p-6">

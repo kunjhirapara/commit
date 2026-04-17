@@ -9,6 +9,7 @@
  */
 
 import type * as comments from "../comments.js";
+import type * as errorUtils from "../errorUtils.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
 import type * as users from "../users.js";
@@ -21,6 +22,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   comments: typeof comments;
+  errorUtils: typeof errorUtils;
   http: typeof http;
   interviews: typeof interviews;
   users: typeof users;

@@ -1,5 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { createServerError, requireIdentity } from "./errorUtils";
 
 export const addComment = mutation({
   args: {
@@ -8,8 +9,14 @@ export const addComment = mutation({
     interviewId: v.id("interviews"),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    const identity = await requireIdentity(ctx);
+
+    if (args.rating < 1 || args.rating > 5) {
+      throw createServerError(
+        new Error(`Invalid rating received: ${args.rating}`),
+        "Rating must be between 1 and 5.",
+      );
+    }
 
     return await ctx.db.insert("comments", {
       interviewId: args.interviewId,
@@ -24,8 +31,7 @@ export const addComment = mutation({
 export const getComments = query({
   args: { interviewId: v.id("interviews") },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("User is not authenticated");
+    await requireIdentity(ctx);
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_interview_id", (q) =>

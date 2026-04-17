@@ -1,18 +1,27 @@
 import { useEffect, useState } from "react";
 import { useUser } from "@clerk/nextjs";
 import { Call, useStreamVideoClient } from "@stream-io/video-react-sdk";
+import {
+  getDisplayErrorMessage,
+  getErrorDetails,
+  logError,
+} from "@/lib/errors";
 
 const useGetCalls = () => {
   const { user } = useUser();
   const client = useStreamVideoClient();
   const [calls, setCalls] = useState<Call[]>();
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errorDetails, setErrorDetails] = useState<string | undefined>();
 
   useEffect(() => {
     const loadCalls = async () => {
       if (!client || !user?.id) return;
 
       setIsLoading(true);
+      setError(null);
+      setErrorDetails(undefined);
 
       try {
         const { calls } = await client.queryCalls({
@@ -28,7 +37,15 @@ const useGetCalls = () => {
 
         setCalls(calls);
       } catch (error) {
-        console.error(error);
+        logError("useGetCalls", error, { userId: user.id });
+        setCalls([]);
+        setError(
+          getDisplayErrorMessage(
+            error,
+            "We couldn't load your calls right now.",
+          ),
+        );
+        setErrorDetails(getErrorDetails(error));
       } finally {
         setIsLoading(false);
       }
@@ -51,7 +68,15 @@ const useGetCalls = () => {
     return startsAt && new Date(startsAt) < now && !endedAt;
   });
 
-  return { calls, endedCalls, upcomingCalls, liveCalls, isLoading };
+  return {
+    calls,
+    endedCalls,
+    upcomingCalls,
+    liveCalls,
+    isLoading,
+    error,
+    errorDetails,
+  };
 };
 
 export default useGetCalls;
