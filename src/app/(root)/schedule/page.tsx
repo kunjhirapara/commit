@@ -1,25 +1,16 @@
 "use client";
 
-import LoaderUI from "@/components/ui/LoaderUI";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import RoleGuard from "@/components/auth/RoleGuard";
 import InterviewScheduleUI from "./InterviewScheduleUI";
 
 function SchedulePage() {
-  const router = useRouter();
-
-  const { isInterviewer, isLoading } = useUserRole();
-
-  useEffect(() => {
-    if (!isLoading && !isInterviewer) {
-      router.replace("/");
-    }
-  }, [isInterviewer, isLoading, router]);
-
-  if (isLoading) return <LoaderUI />;
-  if (!isInterviewer) return <LoaderUI />;
-
-  return <InterviewScheduleUI />;
+  return (
+    <RoleGuard
+      allowedRoles={["recruiter", "admin"]}
+      title="Scheduling restricted"
+      message="Only recruiters and admins can schedule interviews.">
+      <InterviewScheduleUI />
+    </RoleGuard>
+  );
 }
 export default SchedulePage;

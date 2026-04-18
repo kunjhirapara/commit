@@ -8,10 +8,13 @@
  * @module
  */
 
+import type * as auditLogs from "../auditLogs.js";
+import type * as authz from "../authz.js";
 import type * as comments from "../comments.js";
 import type * as errorUtils from "../errorUtils.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
+import type * as notifications from "../notifications.js";
 import type * as users from "../users.js";
 
 import type {
@@ -21,10 +24,13 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auditLogs: typeof auditLogs;
+  authz: typeof authz;
   comments: typeof comments;
   errorUtils: typeof errorUtils;
   http: typeof http;
   interviews: typeof interviews;
+  notifications: typeof notifications;
   users: typeof users;
 }>;
 

@@ -6,7 +6,9 @@ import ErrorState from "@/components/ui/ErrorState";
 import MeetingRoom from "@/components/ui/MeetingRoom";
 import MeetingSetup from "@/components/ui/MeetingSetup";
 import useGetCallById from "@/hooks/useGetCallByUd";
+import { api } from "../../../../../convex/_generated/api";
 import { useUser } from "@clerk/nextjs";
+import { useQuery } from "convex/react";
 import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
 import { useParams } from "next/navigation";
 import { useState } from "react";
@@ -16,6 +18,10 @@ function MeetingPage() {
   const { isLoaded } = useUser();
 
   const { call, isCallLoading, error, errorDetails } = useGetCallById(id ?? "");
+  const interview = useQuery(
+    api.interviews.getInterviewByStreamCallId,
+    call?.id ? { streamCallId: call.id } : "skip",
+  );
 
   const [isSetUpComplete, setIsSetUpComplete] = useState(false);
 
@@ -40,7 +46,10 @@ function MeetingPage() {
     <StreamCall call={call}>
       <StreamTheme>
         {!isSetUpComplete ? (
-          <MeetingSetup onSetupComplete={() => setIsSetUpComplete(true)} />
+          <MeetingSetup
+            interview={interview ?? undefined}
+            onSetupComplete={() => setIsSetUpComplete(true)}
+          />
         ) : (
           <MeetingRoom />
         )}

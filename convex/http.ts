@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { Webhook } from "svix";
 import { createServerError, logServerError } from "./errorUtils";
@@ -74,6 +74,30 @@ http.route({
           "Unable to process the webhook payload.",
         );
       }
+
+      await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
+        action: `clerk.${eventType}`,
+        actorClerkId: id,
+        actorEmail: email,
+        targetType: "user",
+        targetId: id,
+        metadata: JSON.stringify({ eventType }),
+      });
+    }
+
+    if (eventType === "session.created" || eventType === "session.ended") {
+      const sessionData = event.data as { user_id?: string; id?: string };
+
+      await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
+        action: `clerk.${eventType}`,
+        actorClerkId: sessionData.user_id,
+        targetType: "session",
+        targetId: sessionData.id,
+        metadata: JSON.stringify({
+          eventType,
+          userId: sessionData.user_id,
+        }),
+      });
     }
     return new Response("Webhook processed successfully", { status: 200 });
   }),

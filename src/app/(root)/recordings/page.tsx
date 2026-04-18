@@ -1,5 +1,6 @@
 "use client";
 
+import RoleGuard from "@/components/auth/RoleGuard";
 import ErrorState from "@/components/ui/ErrorState";
 import LoaderUI from "@/components/ui/LoaderUI";
 import RecordingCard from "@/components/ui/RecordingCard";
@@ -89,4 +90,13 @@ function RecordingsPage() {
   );
 }
 
-export default RecordingsPage;
+export default function ProtectedRecordingsPage() {
+  return (
+    <RoleGuard
+      allowedRoles={["interviewer", "recruiter", "admin"]}
+      title="Recordings restricted"
+      message="Only interview staff can access recordings.">
+      <RecordingsPage />
+    </RoleGuard>
+  );
+}

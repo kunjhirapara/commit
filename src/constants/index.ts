@@ -1,11 +1,81 @@
 import { Clock, Code2, Calendar, Users } from "lucide-react";
 
 export const INTERVIEW_CATEGORY = [
-  { id: "upcoming", title: "Upcoming Interviews", variant: "outline" },
+  { id: "draft", title: "Draft", variant: "outline" },
+  { id: "scheduled", title: "Scheduled", variant: "outline" },
+  { id: "rescheduled", title: "Rescheduled", variant: "secondary" },
+  { id: "live", title: "Live", variant: "default" },
   { id: "completed", title: "Completed", variant: "secondary" },
-  { id: "succeeded", title: "Succeeded", variant: "default" },
-  { id: "failed", title: "Failed", variant: "destructive" },
+  { id: "passed", title: "Passed", variant: "default" },
+  { id: "rejected", title: "Rejected", variant: "destructive" },
+  { id: "cancelled", title: "Cancelled", variant: "outline" },
+  { id: "no_show", title: "No Show", variant: "destructive" },
 ] as const;
+
+export const INTERVIEW_TEMPLATES = [
+  {
+    id: "screening",
+    label: "Screening",
+    durationMinutes: 30,
+    description: "Introductory screening focused on experience and fit.",
+    instructions:
+      "Please join 5 minutes early, test your microphone and camera, and be ready to discuss your recent experience.",
+  },
+  {
+    id: "technical",
+    label: "Technical",
+    durationMinutes: 60,
+    description: "Hands-on coding and technical discussion round.",
+    instructions:
+      "Bring a stable internet connection, use a laptop or desktop browser, and have your coding environment ready.",
+  },
+  {
+    id: "panel",
+    label: "Panel",
+    durationMinutes: 75,
+    description: "Collaborative panel round with multiple interviewers.",
+    instructions:
+      "You will meet several team members. Keep your camera on when possible and leave time for Q&A at the end.",
+  },
+  {
+    id: "final",
+    label: "Final Round",
+    durationMinutes: 45,
+    description: "Final decision-making round with hiring stakeholders.",
+    instructions:
+      "Please review the role summary beforehand and prepare questions about team expectations and next steps.",
+  },
+] as const;
+
+export const INTERVIEW_STATUS_LABELS = {
+  draft: "Draft",
+  scheduled: "Scheduled",
+  live: "Live",
+  completed: "Completed",
+  cancelled: "Cancelled",
+  no_show: "No Show",
+  rescheduled: "Rescheduled",
+  passed: "Passed",
+  rejected: "Rejected",
+} as const;
+
+export const COMMON_TIMEZONES = [
+  "UTC",
+  "Asia/Kolkata",
+  "Asia/Dubai",
+  "Europe/London",
+  "Europe/Berlin",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Australia/Sydney",
+] as const;
+
+export const DEFAULT_BUFFER_MINUTES = {
+  before: 15,
+  after: 15,
+} as const;
 
 export const TIME_SLOTS = [
   "09:00",

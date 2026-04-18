@@ -10,11 +10,21 @@ import MeetingModal from "@/components/ui/MeetingModal";
 import LoaderUI from "@/components/ui/LoaderUI";
 import { Loader2Icon } from "lucide-react";
 import MeetingCard from "@/components/ui/MeetingCard";
+import NotificationsPanel from "@/components/ui/NotificationsPanel";
+import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 
 export default function Home() {
   const router = useRouter();
+  useLifecycleAutomation();
 
-  const { isInterviewer, isCandidate, isLoading } = useUserRole();
+  const {
+    isInterviewer,
+    isCandidate,
+    isLoading,
+    isPrivileged,
+    canScheduleInterviews,
+    canViewRecordings,
+  } = useUserRole();
 
   const interviews = useQuery(api.interviews.getMyInterviews, {});
   const [showModal, setShowModal] = useState(false);
@@ -42,15 +52,22 @@ export default function Home() {
           Welcome back!
         </h1>
         <p className="text-muted-foreground mt-2">
-          {isInterviewer
-            ? "Manage your interviews and review candidates effectively"
-            : "Access your upcoming interviews and preparations"}
+          {isCandidate
+            ? "Access your upcoming interviews and preparations"
+            : "Manage interviews, reviews, and hiring operations securely"}
         </p>
       </div>
-      {isInterviewer ? (
+      <div className="mb-8">
+        <NotificationsPanel />
+      </div>
+      {isPrivileged ? (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {QUICK_ACTIONS.map((action) => (
+            {QUICK_ACTIONS.filter((action) => {
+              if (action.title === "Schedule") return canScheduleInterviews;
+              if (action.title === "Recordings") return canViewRecordings;
+              return true;
+            }).map((action) => (
               <ActionCard
                 key={action.title}
                 action={action}

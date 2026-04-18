@@ -1,11 +1,17 @@
 "use client";
 
+import RoleGuard from "@/components/auth/RoleGuard";
+import AccessManagementPanel from "@/components/ui/AccessManagementPanel";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import toast from "react-hot-toast";
 import LoaderUI from "@/components/ui/LoaderUI";
-import { getCandidateInfo, groupInterviews } from "@/lib/utils";
+import {
+  getCandidateInfo,
+  getInterviewStartTimeMs,
+  groupInterviews,
+} from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { INTERVIEW_CATEGORY } from "@/constants";
@@ -27,17 +33,23 @@ import {
 import { format } from "date-fns";
 import CommentDialog from "@/components/ui/CommentDialog";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { useUserRole } from "@/hooks/useUserRole";
+import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
+import NotificationsPanel from "@/components/ui/NotificationsPanel";
 
 type Interview = Doc<"interviews">;
+type ReviewStatus = "completed" | "passed" | "rejected";
 
 function DashboardPage() {
+  useLifecycleAutomation();
+  const { canScheduleInterviews, canManageInvitations } = useUserRole();
   const users = useQuery(api.users.getUsers, {});
   const interviews = useQuery(api.interviews.getAllInterviews, {});
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
 
   const handleStatusUpdate = async (
     interviewId: Id<"interviews">,
-    status: string,
+    status: ReviewStatus,
   ) => {
     try {
       await updateStatus({ interviewId, status });
@@ -59,11 +71,36 @@ function DashboardPage() {
 
   return (
     <div className="container mx-auto py-10">
-      <div className="flex items-center mb-8">
-        <Link href="/schedule">
-          <Button>Schedule New Interview</Button>
-        </Link>
+      <div className="mb-8 flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">Interview Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
+            Review interviews, manage outcomes, and control team access.
+          </p>
+        </div>
+        {canScheduleInterviews ? (
+          <Link href="/schedule">
+            <Button>Schedule New Interview</Button>
+          </Link>
+        ) : null}
       </div>
+
+      <div className="mb-8">
+        <NotificationsPanel />
+      </div>
+
+      {canManageInvitations ? (
+        <section className="mb-10 space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Access Management</h2>
+            <p className="text-sm text-muted-foreground">
+              Invite privileged users, update roles, and review recent audit
+              events.
+            </p>
+          </div>
+          <AccessManagementPanel />
+        </section>
+      ) : null}
 
       <div className="space-y-8">
         {INTERVIEW_CATEGORY.map(
@@ -84,7 +121,9 @@ function DashboardPage() {
                         users,
                         interview.candidateId,
                       );
-                      const startTime = new Date(interview.startTime);
+                      const startTime = new Date(
+                        getInterviewStartTimeMs(interview),
+                      );
 
                       return (
                         <Card
@@ -130,7 +169,7 @@ function DashboardPage() {
                                   onClick={() =>
                                     handleStatusUpdate(
                                       interview._id,
-                                      "succeeded",
+                                      "passed",
                                     )
                                   }>
                                   <CheckCircle2Icon className="h-4 w-4 mr-2" />
@@ -140,10 +179,10 @@ function DashboardPage() {
                                   variant="destructive"
                                   className="flex-1"
                                   onClick={() =>
-                                    handleStatusUpdate(interview._id, "failed")
+                                    handleStatusUpdate(interview._id, "rejected")
                                   }>
                                   <XCircleIcon className="h-4 w-4 mr-2" />
-                                  Fail
+                                  Reject
                                 </Button>
                               </div>
                             )}
@@ -161,4 +200,13 @@ function DashboardPage() {
     </div>
   );
 }
-export default DashboardPage;
+export default function ProtectedDashboardPage() {
+  return (
+    <RoleGuard
+      allowedRoles={["interviewer", "recruiter", "admin"]}
+      title="Dashboard restricted"
+      message="Only interview staff can access the dashboard.">
+      <DashboardPage />
+    </RoleGuard>
+  );
+}

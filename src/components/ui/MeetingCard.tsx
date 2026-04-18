@@ -1,7 +1,12 @@
 import useMeetingActions from "@/hooks/useMeetingActions";
 import { Doc } from "../../../convex/_generated/dataModel";
-import { getMeetingStatus } from "@/lib/utils";
-import { format } from "date-fns";
+import {
+  formatInterviewDateTime,
+  getCalendarLinks,
+  getInterviewStatusBadgeVariant,
+  getInterviewStatusLabel,
+  getMeetingStatus,
+} from "@/lib/utils";
 import {
   Card,
   CardContent,
@@ -9,7 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "./card";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "./badge";
 import { Button } from "./button";
 
@@ -19,10 +24,11 @@ function MeetingCard({ interview }: { interview: Interview }) {
   const { joinMeeting } = useMeetingActions();
 
   const status = getMeetingStatus(interview);
-  const formattedDate = format(
-    new Date(interview.startTime),
-    "EEEE, MMMM d · h:mm a",
-  );
+  const formattedDate = formatInterviewDateTime(interview);
+  const calendarLinks = getCalendarLinks(interview);
+  const canJoin = status === "live";
+  const showCalendarLinks =
+    status === "scheduled" || status === "rescheduled" || status === "draft";
 
   return (
     <Card>
@@ -34,22 +40,22 @@ function MeetingCard({ interview }: { interview: Interview }) {
           </div>
 
           <Badge
-            variant={
-              status === "live"
-                ? "default"
-                : status === "upcoming"
-                  ? "secondary"
-                  : "outline"
-            }>
-            {status === "live"
-              ? "Live Now"
-              : status === "upcoming"
-                ? "Upcoming"
-                : "Completed"}
+            variant={getInterviewStatusBadgeVariant(status)}>
+            {getInterviewStatusLabel(status)}
           </Badge>
         </div>
 
         <CardTitle>{interview.title}</CardTitle>
+
+        <div className="space-y-1 text-sm text-muted-foreground">
+          <p>
+            {interview.templateLabel} · {interview.durationMinutes} minutes
+          </p>
+          <p>
+            {interview.timezone}
+            {interview.brandName ? ` · ${interview.brandName}` : ""}
+          </p>
+        </div>
 
         {interview.description && (
           <CardDescription className="line-clamp-2">
@@ -59,7 +65,7 @@ function MeetingCard({ interview }: { interview: Interview }) {
       </CardHeader>
 
       <CardContent>
-        {status === "live" && (
+        {canJoin && (
           <Button
             className="w-full"
             onClick={() => joinMeeting(interview.streamCallId)}>
@@ -67,11 +73,45 @@ function MeetingCard({ interview }: { interview: Interview }) {
           </Button>
         )}
 
-        {status === "upcoming" && (
+        {(status === "scheduled" || status === "rescheduled" || status === "draft") && (
           <Button variant="outline" className="w-full" disabled>
-            Waiting to Start
+            {status === "draft" ? "Draft Interview" : "Waiting to Start"}
           </Button>
         )}
+
+        {showCalendarLinks ? (
+          <div className="mt-3 flex gap-2">
+            <Button variant="outline" className="flex-1" asChild>
+              <a
+                href={calendarLinks.google}
+                target="_blank"
+                rel="noreferrer">
+                Google Calendar
+              </a>
+            </Button>
+            <Button variant="outline" className="flex-1" asChild>
+              <a
+                href={calendarLinks.outlook}
+                target="_blank"
+                rel="noreferrer">
+                Outlook
+                <ExternalLinkIcon className="ml-2 h-4 w-4" />
+              </a>
+            </Button>
+          </div>
+        ) : null}
+
+        {interview.cancellationReason ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Cancellation reason: {interview.cancellationReason}
+          </p>
+        ) : null}
+
+        {interview.rescheduleReason ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            Reschedule note: {interview.rescheduleReason}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   );

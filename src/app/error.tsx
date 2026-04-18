@@ -2,7 +2,11 @@
 
 import { useEffect } from "react";
 import ErrorState from "@/components/ui/ErrorState";
-import { getDisplayErrorMessage, getErrorDetails, logError } from "@/lib/errors";
+import {
+  getDisplayErrorMessage,
+  getErrorDetails,
+  logError,
+} from "@/lib/errors";
 
 export default function GlobalError({
   error,
