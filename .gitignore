@@ -38,5 +38,5 @@ next-env.d.ts
 # clerk configuration (can include secrets)
 /.clerk/
 
-
+agents.md
 desired_Features.md

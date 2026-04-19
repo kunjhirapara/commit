@@ -9,6 +9,8 @@ import {
 } from "./authz";
 import { createServerError } from "./errorUtils";
 
+const INVITATION_LIST_LIMIT = 12;
+
 export const syncUser = mutation({
   args: {
     clerkId: v.string(),
@@ -146,7 +148,7 @@ export const getUserByClerkId = query({
 export const listInvitations = query({
   handler: async (ctx) => {
     await requirePermission(ctx, "manageInvitations");
-    return await ctx.db.query("invitations").order("desc").take(25);
+    return await ctx.db.query("invitations").order("desc").take(INVITATION_LIST_LIMIT);
   },
 });
 

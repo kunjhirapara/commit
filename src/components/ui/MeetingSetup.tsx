@@ -3,6 +3,7 @@ import {
   useCall,
   VideoPreview,
 } from "@stream-io/video-react-sdk";
+import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
 import { Card } from "./card";
 import {
@@ -18,12 +19,14 @@ import {
 import { Button } from "./button";
 import { Switch } from "./switch";
 import { Doc } from "../../../convex/_generated/dataModel";
+import { api } from "../../../convex/_generated/api";
 import {
   getCalendarLinks,
   getInterviewTimezone,
   getInterviewStatusLabel,
   getMeetingStatus,
 } from "@/lib/utils";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 function MeetingSetup({
   interview,
@@ -39,8 +42,10 @@ function MeetingSetup({
   const [browserSupported, setBrowserSupported] = useState(true);
   const [networkLabel, setNetworkLabel] = useState("Checking network");
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [hasRecordingConsent, setHasRecordingConsent] = useState(false);
 
   const call = useCall();
+  const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
 
   const calendarLinks = useMemo(
     () => (interview ? getCalendarLinks(interview) : null),
@@ -111,14 +116,40 @@ function MeetingSetup({
   }, []);
 
   const handleJoin = async () => {
+    if (interview && !hasRecordingConsent) {
+      setJoinError(
+        "Please confirm recording and interview consent before joining the session.",
+      );
+      return;
+    }
+
     try {
       setJoinError(null);
       await call.join();
+      if (interview) {
+        await logSessionEvent({
+          interviewId: interview._id,
+          streamCallId: interview.streamCallId,
+          type: "recording.consent_granted",
+          detail: "Participant confirmed consent before joining",
+          metadata: JSON.stringify({
+            browserSupported,
+            networkLabel,
+            hasRecordingConsent: true,
+          }),
+        });
+      }
       onSetupComplete();
-    } catch {
+    } catch (error) {
+      logError("MeetingSetup.handleJoin", error, {
+        interviewId: interview?._id,
+      });
       setJoinError(
-        interview?.browserFallbackInstructions ||
-          "We couldn't join the interview. Refresh once, confirm device permissions, and try again from a desktop Chrome browser.",
+        getDisplayErrorMessage(
+          error,
+          interview?.browserFallbackInstructions ||
+            "We couldn't join the interview. Refresh once, confirm device permissions, and try again from a desktop Chrome browser.",
+        ),
       );
     }
   };
@@ -293,6 +324,20 @@ function MeetingSetup({
               </div>
             </div>
 
+            <div className="flex items-center justify-between rounded-xl border p-4">
+              <div className="space-y-1">
+                <p className="font-medium">Recording and session consent</p>
+                <p className="text-sm text-muted-foreground">
+                  Confirm that you understand this session may be recorded for interview review and hiring decisions.
+                </p>
+              </div>
+              <Switch
+                checked={hasRecordingConsent}
+                onCheckedChange={setHasRecordingConsent}
+                aria-label="Confirm recording consent"
+              />
+            </div>
+
             {calendarLinks ? (
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" asChild>
@@ -333,7 +378,11 @@ function MeetingSetup({
             ) : null}
 
             <div className="space-y-3">
-              <Button className="w-full" size="lg" onClick={handleJoin}>
+              <Button
+                className="w-full"
+                size="lg"
+                onClick={handleJoin}
+                disabled={!!interview && !hasRecordingConsent}>
                 Join Interview
               </Button>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

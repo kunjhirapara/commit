@@ -12,6 +12,7 @@ export const addComment = mutation({
     content: v.string(),
     rating: v.number(),
     interviewId: v.id("interviews"),
+    visibility: v.optional(v.union(v.literal("shared"), v.literal("private"))),
   },
   handler: async (ctx, args) => {
     const { user } = await requireInterviewReviewAccess(ctx, args.interviewId);
@@ -28,6 +29,7 @@ export const addComment = mutation({
       content: args.content,
       rating: args.rating,
       interviewerId: user.clerkId,
+      visibility: args.visibility ?? "shared",
     });
 
     await logAuditEvent(ctx, {
@@ -39,6 +41,7 @@ export const addComment = mutation({
       metadata: {
         interviewId: args.interviewId,
         rating: args.rating,
+        visibility: args.visibility ?? "shared",
       },
     });
 
@@ -50,13 +53,73 @@ export const addComment = mutation({
 export const getComments = query({
   args: { interviewId: v.id("interviews") },
   handler: async (ctx, args) => {
-    await requireInterviewAccess(ctx, args.interviewId);
+    const { user } = await requireInterviewAccess(ctx, args.interviewId);
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_interview_id", (q) =>
         q.eq("interviewId", args.interviewId),
       )
-      .collect();
-    return comments;
+      .order("desc")
+      .take(100);
+
+    return comments.filter((comment) => {
+      if ((comment.visibility ?? "shared") === "shared") return true;
+      if (comment.interviewerId === user.clerkId) return true;
+
+      return user.role === "admin" || user.role === "recruiter";
+    });
+  },
+});
+
+export const editComment = mutation({
+  args: {
+    commentId: v.id("comments"),
+    content: v.string(),
+    rating: v.number(),
+    visibility: v.optional(v.union(v.literal("shared"), v.literal("private"))),
+  },
+  handler: async (ctx, args) => {
+    const comment = await ctx.db.get(args.commentId);
+
+    if (!comment) {
+      throw createServerError(
+        new Error(`Comment not found: ${args.commentId}`),
+        "Comment not found.",
+      );
+    }
+
+    const { user } = await requireInterviewReviewAccess(
+      ctx,
+      comment.interviewId,
+    );
+
+    if (
+      comment.interviewerId !== user.clerkId &&
+      user.role !== "admin" &&
+      user.role !== "recruiter"
+    ) {
+      throw createServerError(
+        new Error(`User ${user.clerkId} cannot edit comment ${args.commentId}`),
+        "You can only edit your own notes.",
+      );
+    }
+
+    await ctx.db.patch(args.commentId, {
+      content: args.content.trim(),
+      rating: args.rating,
+      visibility: args.visibility ?? comment.visibility ?? "shared",
+      editedAt: Date.now(),
+    });
+
+    await logAuditEvent(ctx, {
+      action: "comment.edited",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "comment",
+      targetId: args.commentId,
+      metadata: {
+        interviewId: comment.interviewId,
+      },
+    });
   },
 });

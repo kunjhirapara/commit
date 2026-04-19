@@ -12,9 +12,11 @@ import type * as auditLogs from "../auditLogs.js";
 import type * as authz from "../authz.js";
 import type * as comments from "../comments.js";
 import type * as errorUtils from "../errorUtils.js";
+import type * as feedback from "../feedback.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
 import type * as notifications from "../notifications.js";
+import type * as sessionEvents from "../sessionEvents.js";
 import type * as users from "../users.js";
 
 import type {
@@ -28,9 +30,11 @@ declare const fullApi: ApiFromModules<{
   authz: typeof authz;
   comments: typeof comments;
   errorUtils: typeof errorUtils;
+  feedback: typeof feedback;
   http: typeof http;
   interviews: typeof interviews;
   notifications: typeof notifications;
+  sessionEvents: typeof sessionEvents;
   users: typeof users;
 }>;
 

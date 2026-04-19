@@ -51,7 +51,7 @@ function MeetingPage() {
             onSetupComplete={() => setIsSetUpComplete(true)}
           />
         ) : (
-          <MeetingRoom />
+          <MeetingRoom interview={interview ?? undefined} />
         )}
       </StreamTheme>
     </StreamCall>

@@ -35,6 +35,15 @@ const notificationStatus = v.union(
   v.literal("read"),
 );
 
+const feedbackState = v.union(v.literal("draft"), v.literal("submitted"));
+const feedbackVisibility = v.union(v.literal("shared"), v.literal("private"));
+const decisionOutcome = v.union(
+  v.literal("pass"),
+  v.literal("reject"),
+  v.literal("hold"),
+  v.literal("review"),
+);
+
 export default defineSchema({
   users: defineTable({
     name: v.string(),
@@ -69,14 +78,16 @@ export default defineSchema({
     cancellationReason: v.optional(v.string()),
     rescheduleReason: v.optional(v.string()),
     reminderSentAt: v.optional(v.number()),
-    lifecycleEvents: v.optional(v.array(
-      v.object({
-        type: v.string(),
-        at: v.number(),
-        actorClerkId: v.optional(v.string()),
-        note: v.optional(v.string()),
-      }),
-    )),
+    lifecycleEvents: v.optional(
+      v.array(
+        v.object({
+          type: v.string(),
+          at: v.number(),
+          actorClerkId: v.optional(v.string()),
+          note: v.optional(v.string()),
+        }),
+      ),
+    ),
   })
     .index("by_candidate_id", ["candidateId"])
     .index("by_stream_call_id", ["streamCallId"])
@@ -87,7 +98,56 @@ export default defineSchema({
     rating: v.number(),
     interviewerId: v.string(),
     interviewId: v.id("interviews"),
-  }).index("by_interview_id", ["interviewId"]),
+    visibility: v.optional(feedbackVisibility),
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_interview_id", ["interviewId"])
+    .index("by_interview_id_interviewer_id", ["interviewId", "interviewerId"]),
+
+  feedback: defineTable({
+    interviewId: v.id("interviews"),
+    interviewerId: v.string(),
+    state: feedbackState,
+    visibility: feedbackVisibility,
+    roundType: v.optional(v.string()),
+    recommendation: decisionOutcome,
+    summary: v.string(),
+    sharedNotes: v.optional(v.string()),
+    privateNotes: v.optional(v.string()),
+    decisionSummary: v.optional(v.string()),
+    weightedScore: v.number(),
+    overallScore: v.number(),
+    hideUntilSubmit: v.boolean(),
+    competencies: v.array(
+      v.object({
+        key: v.string(),
+        label: v.string(),
+        score: v.number(),
+        weight: v.number(),
+        notes: v.optional(v.string()),
+      }),
+    ),
+    dueAt: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    editedAt: v.optional(v.number()),
+  })
+    .index("by_interview_id", ["interviewId"])
+    .index("by_interview_id_interviewer_id", ["interviewId", "interviewerId"])
+    .index("by_interviewer_id_state", ["interviewerId", "state"]),
+
+  interviewSessionEvents: defineTable({
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    type: v.string(),
+    actorClerkId: v.optional(v.string()),
+    actorRole: v.optional(userRole),
+    detail: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_interview_id", ["interviewId"])
+    .index("by_stream_call_id", ["streamCallId"]),
 
   invitations: defineTable({
     email: v.string(),

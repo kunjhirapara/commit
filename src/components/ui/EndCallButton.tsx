@@ -1,11 +1,17 @@
 import { useCall, useCallStateHooks } from "@stream-io/video-react-sdk";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import { useRouter } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
+import { Doc } from "../../../convex/_generated/dataModel";
 import { Button } from "./button";
 import toast from "react-hot-toast";
+import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
-export default function EndCallButton() {
+export default function EndCallButton({
+  interview,
+}: {
+  interview?: Doc<"interviews">;
+}) {
   const call = useCall();
   const router = useRouter();
 
@@ -14,10 +20,7 @@ export default function EndCallButton() {
   const updateInterviewStatus = useMutation(
     api.interviews.updateInterviewStatus,
   );
-
-  const interview = useQuery(api.interviews.getInterviewByStreamCallId, {
-    streamCallId: call?.id || "",
-  });
+  const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
 
   if (!call || !interview) return null;
 
@@ -28,6 +31,12 @@ export default function EndCallButton() {
   const endCall = async () => {
     try {
       await call.endCall();
+      await logSessionEvent({
+        interviewId: interview._id,
+        streamCallId: interview.streamCallId,
+        type: "host.ended_session",
+        detail: "Host ended the session for everyone",
+      });
       await updateInterviewStatus({
         interviewId: interview._id,
         status: "completed",
@@ -35,8 +44,10 @@ export default function EndCallButton() {
       router.push("/");
       toast.success("Meeting ended for everyone");
     } catch (error) {
-      console.error("Error ending call:", error);
-      toast.error("Failed to end meeting");
+      logError("EndCallButton.endCall", error, {
+        interviewId: interview._id,
+      });
+      toast.error(getDisplayErrorMessage(error, "Failed to end meeting."));
     }
   };
 
