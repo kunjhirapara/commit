@@ -1,6 +1,6 @@
 import { useRouter } from "next/navigation";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 const useMeetingActions = () => {

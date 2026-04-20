@@ -21,6 +21,7 @@ export type Permission =
   | "viewUsers"
   | "viewDashboard"
   | "viewRecordings"
+  | "viewObservability"
   | "scheduleInterviews"
   | "editInterviews"
   | "cancelInterviews"
@@ -48,6 +49,7 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "viewUsers",
     "viewDashboard",
     "viewRecordings",
+    "viewObservability",
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
@@ -57,6 +59,7 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "viewUsers",
     "viewDashboard",
     "viewRecordings",
+    "viewObservability",
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
@@ -159,6 +162,18 @@ export const canReviewInterview = (
   );
 };
 
+export const canAccessRecording = (
+  user: Pick<UserRecord, "clerkId" | "role">,
+  interview: InterviewRecord,
+) => {
+  if (user.role === "admin" || user.role === "recruiter") return true;
+
+  return (
+    user.role === "interviewer" &&
+    interview.interviewerIds.includes(user.clerkId)
+  );
+};
+
 export const requireInterviewAccess = async (
   ctx: any,
   interviewId: unknown,
@@ -200,6 +215,24 @@ export const requireInterviewReviewAccess = async (
         `User ${identity.subject} is not allowed to review interview ${String(interviewId)}`,
       ),
       "You are not allowed to review this interview.",
+    );
+  }
+
+  return { identity, user, interview };
+};
+
+export const requireRecordingAccess = async (ctx: any, interviewId: unknown) => {
+  const { identity, user, interview } = await requireInterviewAccess(
+    ctx,
+    interviewId,
+  );
+
+  if (!canAccessRecording(user, interview)) {
+    throw createServerError(
+      new Error(
+        `User ${identity.subject} is not allowed to access recordings for interview ${String(interviewId)}`,
+      ),
+      "You are not allowed to access these recordings.",
     );
   }
 

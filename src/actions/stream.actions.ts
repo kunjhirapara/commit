@@ -1,12 +1,28 @@
 "use server";
 
-import { currentUser } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { StreamClient } from "@stream-io/node-sdk";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../convex/_generated/api";
 import { createPublicError, logError, requireEnvVar } from "@/lib/errors";
+import { getValidatedServerEnv } from "@/lib/env";
+
+export type AuthorizedRecording = {
+  interviewId?: string;
+  title?: string;
+  streamCallId: string;
+  scheduledStartTime: number;
+  retentionExpiresAt?: number;
+  url: string;
+  filename?: string;
+  startTime?: string;
+  endTime?: string;
+};
 
 export const streamTokenProvider = async () => {
   try {
     const user = await currentUser();
+    getValidatedServerEnv();
 
     if (!user) {
       throw new Error("User not authenticated");
@@ -24,6 +40,79 @@ export const streamTokenProvider = async () => {
     throw createPublicError(
       error,
       "Unable to initialize the video session right now.",
+    );
+  }
+};
+
+export const listAuthorizedRecordings = async (): Promise<AuthorizedRecording[]> => {
+  try {
+    const { userId, getToken } = await auth();
+    const env = getValidatedServerEnv();
+
+    if (!userId) {
+      throw new Error("User not authenticated");
+    }
+
+    const token = await getToken({ template: "convex" });
+    const interviews = await fetchQuery(
+      api.interviews.getAuthorizedRecordingInterviews,
+      {},
+      {
+        token: token ?? undefined,
+        url: env.NEXT_PUBLIC_CONVEX_URL,
+      },
+    );
+
+    const streamClient = new StreamClient(
+      env.NEXT_PUBLIC_STREAM_API_KEY,
+      env.STREAM_SECRET_KEY,
+    );
+
+    const recordings = await Promise.all(
+      interviews.map(async (interview) => {
+        try {
+          const response = await streamClient.video
+            .call("default", interview.streamCallId)
+            .listRecordings();
+
+          return (response.recordings ?? []).map((recording) => ({
+            interviewId: interview.interviewId,
+            title: interview.title,
+            streamCallId: interview.streamCallId,
+            scheduledStartTime: interview.scheduledStartTime,
+            retentionExpiresAt: interview.retentionExpiresAt,
+            url: recording.url,
+            filename: recording.filename,
+            startTime: recording.start_time?.toISOString(),
+            endTime: recording.end_time?.toISOString(),
+          }));
+        } catch (error) {
+          logError("listAuthorizedRecordings.listRecordings", error, {
+            interviewId: interview.interviewId,
+            streamCallId: interview.streamCallId,
+          });
+          return [];
+        }
+      }),
+    );
+
+    return recordings
+      .flat()
+      .sort((a, b) => {
+        const aTime = a.startTime
+          ? new Date(a.startTime).getTime()
+          : a.scheduledStartTime;
+        const bTime = b.startTime
+          ? new Date(b.startTime).getTime()
+          : b.scheduledStartTime;
+
+        return bTime - aTime;
+      });
+  } catch (error) {
+    logError("listAuthorizedRecordings", error);
+    throw createPublicError(
+      error,
+      "Unable to load authorized recordings right now.",
     );
   }
 };

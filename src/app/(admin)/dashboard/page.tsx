@@ -5,7 +5,7 @@ import AccessManagementPanel from "@/components/ui/AccessManagementPanel";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import LoaderUI from "@/components/ui/LoaderUI";
 import {
   getCandidateInfo,
@@ -31,6 +31,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useEffect } from "react";
 import CommentDialog from "@/components/ui/CommentDialog";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -45,7 +46,16 @@ function DashboardPage() {
   const { canScheduleInterviews, canManageInvitations } = useUserRole();
   const users = useQuery(api.users.getUsers, {});
   const interviews = useQuery(api.interviews.getAllInterviews, {});
+  const monitoring = useQuery(api.observability.getMonitoringDashboard, {});
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
+  const captureHealthSnapshot = useMutation(
+    api.observability.captureHealthSnapshot,
+  );
+
+  useEffect(() => {
+    if (!canManageInvitations) return;
+    void captureHealthSnapshot().catch(() => undefined);
+  }, [canManageInvitations, captureHealthSnapshot]);
 
   const handleStatusUpdate = async (
     interviewId: Id<"interviews">,
@@ -99,6 +109,87 @@ function DashboardPage() {
             </p>
           </div>
           <AccessManagementPanel />
+        </section>
+      ) : null}
+
+      {canManageInvitations && monitoring ? (
+        <section className="mb-10 space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Observability</h2>
+            <p className="text-sm text-muted-foreground">
+              Track production failures, dependency health, and recent incident
+              context.
+            </p>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <MetricCard label="Auth Failures" value={monitoring.totals.authFailures} />
+            <MetricCard
+              label="Scheduling Failures"
+              value={monitoring.totals.schedulingFailures}
+            />
+            <MetricCard
+              label="Webhook Failures"
+              value={monitoring.totals.webhookFailures}
+            />
+            <MetricCard label="Video Failures" value={monitoring.totals.videoFailures} />
+            <MetricCard
+              label="Critical Events"
+              value={monitoring.totals.criticalEvents}
+            />
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Integration Health</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {monitoring.healthChecks.map((check) => (
+                  <div
+                    key={`${check.provider}-${check.checkedAt}`}
+                    className="flex items-center justify-between rounded-lg border p-3 text-sm">
+                    <span className="font-medium capitalize">{check.provider}</span>
+                    <Badge
+                      variant={
+                        check.status === "healthy"
+                          ? "default"
+                          : check.status === "degraded"
+                            ? "secondary"
+                            : "destructive"
+                      }>
+                      {check.status}
+                    </Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Recent Operational Events</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {monitoring.recentEvents.map((event) => (
+                  <div
+                    key={`${event.scope}-${event.createdAt}`}
+                    className="rounded-lg border p-3 text-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium">{event.scope}</span>
+                      <Badge
+                        variant={
+                          event.level === "error" || event.level === "critical"
+                            ? "destructive"
+                            : event.level === "warn"
+                              ? "secondary"
+                              : "outline"
+                        }>
+                        {event.level}
+                      </Badge>
+                    </div>
+                    <p className="mt-1 text-muted-foreground">{event.message}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
         </section>
       ) : null}
 
@@ -200,6 +291,18 @@ function DashboardPage() {
     </div>
   );
 }
+
+function MetricCard({ label, value }: { label: string; value: number }) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">{label}</CardTitle>
+      </CardHeader>
+      <CardContent className="text-2xl font-semibold">{value}</CardContent>
+    </Card>
+  );
+}
+
 export default function ProtectedDashboardPage() {
   return (
     <RoleGuard

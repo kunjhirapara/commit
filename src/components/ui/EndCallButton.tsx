@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api } from "../../../convex/_generated/api";
 import { Doc } from "../../../convex/_generated/dataModel";
 import { Button } from "./button";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 export default function EndCallButton({

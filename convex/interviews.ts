@@ -1,9 +1,11 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import {
   canAccessInterview,
   getCurrentUserRecord,
   logAuditEvent,
+  requireRecordingAccess,
   requireInterviewAccess,
   requireInterviewReviewAccess,
   requirePermission,
@@ -74,6 +76,11 @@ const DEFAULT_BUFFER_BEFORE_MINUTES = 15;
 const DEFAULT_BUFFER_AFTER_MINUTES = 15;
 const DEFAULT_TEMPLATE_ID = "technical";
 const DEFAULT_TEMPLATE_LABEL = "Technical";
+const DEFAULT_RECORDING_RETENTION_DAYS = 30;
+const DEFAULT_NOTES_RETENTION_DAYS = 180;
+const DEFAULT_CANDIDATE_DATA_RETENTION_DAYS = 365;
+const DEFAULT_RECORDING_DISCLOSURE =
+  "This interview may be recorded for hiring review, training, and compliance purposes.";
 
 const normalizeStoredStatus = (
   status: InterviewStatus | string,
@@ -121,6 +128,16 @@ const normalizeInterview = (interview: any) => {
       interview.bufferBeforeMinutes ?? DEFAULT_BUFFER_BEFORE_MINUTES,
     bufferAfterMinutes:
       interview.bufferAfterMinutes ?? DEFAULT_BUFFER_AFTER_MINUTES,
+    recordingConsentRequired: interview.recordingConsentRequired ?? true,
+    recordingDisclosure:
+      interview.recordingDisclosure ?? DEFAULT_RECORDING_DISCLOSURE,
+    recordingRetentionDays:
+      interview.recordingRetentionDays ?? DEFAULT_RECORDING_RETENTION_DAYS,
+    notesRetentionDays:
+      interview.notesRetentionDays ?? DEFAULT_NOTES_RETENTION_DAYS,
+    candidateDataRetentionDays:
+      interview.candidateDataRetentionDays ??
+      DEFAULT_CANDIDATE_DATA_RETENTION_DAYS,
     lifecycleEvents: interview.lifecycleEvents ?? [],
   };
 };
@@ -405,6 +422,9 @@ const processReminder = async (ctx: any, interview: any) => {
   });
 };
 
+const getRecordingRetentionExpiry = (interview: ReturnType<typeof normalizeInterview>) =>
+  interview.scheduledEndTime + interview.recordingRetentionDays * 24 * 60 * 60 * 1000;
+
 export const getAllInterviews = query({
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
@@ -456,6 +476,25 @@ export const getInterviewByStreamCallId = query({
   },
 });
 
+export const getAuthorizedRecordingInterviews = query({
+  handler: async (ctx) => {
+    const { user } = await requirePermission(ctx, "viewRecordings");
+    const interviews = (await ctx.db.query("interviews").collect()).map(
+      normalizeInterview,
+    );
+
+    return interviews
+      .filter((interview: any) => requireRecordingManifest(user, interview))
+      .map((interview: any) => ({
+        interviewId: interview._id,
+        title: interview.title,
+        streamCallId: interview.streamCallId,
+        scheduledStartTime: interview.scheduledStartTime,
+        retentionExpiresAt: getRecordingRetentionExpiry(interview),
+      }));
+  },
+});
+
 export const createInterview = mutation({
   args: {
     title: v.string(),
@@ -497,6 +536,11 @@ export const createInterview = mutation({
       startTime: args.scheduledStartTime,
       scheduledEndTime,
       reminderSentAt: undefined,
+      recordingConsentRequired: true,
+      recordingDisclosure: DEFAULT_RECORDING_DISCLOSURE,
+      recordingRetentionDays: DEFAULT_RECORDING_RETENTION_DAYS,
+      notesRetentionDays: DEFAULT_NOTES_RETENTION_DAYS,
+      candidateDataRetentionDays: DEFAULT_CANDIDATE_DATA_RETENTION_DAYS,
       lifecycleEvents: [
         {
           type: "created",
@@ -532,6 +576,22 @@ export const createInterview = mutation({
         status: args.status,
         timezone: args.timezone,
       },
+    });
+
+    await ctx.runMutation(internal.observability.recordOperationalEvent, {
+      source: "convex",
+      scope: "interviews.create",
+      level: "info",
+      message: "Interview scheduled.",
+      userId: user.clerkId,
+      interviewId,
+      streamCallId: args.streamCallId,
+      provider: "stream",
+      status: args.status,
+      metadata: JSON.stringify({
+        candidateId: args.candidateId,
+        interviewerCount: args.interviewerIds.length,
+      }),
     });
 
     return interviewId;
@@ -784,6 +844,47 @@ export const updateInterviewStatus = mutation({
   },
 });
 
+export const captureRecordingConsent = mutation({
+  args: {
+    interviewId: v.id("interviews"),
+  },
+  handler: async (ctx, args) => {
+    const { user, interview } = await requireInterviewAccess(ctx, args.interviewId);
+    const normalizedInterview = normalizeInterview(interview);
+
+    if (user.role !== "candidate") {
+      return {
+        capturedAt: normalizedInterview.recordingConsentCapturedAt ?? Date.now(),
+      };
+    }
+
+    const capturedAt = normalizedInterview.recordingConsentCapturedAt ?? Date.now();
+
+    await ctx.db.patch(args.interviewId, {
+      recordingConsentCapturedAt: capturedAt,
+      recordingConsentCapturedBy:
+        normalizedInterview.recordingConsentCapturedBy ?? user.clerkId,
+      lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
+        type: "recording.consent_captured",
+        actorClerkId: user.clerkId,
+      }),
+    });
+
+    await logAuditEvent(ctx, {
+      action: "interview.recording_consent_captured",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "interview",
+      targetId: args.interviewId,
+      metadata: {
+        recordedAt: capturedAt,
+      },
+    });
+
+    return { capturedAt };
+  },
+});
+
 export const runLifecycleAutomation = mutation({
   handler: async (ctx) => {
     await getCurrentUserRecord(ctx);
@@ -799,3 +900,16 @@ export const runLifecycleAutomation = mutation({
     return { updatedCount };
   },
 });
+
+const requireRecordingManifest = (
+  user: { clerkId: string; role: string },
+  interview: ReturnType<typeof normalizeInterview>,
+) => {
+  if (Date.now() > getRecordingRetentionExpiry(interview)) return false;
+
+  return (
+    (user.role === "admin" || user.role === "recruiter") ||
+    (user.role === "interviewer" &&
+      interview.interviewerIds.includes(user.clerkId))
+  );
+};

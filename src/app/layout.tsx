@@ -5,8 +5,9 @@ import "./globals.css";
 import { RedirectToSignIn, SignedIn, SignedOut } from "@clerk/nextjs";
 import ConvexClerkProvider from "@/components/providers/ConvexClerkProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
-import { Toaster } from "react-hot-toast";
+import { Toaster } from "sonner";
 import Navbar from "@/components/ui/Navbar";
+import { getValidatedServerEnv } from "@/lib/env";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -29,6 +30,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  getValidatedServerEnv();
+
   return (
     <ConvexClerkProvider>
       <html lang="en" suppressHydrationWarning>
@@ -50,7 +53,7 @@ export default function RootLayout({
               <RedirectToSignIn />
             </SignedOut>
           </ThemeProvider>
-          <Toaster />
+          <Toaster position="top-right" />
         </body>
       </html>
     </ConvexClerkProvider>

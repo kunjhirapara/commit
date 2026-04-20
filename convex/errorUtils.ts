@@ -20,11 +20,17 @@ export const logServerError = (
   error: unknown,
   metadata?: Record<string, unknown>,
 ) => {
-  console.error(`[${scope}]`, {
-    message: getErrorMessage(error),
-    metadata,
-    stack: error instanceof Error ? error.stack : undefined,
-  });
+  console.error(
+    JSON.stringify({
+      source: "convex",
+      level: "error",
+      scope,
+      message: getErrorMessage(error),
+      metadata,
+      stack: error instanceof Error ? error.stack : undefined,
+      timestamp: new Date().toISOString(),
+    }),
+  );
 };
 
 export const createServerError = (

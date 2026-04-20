@@ -46,6 +46,9 @@ function MeetingSetup({
 
   const call = useCall();
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
+  const captureRecordingConsent = useMutation(
+    api.interviews.captureRecordingConsent,
+  );
 
   const calendarLinks = useMemo(
     () => (interview ? getCalendarLinks(interview) : null),
@@ -125,6 +128,11 @@ function MeetingSetup({
 
     try {
       setJoinError(null);
+      if (interview) {
+        await captureRecordingConsent({
+          interviewId: interview._id,
+        });
+      }
       await call.join();
       if (interview) {
         await logSessionEvent({
@@ -328,7 +336,8 @@ function MeetingSetup({
               <div className="space-y-1">
                 <p className="font-medium">Recording and session consent</p>
                 <p className="text-sm text-muted-foreground">
-                  Confirm that you understand this session may be recorded for interview review and hiring decisions.
+                  {interview?.recordingDisclosure ||
+                    "Confirm that you understand this session may be recorded for interview review and hiring decisions."}
                 </p>
               </div>
               <Switch

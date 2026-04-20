@@ -5,7 +5,7 @@ import * as z from "zod";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import {
   DownloadIcon,
   FileTextIcon,
@@ -376,6 +376,10 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
                         users,
                         entry.interviewerId,
                       );
+                      const commentTimestamp =
+                        entry.updatedAt ?? entry._creationTime;
+                      const wasEdited =
+                        !!entry.updatedAt && entry.updatedAt > entry._creationTime;
                       return (
                         <div
                           key={entry._id}
@@ -393,11 +397,8 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
                                   {interviewer.name}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                  {format(
-                                    entry.editedAt ?? entry._creationTime,
-                                    "MMM d, yyyy • h:mm a",
-                                  )}
-                                  {entry.editedAt ? " • edited" : ""}
+                                  {format(commentTimestamp, "MMM d, yyyy • h:mm a")}
+                                  {wasEdited ? " • edited" : ""}
                                 </p>
                               </div>
                             </div>

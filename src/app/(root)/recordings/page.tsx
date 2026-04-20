@@ -5,35 +5,85 @@ import ErrorState from "@/components/ui/ErrorState";
 import LoaderUI from "@/components/ui/LoaderUI";
 import RecordingCard from "@/components/ui/RecordingCard";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import useGetCalls from "@/hooks/useGetCalls";
-import { CallRecording } from "@stream-io/video-react-sdk";
 import { useEffect, useState } from "react";
 import { getDisplayErrorMessage, getErrorDetails, logError } from "@/lib/errors";
+import useGetCalls from "@/hooks/useGetCalls";
+import {
+  AuthorizedRecording,
+  listAuthorizedRecordings,
+} from "@/actions/stream.actions";
 
 function RecordingsPage() {
-  const { calls, isLoading, error, errorDetails } = useGetCalls();
-  const [recordings, setRecordings] = useState<CallRecording[]>([]);
+  const { calls, isLoading: callsLoading, error, errorDetails } = useGetCalls();
+  const [recordings, setRecordings] = useState<AuthorizedRecording[]>([]);
   const [recordingsError, setRecordingsError] = useState<string | null>(null);
   const [recordingsErrorDetails, setRecordingsErrorDetails] = useState<
     string | undefined
   >();
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const fetchRecordings = async () => {
-      if (!calls) return;
+      if (callsLoading) return;
 
+      setIsLoading(true);
       setRecordingsError(null);
       setRecordingsErrorDetails(undefined);
 
       try {
-        const callData = await Promise.all(
-          calls.map(async (call) => {
-            const { recordings } = await call.listRecordings();
-            return recordings;
+        const [authorizedRecordings, callRecordings] = await Promise.all([
+          listAuthorizedRecordings(),
+          Promise.all(
+            (calls ?? []).map(async (call) => {
+              try {
+                const { recordings } = await call.listRecordings();
+
+                return (recordings ?? []).map((recording) => ({
+                  streamCallId: call.id,
+                  title:
+                    typeof call.state.custom?.description === "string"
+                      ? call.state.custom.description
+                      : undefined,
+                  scheduledStartTime: recording.start_time
+                    ? new Date(recording.start_time).getTime()
+                    : 0,
+                  url: recording.url,
+                  filename: recording.filename,
+                  startTime: recording.start_time,
+                  endTime: recording.end_time,
+                }));
+              } catch (error) {
+                logError("RecordingsPage.call.listRecordings", error, {
+                  callId: call.id,
+                });
+                return [];
+              }
+            }),
+          ),
+        ]);
+
+        const mergedRecordings = new Map<string, AuthorizedRecording>();
+
+        callRecordings
+          .flat()
+          .forEach((recording) => mergedRecordings.set(recording.url, recording));
+
+        authorizedRecordings.forEach((recording) =>
+          mergedRecordings.set(recording.url, recording),
+        );
+
+        setRecordings(
+          Array.from(mergedRecordings.values()).sort((a, b) => {
+            const aTime = a.startTime
+              ? new Date(a.startTime).getTime()
+              : a.scheduledStartTime;
+            const bTime = b.startTime
+              ? new Date(b.startTime).getTime()
+              : b.scheduledStartTime;
+
+            return bTime - aTime;
           }),
         );
-        const allRecordings = callData.flat();
-        setRecordings(allRecordings);
       } catch (error) {
         logError("RecordingsPage.fetchRecordings", error);
         setRecordings([]);
@@ -44,12 +94,14 @@ function RecordingsPage() {
           ),
         );
         setRecordingsErrorDetails(getErrorDetails(error));
+      } finally {
+        setIsLoading(false);
       }
     };
     fetchRecordings();
-  }, [calls]);
+  }, [calls, callsLoading]);
 
-  if (isLoading) return <LoaderUI />;
+  if (isLoading || callsLoading) return <LoaderUI />;
 
   if (error || recordingsError) {
     return (
@@ -75,7 +127,7 @@ function RecordingsPage() {
         {recordings.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
             {recordings.map((r) => (
-              <RecordingCard key={r.end_time} recording={r} />
+              <RecordingCard key={`${r.streamCallId}-${r.url}`} recording={r} />
             ))}
           </div>
         ) : (

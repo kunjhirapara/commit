@@ -1,15 +1,15 @@
 "use client";
 
-import { CallRecording } from "@stream-io/video-react-sdk";
-import toast from "react-hot-toast";
+import { toast } from "sonner";
 import { format } from "date-fns";
 import { calculateRecordingDuration } from "@/lib/utils";
 import { CalendarIcon, ClockIcon, CopyIcon, PlayIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "./button";
 import { Card, CardContent, CardFooter, CardHeader } from "./card";
+import { AuthorizedRecording } from "@/actions/stream.actions";
 
-function RecordingCard({ recording }: { recording: CallRecording }) {
+function RecordingCard({ recording }: { recording: AuthorizedRecording }) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const handleCopyLink = async () => {
@@ -21,19 +21,22 @@ function RecordingCard({ recording }: { recording: CallRecording }) {
     }
   };
 
-  const formattedStartTime = recording.start_time
-    ? format(new Date(recording.start_time), "MMM d, yyyy, hh:mm a")
+  const formattedStartTime = recording.startTime
+    ? format(new Date(recording.startTime), "MMM d, yyyy, hh:mm a")
     : "Unknown";
 
   const duration =
-    recording.start_time && recording.end_time
-      ? calculateRecordingDuration(recording.start_time, recording.end_time)
+    recording.startTime && recording.endTime
+      ? calculateRecordingDuration(recording.startTime, recording.endTime)
       : "Unknown duration";
+  const recordingTitle =
+    recording.title?.trim() || recording.filename || recording.streamCallId;
 
   return (
     <Card className="group hover:shadow-md transition-all">
       <CardHeader className="space-y-1">
         <div className="space-y-2">
+          <p className="font-medium">{recordingTitle}</p>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center text-sm text-muted-foreground gap-2">
               <CalendarIcon className="h-3.5 w-3.5" />
@@ -43,6 +46,12 @@ function RecordingCard({ recording }: { recording: CallRecording }) {
               <ClockIcon className="h-3.5 w-3.5" />
               <span>{duration}</span>
             </div>
+            {recording.retentionExpiresAt ? (
+              <p className="text-xs text-muted-foreground">
+                Retained until{" "}
+                {format(new Date(recording.retentionExpiresAt), "MMM d, yyyy")}
+              </p>
+            ) : null}
           </div>
         </div>
       </CardHeader>

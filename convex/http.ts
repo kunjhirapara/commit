@@ -11,12 +11,22 @@ http.route({
   path: "/clerk-webhook",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
+    const correlationId = req.headers.get("x-correlation-id") ?? crypto.randomUUID();
     const webhookSecret = process.env.CLERK_WEBHOOK_SECRET;
     if (!webhookSecret) {
       logServerError(
         "clerk-webhook.config",
         new Error("Webhook secret not configured"),
       );
+      await ctx.runMutation(internal.observability.recordOperationalEvent, {
+        source: "webhook",
+        scope: "clerk-webhook.config",
+        level: "critical",
+        message: "Clerk webhook secret not configured.",
+        correlationId,
+        provider: "clerk",
+        status: "misconfigured",
+      });
       return new Response("Webhook unavailable", { status: 503 });
     }
 
@@ -29,6 +39,15 @@ http.route({
         "clerk-webhook.headers",
         new Error("Missing Svix headers"),
       );
+      await ctx.runMutation(internal.observability.recordOperationalEvent, {
+        source: "webhook",
+        scope: "clerk-webhook.headers",
+        level: "warn",
+        message: "Missing Svix headers.",
+        correlationId,
+        provider: "clerk",
+        status: "rejected",
+      });
       return new Response("Invalid webhook request", { status: 400 });
     }
 
@@ -46,6 +65,16 @@ http.route({
       }) as WebhookEvent;
     } catch (err) {
       logServerError("clerk-webhook.verify", err);
+      await ctx.runMutation(internal.observability.recordOperationalEvent, {
+        source: "webhook",
+        scope: "clerk-webhook.verify",
+        level: "error",
+        message: "Webhook signature verification failed.",
+        correlationId,
+        provider: "clerk",
+        status: "rejected",
+        metadata: JSON.stringify({ svixId: svix_id }),
+      });
       return new Response("Invalid signature", { status: 400 });
     }
 
@@ -68,6 +97,17 @@ http.route({
         logServerError("clerk-webhook.syncUser", error, {
           clerkId: id,
           eventType,
+        });
+        await ctx.runMutation(internal.observability.recordOperationalEvent, {
+          source: "webhook",
+          scope: "clerk-webhook.syncUser",
+          level: "error",
+          message: "Failed to sync Clerk user from webhook.",
+          correlationId,
+          provider: "clerk",
+          userId: id,
+          status: eventType,
+          metadata: JSON.stringify({ eventType, email }),
         });
         throw createServerError(
           error,
@@ -99,6 +139,15 @@ http.route({
         }),
       });
     }
+    await ctx.runMutation(internal.observability.recordOperationalEvent, {
+      source: "webhook",
+      scope: "clerk-webhook.processed",
+      level: "info",
+      message: "Webhook processed successfully.",
+      correlationId,
+      provider: "clerk",
+      status: eventType,
+    });
     return new Response("Webhook processed successfully", { status: 200 });
   }),
 });

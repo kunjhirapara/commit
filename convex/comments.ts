@@ -2,6 +2,7 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   logAuditEvent,
+  requirePermission,
   requireInterviewAccess,
   requireInterviewReviewAccess,
 } from "./authz";
@@ -16,6 +17,7 @@ export const addComment = mutation({
   },
   handler: async (ctx, args) => {
     const { user } = await requireInterviewReviewAccess(ctx, args.interviewId);
+    const now = Date.now();
 
     if (args.rating < 1 || args.rating > 5) {
       throw createServerError(
@@ -30,6 +32,7 @@ export const addComment = mutation({
       rating: args.rating,
       interviewerId: user.clerkId,
       visibility: args.visibility ?? "shared",
+      updatedAt: now,
     });
 
     await logAuditEvent(ctx, {
@@ -53,7 +56,7 @@ export const addComment = mutation({
 export const getComments = query({
   args: { interviewId: v.id("interviews") },
   handler: async (ctx, args) => {
-    const { user } = await requireInterviewAccess(ctx, args.interviewId);
+    const { user } = await requireInterviewReviewAccess(ctx, args.interviewId);
     const comments = await ctx.db
       .query("comments")
       .withIndex("by_interview_id", (q) =>
@@ -80,6 +83,7 @@ export const editComment = mutation({
   },
   handler: async (ctx, args) => {
     const comment = await ctx.db.get(args.commentId);
+    const now = Date.now();
 
     if (!comment) {
       throw createServerError(
@@ -108,7 +112,7 @@ export const editComment = mutation({
       content: args.content.trim(),
       rating: args.rating,
       visibility: args.visibility ?? comment.visibility ?? "shared",
-      editedAt: Date.now(),
+      updatedAt: now,
     });
 
     await logAuditEvent(ctx, {

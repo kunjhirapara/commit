@@ -43,6 +43,17 @@ const decisionOutcome = v.union(
   v.literal("hold"),
   v.literal("review"),
 );
+const observabilityLevel = v.union(
+  v.literal("info"),
+  v.literal("warn"),
+  v.literal("error"),
+  v.literal("critical"),
+);
+const healthStatus = v.union(
+  v.literal("healthy"),
+  v.literal("degraded"),
+  v.literal("unhealthy"),
+);
 
 export default defineSchema({
   users: defineTable({
@@ -78,6 +89,13 @@ export default defineSchema({
     cancellationReason: v.optional(v.string()),
     rescheduleReason: v.optional(v.string()),
     reminderSentAt: v.optional(v.number()),
+    recordingConsentRequired: v.optional(v.boolean()),
+    recordingConsentCapturedAt: v.optional(v.number()),
+    recordingConsentCapturedBy: v.optional(v.string()),
+    recordingDisclosure: v.optional(v.string()),
+    recordingRetentionDays: v.optional(v.number()),
+    notesRetentionDays: v.optional(v.number()),
+    candidateDataRetentionDays: v.optional(v.number()),
     lifecycleEvents: v.optional(
       v.array(
         v.object({
@@ -99,7 +117,7 @@ export default defineSchema({
     interviewerId: v.string(),
     interviewId: v.id("interviews"),
     visibility: v.optional(feedbackVisibility),
-    editedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
   })
     .index("by_interview_id", ["interviewId"])
     .index("by_interview_id_interviewer_id", ["interviewId", "interviewerId"]),
@@ -194,4 +212,39 @@ export default defineSchema({
     .index("by_recipient_status", ["recipientClerkId", "status"])
     .index("by_recipient_scheduled_for", ["recipientClerkId", "scheduledFor"])
     .index("by_status", ["status"]),
+
+  operationalEvents: defineTable({
+    source: v.union(
+      v.literal("client"),
+      v.literal("server"),
+      v.literal("convex"),
+      v.literal("webhook"),
+    ),
+    scope: v.string(),
+    level: observabilityLevel,
+    message: v.string(),
+    requestId: v.optional(v.string()),
+    correlationId: v.optional(v.string()),
+    userId: v.optional(v.string()),
+    interviewId: v.optional(v.string()),
+    streamCallId: v.optional(v.string()),
+    provider: v.optional(v.string()),
+    status: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_created_at", ["createdAt"])
+    .index("by_level_created_at", ["level", "createdAt"])
+    .index("by_scope_created_at", ["scope", "createdAt"]),
+
+  integrationHealthChecks: defineTable({
+    provider: v.string(),
+    status: healthStatus,
+    message: v.string(),
+    latencyMs: v.optional(v.number()),
+    metadata: v.optional(v.string()),
+    checkedAt: v.number(),
+  })
+    .index("by_provider_checked_at", ["provider", "checkedAt"])
+    .index("by_status_checked_at", ["status", "checkedAt"]),
 });

@@ -16,6 +16,7 @@ import type * as feedback from "../feedback.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
 import type * as notifications from "../notifications.js";
+import type * as observability from "../observability.js";
 import type * as sessionEvents from "../sessionEvents.js";
 import type * as users from "../users.js";
 
@@ -34,6 +35,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   interviews: typeof interviews;
   notifications: typeof notifications;
+  observability: typeof observability;
   sessionEvents: typeof sessionEvents;
   users: typeof users;
 }>;

@@ -11,6 +11,7 @@ import {
   getErrorDetails,
   logError,
 } from "@/lib/errors";
+import { getValidatedClientEnv } from "@/lib/env";
 
 const StreamClientProvider = ({ children }: { children: ReactNode }) => {
   const [streamVideoClient, setStreamVideoClient] =
@@ -35,6 +36,7 @@ const StreamClientProvider = ({ children }: { children: ReactNode }) => {
 
     try {
       const apiKey = process.env.NEXT_PUBLIC_STREAM_API_KEY;
+      getValidatedClientEnv();
 
       if (!apiKey) {
         throw new Error(

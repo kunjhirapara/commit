@@ -1,6 +1,6 @@
 import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { logAuditEvent, requirePermission } from "./authz";
+import { requirePermission } from "./authz";
 
 const AUDIT_LOG_LIMIT = 20;
 
@@ -23,7 +23,7 @@ export const recordSystemAuditLog = internalMutation({
 
 export const getRecentAuditLogs = query({
   handler: async (ctx) => {
-    await requirePermission(ctx, "manageRoles");
+    await requirePermission(ctx, "viewObservability");
     return await ctx.db.query("auditLogs").order("desc").take(AUDIT_LOG_LIMIT);
   },
 });

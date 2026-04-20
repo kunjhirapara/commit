@@ -31,12 +31,32 @@ export const logError = (
   metadata?: ErrorMetadata,
 ) => {
   const details = {
+    source: typeof window === "undefined" ? "server" : "client",
+    level: "error",
+    scope,
     message: getErrorMessage(error),
     metadata,
     stack: error instanceof Error ? error.stack : undefined,
+    timestamp: new Date().toISOString(),
   };
 
-  console.error(`[${scope}]`, details);
+  console.error(JSON.stringify(details));
+
+  if (typeof window !== "undefined") {
+    void import("./telemetry")
+      .then(({ createTelemetryEvent, sendTelemetry }) =>
+        sendTelemetry(
+          createTelemetryEvent({
+            source: "client",
+            scope,
+            level: "error",
+            message: details.message,
+            metadata,
+          }),
+        ),
+      )
+      .catch(() => undefined);
+  }
 };
 
 export const getDisplayErrorMessage = (

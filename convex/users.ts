@@ -11,6 +11,25 @@ import { createServerError } from "./errorUtils";
 
 const INVITATION_LIST_LIMIT = 12;
 
+const sanitizeUserForViewer = <T extends {
+  clerkId: string;
+  email: string;
+  role: UserRole;
+}>(
+  viewer: { clerkId: string; role: UserRole },
+  user: T,
+) => {
+  const canViewEmail =
+    viewer.role === "admin" ||
+    viewer.role === "recruiter" ||
+    viewer.clerkId === user.clerkId;
+
+  return {
+    ...user,
+    email: canViewEmail ? user.email : "",
+  };
+};
+
 export const syncUser = mutation({
   args: {
     clerkId: v.string(),
@@ -120,30 +139,46 @@ export const syncUser = mutation({
 export const getCurrentUser = query({
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    return user;
+    return sanitizeUserForViewer(user, user);
   },
 });
 
 export const getUsers = query({
   handler: async (ctx) => {
-    await requirePermission(ctx, "viewUsers");
+    const { user } = await requirePermission(ctx, "viewUsers");
     const users = await ctx.db.query("users").collect();
-    return users;
+    return users.map((record) => sanitizeUserForViewer(user, record));
   },
 });
 export const getUserByClerkId = query({
   args: { clerkId: v.string() },
   handler: async (ctx, args) => {
     if (!args.clerkId) return null;
+    const { user: viewer } = await getCurrentUserRecord(ctx);
 
-    const user = await ctx.db
+    const targetUser = await ctx.db
       .query("users")
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .first();
 
-    return user;
+    if (!targetUser) return null;
+
+    if (
+      viewer.clerkId !== args.clerkId &&
+      viewerCannotInspectUser(viewer.role)
+    ) {
+      throw createServerError(
+        new Error(`User ${viewer.clerkId} attempted to inspect ${args.clerkId}`),
+        "You are not allowed to view this user.",
+      );
+    }
+
+    return sanitizeUserForViewer(viewer, targetUser);
   },
 });
+
+const viewerCannotInspectUser = (role: UserRole) =>
+  role !== "admin" && role !== "recruiter" && role !== "interviewer";
 
 export const listInvitations = query({
   handler: async (ctx) => {

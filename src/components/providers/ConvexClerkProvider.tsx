@@ -3,8 +3,10 @@ import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { useSyncUser } from "@/hooks/useSyncUser";
+import { getValidatedClientEnv } from "@/lib/env";
 
-const convex = new ConvexReactClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+const clientEnv = getValidatedClientEnv();
+const convex = new ConvexReactClient(clientEnv.NEXT_PUBLIC_CONVEX_URL);
 
 function SyncUserProvider({ children }: { children: React.ReactNode }) {
   useSyncUser();
@@ -14,7 +16,7 @@ function SyncUserProvider({ children }: { children: React.ReactNode }) {
 function ConvexClerkProvider({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider
-      publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+      publishableKey={clientEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <SyncUserProvider>{children}</SyncUserProvider>
       </ConvexProviderWithClerk>
@@ -23,4 +25,3 @@ function ConvexClerkProvider({ children }: { children: React.ReactNode }) {
 }
 
 export default ConvexClerkProvider;
-
