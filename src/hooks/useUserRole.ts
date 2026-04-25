@@ -35,7 +35,7 @@ const BASE_PERMISSIONS = {
     "manageRoles",
     "manageRoleCatalog",
     "manageInvitations",
-    "manageCompliance",
+
     "manageReliability",
     "manageDeployments",
   ],
@@ -53,7 +53,7 @@ export type AppPermission =
   | "manageRoles"
   | "manageRoleCatalog"
   | "manageInvitations"
-  | "manageCompliance"
+
   | "manageReliability"
   | "manageDeployments";
 
@@ -75,7 +75,7 @@ export const useUserRole = () => {
   const canManageInvitations = hasPermission("manageInvitations");
   const canManageRoles = hasPermission("manageRoles");
   const canManageRoleCatalog = hasPermission("manageRoleCatalog");
-  const canManageCompliance = hasPermission("manageCompliance");
+
   const canEditInterviews = hasPermission("editInterviews");
   const canAccessDeveloperTools =
     hasPermission("viewObservability") ||
@@ -104,7 +104,7 @@ export const useUserRole = () => {
     canManageInvitations,
     canManageRoles,
     canManageRoleCatalog,
-    canManageCompliance,
+
     canEditInterviews,
     canAccessDeveloperTools,
     canViewRecordings,

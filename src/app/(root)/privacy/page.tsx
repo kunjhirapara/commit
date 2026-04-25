@@ -13,7 +13,7 @@ export default function PrivacyPage() {
             Commit stores interview scheduling details, participant identity data, evaluation notes, notification delivery state, and operational audit information to run hiring workflows safely.
           </p>
           <p>
-            Recording disclosures, retention windows, compliance jurisdiction, and candidate data handling are attached to interviews where applicable.
+            Recording disclosures, retention windows, and candidate data handling are attached to interviews where applicable.
           </p>
           <p>
             Sensitive access to candidate history, recordings, exports, and governance workflows may be logged to support least-privilege controls and incident investigations.

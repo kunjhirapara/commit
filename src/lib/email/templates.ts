@@ -301,7 +301,7 @@ export const resolveEmailTemplate = (
     case "feedback.reminder":
       return feedbackReminderTemplate(data);
     default:
-      if (type.startsWith("compliance.") || type.startsWith("system.")) {
+      if (type.startsWith("system.")) {
         return systemNotificationTemplate(data);
       }
       return null;

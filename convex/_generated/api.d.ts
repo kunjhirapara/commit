@@ -12,7 +12,6 @@ import type * as admin from "../admin.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as authz from "../authz.js";
 import type * as comments from "../comments.js";
-import type * as compliance from "../compliance.js";
 import type * as emailActions from "../emailActions.js";
 import type * as emailTemplates from "../emailTemplates.js";
 import type * as errorUtils from "../errorUtils.js";
@@ -36,7 +35,6 @@ declare const fullApi: ApiFromModules<{
   auditLogs: typeof auditLogs;
   authz: typeof authz;
   comments: typeof comments;
-  compliance: typeof compliance;
   emailActions: typeof emailActions;
   emailTemplates: typeof emailTemplates;
   errorUtils: typeof errorUtils;

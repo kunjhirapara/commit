@@ -47,7 +47,6 @@ const notificationCategory = v.union(
   v.literal("interview_update"),
   v.literal("interview_reminder"),
   v.literal("feedback_reminder"),
-  v.literal("compliance"),
   v.literal("system"),
 );
 
@@ -103,12 +102,7 @@ const backupSnapshotKind = v.union(
   v.literal("manual"),
   v.literal("restore_drill"),
 );
-const deploymentStatus = v.union(
-  v.literal("proposed"),
-  v.literal("approved"),
-  v.literal("deployed"),
-  v.literal("rolled_back"),
-);
+
 
 export default defineSchema({
   users: defineTable({
@@ -164,7 +158,7 @@ export default defineSchema({
     recordingConsentRequired: v.optional(v.boolean()),
     recordingConsentCapturedAt: v.optional(v.number()),
     recordingConsentCapturedBy: v.optional(v.string()),
-    complianceJurisdiction: v.optional(v.string()),
+
     recordingDisclosure: v.optional(v.string()),
     recordingRetentionDays: v.optional(v.number()),
     notesRetentionDays: v.optional(v.number()),
@@ -302,7 +296,6 @@ export default defineSchema({
     interviewScheduleEmails: v.boolean(),
     interviewReminderEmails: v.boolean(),
     feedbackReminderEmails: v.boolean(),
-    complianceEmails: v.boolean(),
     optOutAll: v.boolean(),
     timezone: v.optional(v.string()),
     updatedAt: v.number(),
@@ -410,32 +403,4 @@ export default defineSchema({
   })
     .index("by_status_created_at", ["status", "createdAt"])
     .index("by_kind_created_at", ["kind", "createdAt"]),
-
-  dataAccessLogs: defineTable({
-    actorClerkId: v.string(),
-    actorRole: userRole,
-    accessType: v.string(),
-    targetType: v.string(),
-    targetId: v.optional(v.string()),
-    justification: v.optional(v.string()),
-    metadata: v.optional(v.string()),
-    createdAt: v.number(),
-  })
-    .index("by_actor_created_at", ["actorClerkId", "createdAt"])
-    .index("by_target_type_created_at", ["targetType", "createdAt"]),
-
-  deploymentChanges: defineTable({
-    title: v.string(),
-    summary: v.string(),
-    status: deploymentStatus,
-    environment: v.string(),
-    proposedBy: v.string(),
-    approvedBy: v.optional(v.string()),
-    notes: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    deployedAt: v.optional(v.number()),
-  })
-    .index("by_status_created_at", ["status", "createdAt"])
-    .index("by_environment_created_at", ["environment", "createdAt"]),
 });

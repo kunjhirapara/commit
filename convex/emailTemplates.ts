@@ -228,7 +228,7 @@ export const resolveEmailTemplate = (
     }
 
     default: {
-      if (type.startsWith("compliance.") || type.startsWith("system.")) {
+      if (type.startsWith("system.")) {
         const body = `
           <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${BRAND_DARK};">System Notification</h1>
           ${pill("SYSTEM", MUTED_COLOR)}

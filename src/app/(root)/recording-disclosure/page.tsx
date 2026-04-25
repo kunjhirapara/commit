@@ -43,7 +43,7 @@ export default function RecordingDisclosurePage() {
           </p>
           <p>
             The platform records acknowledgement state, jurisdiction, and access activity to
-            support internal compliance review, least-privilege access, and candidate data-rights
+            support internal review, least-privilege access, and candidate data-rights
             requests.
           </p>
           <div className="space-y-3 rounded-2xl border border-border/70 bg-muted/30 p-4">

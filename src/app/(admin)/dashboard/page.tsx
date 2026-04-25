@@ -11,6 +11,7 @@ import {
 import LoaderUI from "@/components/ui/LoaderUI";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "../../../../convex/_generated/api";
@@ -71,12 +72,7 @@ function DashboardOverviewPage() {
       description: "System health, reliability queues, and delivery operations.",
       visible: canAccessDeveloperTools,
     },
-    {
-      href: "/dashboard/compliance",
-      title: "Compliance oversight",
-      description: "GDPR requests, sensitive access logs, and policy reporting.",
-      visible: canManageRoles,
-    },
+
     {
       href: "/dashboard/roles",
       title: "Roles studio",
@@ -222,7 +218,7 @@ function DashboardOverviewPage() {
                         <p className="font-medium capitalize">{check.provider}</p>
                         <p className="text-muted-foreground">{check.message}</p>
                       </div>
-                      <Badge variant="outline">{check.status}</Badge>
+                      <StatusBadge status={check.status} />
                     </div>
                   ))
                 )}

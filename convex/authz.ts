@@ -24,16 +24,16 @@ export const PERMISSION_VALUES = [
   "viewDashboard",
   "viewRecordings",
   "viewObservability",
-  "viewDataAccessLogs",
+
   "scheduleInterviews",
   "editInterviews",
   "cancelInterviews",
   "manageRoles",
   "manageRoleCatalog",
   "manageInvitations",
-  "manageCompliance",
+
   "manageReliability",
-  "manageDeployments",
+
 ] as const;
 
 export type Permission = (typeof PERMISSION_VALUES)[number];
@@ -61,7 +61,7 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "viewDashboard",
     "viewRecordings",
     "viewObservability",
-    "viewDataAccessLogs",
+
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
@@ -72,23 +72,20 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "viewObservability",
     "manageRoleCatalog",
     "manageReliability",
-    "manageDeployments",
   ],
   admin: [
     "viewUsers",
     "viewDashboard",
     "viewRecordings",
     "viewObservability",
-    "viewDataAccessLogs",
+
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
     "manageRoles",
     "manageRoleCatalog",
     "manageInvitations",
-    "manageCompliance",
     "manageReliability",
-    "manageDeployments",
   ],
 };
 

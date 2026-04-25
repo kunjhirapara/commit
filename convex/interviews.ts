@@ -138,7 +138,7 @@ const normalizeInterview = (interview: any) => {
       interview.bufferAfterMinutes ?? DEFAULT_BUFFER_AFTER_MINUTES,
     feedbackReminderSentAt: interview.feedbackReminderSentAt,
     recordingConsentRequired: interview.recordingConsentRequired ?? true,
-    complianceJurisdiction: interview.complianceJurisdiction ?? "global",
+
     recordingDisclosure:
       interview.recordingDisclosure ?? DEFAULT_RECORDING_DISCLOSURE,
     recordingRetentionDays:
@@ -617,7 +617,7 @@ export const createInterview = mutation({
       reminderSentAt: undefined,
       feedbackReminderSentAt: undefined,
       recordingConsentRequired: true,
-      complianceJurisdiction: "global",
+
       recordingDisclosure: DEFAULT_RECORDING_DISCLOSURE,
       recordingRetentionDays: DEFAULT_RECORDING_RETENTION_DAYS,
       notesRetentionDays: DEFAULT_NOTES_RETENTION_DAYS,

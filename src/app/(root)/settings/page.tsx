@@ -45,7 +45,7 @@ export default function SettingsPage() {
           next.interviewReminderEmails ?? preferences.interviewReminderEmails,
         feedbackReminderEmails:
           next.feedbackReminderEmails ?? preferences.feedbackReminderEmails,
-        complianceEmails: next.complianceEmails ?? preferences.complianceEmails,
+
         optOutAll: next.optOutAll ?? preferences.optOutAll,
         timezone: next.timezone ?? preferences.timezone,
       });
@@ -71,7 +71,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Notification Preferences</CardTitle>
           <CardDescription>
-            Choose which interview, reminder, and compliance updates should
+            Choose which interview and reminder updates should
             reach you.
           </CardDescription>
         </CardHeader>
@@ -114,7 +114,7 @@ export default function SettingsPage() {
           />
           <PreferenceRow
             label="In-app notifications"
-            description="Show interview and compliance updates inside the app."
+            description="Show interview updates inside the app."
             checked={preferences.inAppEnabled}
             onCheckedChange={(value) =>
               handlePreferenceToggle({ inAppEnabled: value })
@@ -144,14 +144,7 @@ export default function SettingsPage() {
               handlePreferenceToggle({ feedbackReminderEmails: value })
             }
           />
-          <PreferenceRow
-            label="Compliance emails"
-            description="Compliance-related operational updates."
-            checked={preferences.complianceEmails}
-            onCheckedChange={(value) =>
-              handlePreferenceToggle({ complianceEmails: value })
-            }
-          />
+
         </CardContent>
       </Card>
     </div>
