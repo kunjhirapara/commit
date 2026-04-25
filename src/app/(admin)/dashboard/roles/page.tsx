@@ -95,7 +95,6 @@ function RolesWorkspacePage() {
     return Array.from(groups.entries());
   }, [data]);
 
-  if (!data) return <LoaderUI />;
 
   const handlePermissionToggle = (permission: string) => {
     setSelectedPermissions((current) =>
@@ -186,6 +185,12 @@ function RolesWorkspacePage() {
         description="Create custom roles, attach permission bundles, and change a user's base role or assigned custom role from one developer/admin-only page."
       />
 
+      {!data ? (
+        <div className="py-20 flex justify-center">
+          <LoaderUI />
+        </div>
+      ) : (
+        <>
       <section className="grid gap-4 xl:grid-cols-[340px_minmax(0,1fr)]">
         <Card className="border-border/70 bg-card/80 shadow-sm">
           <CardHeader>
@@ -406,6 +411,8 @@ function RolesWorkspacePage() {
           </CardContent>
         </Card>
       </section>
+      </>
+      )}
     </div>
   );
 }

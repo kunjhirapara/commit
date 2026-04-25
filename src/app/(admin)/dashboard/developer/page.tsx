@@ -45,9 +45,7 @@ function DeveloperWorkspacePage() {
     void captureHealthSnapshot().catch(() => undefined);
   }, [captureHealthSnapshot]);
 
-  if (!monitoring || !reliability || !notificationOps || !deployments) {
-    return <LoaderUI />;
-  }
+  const isLoading = !monitoring || !reliability || !notificationOps || !deployments;
 
   const handleBackupRecord = async () => {
     if (!backupSummary.trim()) {
@@ -102,6 +100,12 @@ function DeveloperWorkspacePage() {
         description="Observability, reliability, notification delivery, backups, and deployment changes now live in one role-specific area for developers and admins."
       />
 
+      {isLoading ? (
+        <div className="py-20 flex justify-center">
+          <LoaderUI />
+        </div>
+      ) : (
+        <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Critical events" value={monitoring.totals.criticalEvents} />
         <MetricCard label="Open recoveries" value={reliability.totals.openRecoveries} />
@@ -423,6 +427,8 @@ function DeveloperWorkspacePage() {
           </CardContent>
         </Card>
       </section>
+      </>
+      )}
     </div>
   );
 }

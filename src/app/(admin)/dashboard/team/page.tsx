@@ -73,7 +73,6 @@ function TeamWorkspacePage() {
     [adminDashboard?.interviewerRoster],
   );
 
-  if (!adminDashboard) return <LoaderUI />;
 
   const handleInterviewerUpdate = async () => {
     if (!selectedInterviewerId) {
@@ -114,7 +113,12 @@ function TeamWorkspacePage() {
         <AccessManagementPanel />
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+      {!adminDashboard ? (
+        <div className="py-20 flex justify-center">
+          <LoaderUI />
+        </div>
+      ) : (
+        <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-border/70 bg-card/80 shadow-sm">
           <CardHeader>
             <CardTitle>Candidate history</CardTitle>
@@ -123,18 +127,20 @@ function TeamWorkspacePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Select value={selectedCandidateId} onValueChange={setSelectedCandidateId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Choose a candidate" />
-              </SelectTrigger>
-              <SelectContent>
-                {candidateOptions.map((candidate) => (
-                  <SelectItem key={candidate.clerkId} value={candidate.clerkId}>
-                    {candidate.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {candidateOptions.length > 0 && (
+              <Select value={selectedCandidateId} onValueChange={setSelectedCandidateId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a candidate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {candidateOptions.map((candidate) => (
+                    <SelectItem key={candidate.clerkId} value={candidate.clerkId}>
+                      {candidate.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <div className="grid gap-3">
               {(candidateHistory ?? []).map((round) => (
                 <div
@@ -166,18 +172,20 @@ function TeamWorkspacePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <Select value={selectedInterviewerId} onValueChange={setSelectedInterviewerId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Choose interviewer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {interviewerOptions.map((interviewer) => (
-                    <SelectItem key={interviewer.clerkId} value={interviewer.clerkId}>
-                      {interviewer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {interviewerOptions.length > 0 && (
+                <Select value={selectedInterviewerId} onValueChange={setSelectedInterviewerId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Choose interviewer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {interviewerOptions.map((interviewer) => (
+                      <SelectItem key={interviewer.clerkId} value={interviewer.clerkId}>
+                        {interviewer.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Input
                 value={skillDraft}
                 onChange={(event) => setSkillDraft(event.target.value)}
@@ -198,6 +206,7 @@ function TeamWorkspacePage() {
           </Card>
         ) : null}
       </section>
+      )}
     </div>
   );
 }

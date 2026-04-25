@@ -48,18 +48,20 @@ export function ManualOverrideCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <Select value={overrideInterviewId} onValueChange={onInterviewChange}>
-          <SelectTrigger>
-            <SelectValue placeholder="Choose interview" />
-          </SelectTrigger>
-          <SelectContent>
-            {interviews.map((interview) => (
-              <SelectItem key={String(interview._id)} value={String(interview._id)}>
-                {interview.candidateName} · {interview.title}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {interviews.length > 0 && (
+          <Select value={overrideInterviewId} onValueChange={onInterviewChange}>
+            <SelectTrigger>
+              <SelectValue placeholder="Choose interview" />
+            </SelectTrigger>
+            <SelectContent>
+              {interviews.map((interview) => (
+                <SelectItem key={String(interview._id)} value={String(interview._id)}>
+                  {interview.candidateName} · {interview.title}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select
           value={overrideStatus}
           onValueChange={(value) => onStatusChange(value as OverrideStatus)}

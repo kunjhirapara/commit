@@ -101,28 +101,32 @@ function RecordingsPage() {
     fetchRecordings();
   }, [calls, callsLoading]);
 
-  if (isLoading || callsLoading) return <LoaderUI />;
 
-  if (error || recordingsError) {
-    return (
-      <ErrorState
-        title="Unable to load recordings"
-        message={recordingsError ?? error ?? "Recordings are unavailable."}
-        details={recordingsErrorDetails ?? errorDetails}
-      />
-    );
-  }
 
   return (
     <div className="container max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold">Recordings</h1>
       <p className="text-muted-foreground my-1">
-        {recordings.length}{" "}
-        {recordings.length === 1 ? "recording" : "recordings"} available
+        {!isLoading && !callsLoading ? (
+          <>{recordings.length} {recordings.length === 1 ? "recording" : "recordings"} available</>
+        ) : (
+          "Loading recordings..."
+        )}
       </p>
 
-      {/* RECORDINGS RID */}
+      {/* RECORDINGS GRID */}
 
+      {isLoading || callsLoading ? (
+        <div className="flex items-center justify-center h-[400px]">
+          <LoaderUI />
+        </div>
+      ) : error || recordingsError ? (
+        <ErrorState
+          title="Unable to load recordings"
+          message={recordingsError ?? error ?? "Recordings are unavailable."}
+          details={recordingsErrorDetails ?? errorDetails}
+        />
+      ) : (
       <ScrollArea className="h-[calc(100vh-12rem)] mt-3">
         {recordings.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 pb-6">
@@ -138,6 +142,7 @@ function RecordingsPage() {
           </div>
         )}
       </ScrollArea>
+      )}
     </div>
   );
 }

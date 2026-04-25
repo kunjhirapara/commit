@@ -62,9 +62,8 @@ function InterviewsWorkspacePage() {
   const manualOverrideInterview = useMutation(api.admin.manualOverrideInterview);
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
 
-  if (!adminDashboard) return <LoaderUI />;
 
-  const interviewerOptions = adminDashboard.interviewerRoster ?? [];
+  const interviewerOptions = adminDashboard?.interviewerRoster ?? [];
 
   const handleBulkAction = async () => {
     if (!canEditInterviews) {
@@ -163,6 +162,13 @@ function InterviewsWorkspacePage() {
         }
       />
 
+      {!adminDashboard ? (
+        <div className="py-20 flex items-center justify-center">
+          <LoaderUI />
+        </div>
+      ) : (
+        <>
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Throughput" value={adminDashboard.analytics.throughput} />
         <MetricCard
@@ -232,6 +238,8 @@ function InterviewsWorkspacePage() {
           ) : null}
         </div>
       </section>
+      </>
+      )}
     </div>
   );
 }

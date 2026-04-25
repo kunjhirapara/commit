@@ -87,6 +87,16 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
     setCommentVisibility("shared");
   };
 
+  const handleOpenChange = (open: boolean) => {
+    if (!open && form.formState.isDirty) {
+      if (!window.confirm("You have unsaved changes. Are you sure you want to close?")) {
+        return;
+      }
+      form.reset();
+    }
+    setIsOpen(open);
+  };
+
   const handleNoteSubmit = async () => {
     if (!comment.trim()) return toast.error("Please enter a note.");
 
@@ -160,21 +170,19 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
     setCommentVisibility((entry.visibility ?? "shared") as NoteVisibility);
   };
 
-  if (
-    existingComments === undefined ||
-    users === undefined ||
-    feedbackEntries === undefined
-  ) {
-    return <LoaderUI />;
-  }
+
 
   return (
-    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button variant="secondary" className="w-full">
           <FileTextIcon className="h-4 w-4 mr-2" />
           Evaluation & Notes
-          <p>({feedbackEntries.length + existingComments.length})</p>
+          {feedbackEntries && existingComments ? (
+            <p>({feedbackEntries.length + existingComments.length})</p>
+          ) : (
+            <span className="w-4 h-4 ml-1 rounded-full animate-pulse bg-muted-foreground/20" />
+          )}
         </Button>
       </DialogTrigger>
 
@@ -183,46 +191,52 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
           <DialogTitle>Evaluation Workflow</DialogTitle>
         </DialogHeader>
 
-        <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] flex-1 overflow-hidden">
-          <div className="space-y-6 flex flex-col h-full overflow-y-auto pr-2 pb-4 self-start">
-            <FeedbackEntriesPanel feedbackEntries={feedbackEntries} users={users} />
-            <CommentHistoryPanel
-              comments={existingComments}
-              users={users}
-              onEdit={handleEditComment}
-            />
+        {!existingComments || !users || !feedbackEntries ? (
+          <div className="flex-1 flex items-center justify-center min-h-[400px]">
+            <LoaderUI />
           </div>
+        ) : (
+          <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] flex-1 overflow-hidden">
+            <div className="space-y-6 flex flex-col h-full overflow-y-auto pr-2 pb-4 self-start">
+              <FeedbackEntriesPanel feedbackEntries={feedbackEntries} users={users} />
+              <CommentHistoryPanel
+                comments={existingComments}
+                users={users}
+                onEdit={handleEditComment}
+              />
+            </div>
 
-          <div className="space-y-6 h-full overflow-y-auto pr-2 pb-4">
-            <StructuredScorecardSection
-              averageScore={averageScore}
-              feedbackState={feedbackState}
-              form={form}
-              formCompetencies={formCompetencies}
-              myFeedback={myFeedback ?? null}
-              onSaveDraft={form.handleSubmit((data) =>
-                handleFeedbackSubmit(data, "draft"),
-              )}
-              onSubmitEvaluation={form.handleSubmit((data) =>
-                handleFeedbackSubmit(data, "submitted"),
-              )}
-            />
-            <NotesComposerSection
-              comment={comment}
-              commentVisibility={commentVisibility}
-              editingCommentId={editingCommentId}
-              rating={rating}
-              onCancelEdit={resetNoteComposer}
-              onCommentChange={setComment}
-              onRatingChange={setRating}
-              onSubmit={handleNoteSubmit}
-              onVisibilityChange={setCommentVisibility}
-            />
+            <div className="space-y-6 h-full overflow-y-auto pr-2 pb-4">
+              <StructuredScorecardSection
+                averageScore={averageScore}
+                feedbackState={feedbackState}
+                form={form}
+                formCompetencies={formCompetencies}
+                myFeedback={myFeedback ?? null}
+                onSaveDraft={form.handleSubmit((data) =>
+                  handleFeedbackSubmit(data, "draft"),
+                )}
+                onSubmitEvaluation={form.handleSubmit((data) =>
+                  handleFeedbackSubmit(data, "submitted"),
+                )}
+              />
+              <NotesComposerSection
+                comment={comment}
+                commentVisibility={commentVisibility}
+                editingCommentId={editingCommentId}
+                rating={rating}
+                onCancelEdit={resetNoteComposer}
+                onCommentChange={setComment}
+                onRatingChange={setRating}
+                onSubmit={handleNoteSubmit}
+                onVisibilityChange={setCommentVisibility}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setIsOpen(false)}>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
             Close
           </Button>
         </DialogFooter>

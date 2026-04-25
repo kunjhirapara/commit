@@ -47,13 +47,10 @@ function DashboardOverviewPage() {
     canAccessDeveloperTools ? {} : "skip",
   );
 
-  if (
-    (role !== "developer" && !operations) ||
+  const isLoading =
+    (role !== "developer" && operations === undefined) ||
     (canAccessDeveloperTools &&
-      (!monitoring || !reliability || !notificationOps))
-  ) {
-    return <LoaderUI />;
-  }
+      (monitoring === undefined || reliability === undefined || notificationOps === undefined));
 
   const workspaceLinks = [
     {
@@ -129,6 +126,13 @@ function DashboardOverviewPage() {
         </Card>
       </div>
 
+      {isLoading ? (
+        <div className="py-20 flex justify-center">
+          <LoaderUI />
+        </div>
+      ) : (
+        <>
+
       {operations ? (
         <section className="space-y-4">
           <SectionIntro
@@ -203,18 +207,25 @@ function DashboardOverviewPage() {
                 <CardTitle>Latest health checks</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                {monitoring.healthChecks.map((check) => (
-                  <div
-                    key={`${check.provider}-${check.checkedAt}`}
-                    className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm"
-                  >
-                    <div>
-                      <p className="font-medium capitalize">{check.provider}</p>
-                      <p className="text-muted-foreground">{check.message}</p>
-                    </div>
-                    <Badge variant="outline">{check.status}</Badge>
+                {monitoring.healthChecks.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-8 text-center text-muted-foreground bg-muted/20 rounded-2xl border border-dashed border-border/70">
+                    <p className="text-sm font-medium">No recent health checks found.</p>
+                    <p className="text-xs opacity-80 mt-1">System monitoring will appear here.</p>
                   </div>
-                ))}
+                ) : (
+                  monitoring.healthChecks.map((check) => (
+                    <div
+                      key={`${check.provider}-${check.checkedAt}`}
+                      className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm"
+                    >
+                      <div>
+                        <p className="font-medium capitalize">{check.provider}</p>
+                        <p className="text-muted-foreground">{check.message}</p>
+                      </div>
+                      <Badge variant="outline">{check.status}</Badge>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
             <Card className="border-border/70 bg-card/80 shadow-sm">
@@ -236,6 +247,8 @@ function DashboardOverviewPage() {
           </div>
         </section>
       ) : null}
+        </>
+      )}
     </div>
   );
 }

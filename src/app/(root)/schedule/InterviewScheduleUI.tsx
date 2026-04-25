@@ -98,7 +98,7 @@ function InterviewScheduleUI() {
     candidateId: "",
     interviewerIds: [] as string[],
     meetingInstructions: defaultTemplate.instructions,
-    brandName: "CodeSync",
+    brandName: "Commit",
     browserFallbackInstructions:
       "If video fails, refresh once and rejoin from a laptop or desktop Chrome browser.",
     bufferBeforeMinutes: DEFAULT_BUFFER_MINUTES.before,
@@ -236,7 +236,7 @@ function InterviewScheduleUI() {
         candidateId: "",
         interviewerIds: [],
         meetingInstructions: defaultTemplate.instructions,
-        brandName: "CodeSync",
+        brandName: "Commit",
         browserFallbackInstructions:
           "If video fails, refresh once and rejoin from a laptop or desktop Chrome browser.",
         bufferBeforeMinutes: DEFAULT_BUFFER_MINUTES.before,
@@ -473,27 +473,29 @@ function InterviewScheduleUI() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Candidate</label>
-                <Select
-                  value={formData.candidateId}
-                  onValueChange={(candidateId) =>
-                    setFormData({ ...formData, candidateId })
-                  }>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select candidate" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {candidates.map((candidate) => (
-                      <SelectItem
-                        key={candidate.clerkId}
-                        value={candidate.clerkId}>
-                        <UserInfo user={candidate} />
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              {candidates.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Candidate</label>
+                  <Select
+                    value={formData.candidateId}
+                    onValueChange={(candidateId) =>
+                      setFormData({ ...formData, candidateId })
+                    }>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select candidate" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {candidates.map((candidate) => (
+                        <SelectItem
+                          key={candidate.clerkId}
+                          value={candidate.clerkId}>
+                          <UserInfo user={candidate} />
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">Interviewers</label>

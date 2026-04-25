@@ -77,7 +77,7 @@ export function PipelineFilters({
         </Select>
       </div>
 
-      {canEditInterviews && bulkAction === "assign_interviewer" ? (
+      {canEditInterviews && bulkAction === "assign_interviewer" && interviewerOptions.length > 0 ? (
         <Select value={bulkInterviewerId} onValueChange={onBulkInterviewerChange}>
           <SelectTrigger>
             <SelectValue placeholder="Assign interviewer" />
