@@ -79,76 +79,110 @@ http.route({
     }
 
     const eventType = event.type;
+    const existingEvent = await ctx.runQuery(
+      internal.reliability.getWebhookEventByProviderEventId,
+      {
+        provider: "clerk",
+        eventId: svix_id,
+      },
+    );
 
-    if (eventType === "user.created" || eventType === "user.updated") {
-      const { id, email_addresses, first_name, last_name, image_url } =
-        event.data;
-      const email = email_addresses[0].email_address;
-      const name = `${first_name || ""} ${last_name || ""}`.trim();
+    if (existingEvent?.status === "processed" || existingEvent?.status === "duplicate") {
+      await ctx.runMutation(internal.reliability.recordWebhookReceipt, {
+        provider: "clerk",
+        eventId: svix_id,
+        eventType,
+        payload: body,
+        correlationId,
+      });
 
-      try {
+      return new Response("Webhook already processed", { status: 200 });
+    }
+
+    await ctx.runMutation(internal.reliability.recordWebhookReceipt, {
+      provider: "clerk",
+      eventId: svix_id,
+      eventType,
+      payload: body,
+      correlationId,
+    });
+
+    try {
+      if (eventType === "user.created" || eventType === "user.updated") {
+        const { id, email_addresses, first_name, last_name, image_url } =
+          event.data;
+        const email = email_addresses[0].email_address;
+        const name = `${first_name || ""} ${last_name || ""}`.trim();
+
         await ctx.runMutation(api.users.syncUser, {
           clerkId: id,
           email,
           name,
           image: image_url || undefined,
         });
-      } catch (error) {
-        logServerError("clerk-webhook.syncUser", error, {
-          clerkId: id,
-          eventType,
+
+        await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
+          action: `clerk.${eventType}`,
+          actorClerkId: id,
+          actorEmail: email,
+          targetType: "user",
+          targetId: id,
+          metadata: JSON.stringify({ eventType }),
         });
-        await ctx.runMutation(internal.observability.recordOperationalEvent, {
-          source: "webhook",
-          scope: "clerk-webhook.syncUser",
-          level: "error",
-          message: "Failed to sync Clerk user from webhook.",
-          correlationId,
-          provider: "clerk",
-          userId: id,
-          status: eventType,
-          metadata: JSON.stringify({ eventType, email }),
-        });
-        throw createServerError(
-          error,
-          "Unable to process the webhook payload.",
-        );
       }
 
-      await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
-        action: `clerk.${eventType}`,
-        actorClerkId: id,
-        actorEmail: email,
-        targetType: "user",
-        targetId: id,
-        metadata: JSON.stringify({ eventType }),
-      });
-    }
+      if (eventType === "session.created" || eventType === "session.ended") {
+        const sessionData = event.data as { user_id?: string; id?: string };
 
-    if (eventType === "session.created" || eventType === "session.ended") {
-      const sessionData = event.data as { user_id?: string; id?: string };
-
-      await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
-        action: `clerk.${eventType}`,
-        actorClerkId: sessionData.user_id,
-        targetType: "session",
-        targetId: sessionData.id,
-        metadata: JSON.stringify({
-          eventType,
-          userId: sessionData.user_id,
-        }),
+        await ctx.runMutation(internal.auditLogs.recordSystemAuditLog, {
+          action: `clerk.${eventType}`,
+          actorClerkId: sessionData.user_id,
+          targetType: "session",
+          targetId: sessionData.id,
+          metadata: JSON.stringify({
+            eventType,
+            userId: sessionData.user_id,
+          }),
+        });
+      }
+      await ctx.runMutation(internal.reliability.markWebhookProcessed, {
+        provider: "clerk",
+        eventId: svix_id,
       });
+      await ctx.runMutation(internal.observability.recordOperationalEvent, {
+        source: "webhook",
+        scope: "clerk-webhook.processed",
+        level: "info",
+        message: "Webhook processed successfully.",
+        correlationId,
+        provider: "clerk",
+        status: eventType,
+      });
+      return new Response("Webhook processed successfully", { status: 200 });
+    } catch (error) {
+      logServerError("clerk-webhook.process", error, {
+        eventType,
+        svixId: svix_id,
+      });
+      await ctx.runMutation(internal.reliability.markWebhookFailed, {
+        provider: "clerk",
+        eventId: svix_id,
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown webhook processing error.",
+        payload: body,
+      });
+      await ctx.runMutation(internal.observability.recordOperationalEvent, {
+        source: "webhook",
+        scope: "clerk-webhook.process",
+        level: "error",
+        message: "Webhook processing failed and was queued for recovery.",
+        correlationId,
+        provider: "clerk",
+        status: eventType,
+        metadata: JSON.stringify({ svixId: svix_id }),
+      });
+      throw createServerError(error, "Unable to process the webhook payload.");
     }
-    await ctx.runMutation(internal.observability.recordOperationalEvent, {
-      source: "webhook",
-      scope: "clerk-webhook.processed",
-      level: "info",
-      message: "Webhook processed successfully.",
-      correlationId,
-      provider: "clerk",
-      status: eventType,
-    });
-    return new Response("Webhook processed successfully", { status: 200 });
   }),
 });
 

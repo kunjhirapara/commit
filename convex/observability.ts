@@ -121,11 +121,13 @@ export const captureHealthSnapshot = mutation({
       {
         provider: "stream",
         status:
-          process.env.NEXT_PUBLIC_STREAM_API_KEY && process.env.STREAM_SECRET_KEY
+          process.env.NEXT_PUBLIC_STREAM_API_KEY &&
+          process.env.STREAM_SECRET_KEY
             ? "healthy"
             : "unhealthy",
         message:
-          process.env.NEXT_PUBLIC_STREAM_API_KEY && process.env.STREAM_SECRET_KEY
+          process.env.NEXT_PUBLIC_STREAM_API_KEY &&
+          process.env.STREAM_SECRET_KEY
             ? "Stream video credentials configured."
             : "Missing Stream credentials.",
       },
@@ -167,8 +169,13 @@ export const getMonitoringDashboard = query({
       .order("desc")
       .take(50);
 
-    const eventsLastDay = recentEvents.filter((event) => event.createdAt >= oneDayAgo);
-    const latestHealthByProvider = new Map<string, (typeof recentHealthChecks)[number]>();
+    const eventsLastDay = recentEvents.filter(
+      (event) => event.createdAt >= oneDayAgo,
+    );
+    const latestHealthByProvider = new Map<
+      string,
+      (typeof recentHealthChecks)[number]
+    >();
 
     for (const healthCheck of recentHealthChecks) {
       if (!latestHealthByProvider.has(healthCheck.provider)) {
@@ -178,18 +185,23 @@ export const getMonitoringDashboard = query({
 
     return {
       totals: {
-        authFailures: eventsLastDay.filter((event) => event.scope.includes("auth")).length,
-        schedulingFailures: eventsLastDay.filter((event) =>
-          event.scope.includes("schedule") || event.scope.includes("interview"),
+        authFailures: eventsLastDay.filter((event) =>
+          event.scope.includes("auth"),
+        ).length,
+        schedulingFailures: eventsLastDay.filter(
+          (event) =>
+            event.scope.includes("schedule") ||
+            event.scope.includes("interview"),
         ).length,
         webhookFailures: eventsLastDay.filter((event) =>
           event.scope.includes("webhook"),
         ).length,
-        videoFailures: eventsLastDay.filter((event) =>
-          event.provider === "stream" || event.scope.includes("video"),
+        videoFailures: eventsLastDay.filter(
+          (event) =>
+            event.provider === "stream" || event.scope.includes("video"),
         ).length,
-        criticalEvents: eventsLastDay.filter((event) =>
-          event.level === "critical" || event.level === "error",
+        criticalEvents: eventsLastDay.filter(
+          (event) => event.level === "critical" || event.level === "error",
         ).length,
       },
       recentEvents: recentEvents.slice(0, 12),
