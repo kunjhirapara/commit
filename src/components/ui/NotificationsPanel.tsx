@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { BellRingIcon } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { Badge } from "./badge";
@@ -20,7 +20,8 @@ const formatTimestamp = (timestamp: number) =>
   }).format(new Date(timestamp));
 
 function NotificationsPanel() {
-  const notifications = useQuery(api.notifications.getMyNotifications, {});
+  const { isAuthenticated } = useConvexAuth();
+  const notifications = useQuery(api.notifications.getMyNotifications, isAuthenticated ? {} : "skip");
   const markAsRead = useMutation(api.notifications.markNotificationAsRead);
 
   if (!notifications || notifications.length === 0) return null;
@@ -35,7 +36,7 @@ function NotificationsPanel() {
         <div className="flex items-start justify-between gap-3">
           <div className="space-y-1">
             <CardTitle className="flex items-center gap-2 text-lg">
-              <BellRingIcon className="h-5 w-5 text-emerald-500" />
+              <BellRingIcon className="h-5 w-5 text-primary" />
               Recent notifications
             </CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -52,8 +53,8 @@ function NotificationsPanel() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {notifications.slice(0, 4).map((notification) => {
+      <CardContent className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+        {notifications.map((notification) => {
           const unread = notification.status !== "read";
 
           return (
@@ -63,7 +64,7 @@ function NotificationsPanel() {
             >
               <div
                 className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${
-                  unread ? "bg-emerald-500" : "bg-muted-foreground/30"
+                  unread ? "bg-primary" : "bg-muted-foreground/30"
                 }`}
               />
               <div className="min-w-0 flex-1 space-y-1">

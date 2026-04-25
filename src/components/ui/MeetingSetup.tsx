@@ -206,7 +206,7 @@ function MeetingSetup({
         <Card className="p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <p className="text-sm uppercase tracking-[0.2em] text-emerald-600">
+              <p className="text-sm uppercase tracking-[0.2em] text-primary">
                 {interview?.brandName || "Commit Interviews"}
               </p>
               <h1 className="mt-2 text-2xl font-semibold">
@@ -287,10 +287,10 @@ function MeetingSetup({
                   aria-live="polite">
                   <div className="flex items-start gap-3">
                     <div
-                      className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${item.ok ? "bg-emerald-500/10" : "bg-amber-500/10"
+                      className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${item.ok ? "bg-primary/10" : "bg-amber-500/10"
                         }`}>
                       <item.icon
-                        className={`h-4 w-4 ${item.ok ? "text-emerald-600" : "text-amber-600"
+                        className={`h-4 w-4 ${item.ok ? "text-primary" : "text-amber-600"
                           }`}
                       />
                     </div>

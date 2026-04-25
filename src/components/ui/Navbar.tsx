@@ -12,7 +12,7 @@ function Navbar() {
         <Link
           href="/"
           className="flex items-center gap-2 font-semibold text-2xl mr-6 font-mono hover:opacity-80 transition-opacity">
-          <CodeIcon className="size-8 text-emerald-500" />
+          <CodeIcon className="size-8 text-primary" />
           <span className="text-primary font-bold">
             Commit
           </span>
@@ -20,12 +20,6 @@ function Navbar() {
 
         <SignedIn>
           <div className="flex items-center space-x-4 ml-auto">
-            <Link
-              href="/settings"
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-            >
-              Settings
-            </Link>
             <DasboardBtn />
             <NotificationBell />
             <ModeToggle />

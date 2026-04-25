@@ -674,7 +674,7 @@ function InterviewScheduleUI() {
           <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
         </div>
       ) : interviews.length > 0 ? (
-        <div className="space-y-4">
+        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
             {interviews.map((interview) => (
               <div key={interview._id} className="space-y-3">

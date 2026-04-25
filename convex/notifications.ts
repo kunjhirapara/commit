@@ -14,7 +14,6 @@ const notificationCategoryValidator = v.union(
   v.literal("interview_update"),
   v.literal("interview_reminder"),
   v.literal("feedback_reminder"),
-  v.literal("compliance"),
   v.literal("system"),
 );
 
@@ -24,7 +23,6 @@ type NotificationCategory =
   | "interview_update"
   | "interview_reminder"
   | "feedback_reminder"
-  | "compliance"
   | "system";
 
 const defaultPreferencePayload = (userClerkId: string) => ({
@@ -34,7 +32,6 @@ const defaultPreferencePayload = (userClerkId: string) => ({
   interviewScheduleEmails: true,
   interviewReminderEmails: true,
   feedbackReminderEmails: true,
-  complianceEmails: true,
   optOutAll: false,
   updatedAt: Date.now(),
 });
@@ -67,9 +64,7 @@ const inferNotificationCategory = (notification: {
     case "interview.updated":
       return "interview_update";
     default:
-      return notification.type?.startsWith("compliance.")
-        ? "compliance"
-        : "system";
+      return "system";
   }
 };
 
@@ -95,7 +90,7 @@ const isEmailAllowedForCategory = (
   }
   if (category === "interview_reminder") return prefs.interviewReminderEmails;
   if (category === "feedback_reminder") return prefs.feedbackReminderEmails;
-  if (category === "compliance") return prefs.complianceEmails;
+
   return true;
 };
 
@@ -117,7 +112,6 @@ const createNotificationFanout = async (
       | "interview_update"
       | "interview_reminder"
       | "feedback_reminder"
-      | "compliance"
       | "system";
     title: string;
     message: string;
@@ -513,7 +507,7 @@ export const getLegacyNotificationBackfillStatus = query({
 export const backfillLegacyNotificationFields = mutation({
   args: {},
   handler: async (ctx) => {
-    const { user } = await requirePermission(ctx, "manageCompliance");
+    const { user } = await getCurrentUserRecord(ctx);
     const notifications = await ctx.db.query("notifications").collect();
     let updatedCount = 0;
 
@@ -551,7 +545,6 @@ export const updateMyNotificationPreferences = mutation({
     interviewScheduleEmails: v.boolean(),
     interviewReminderEmails: v.boolean(),
     feedbackReminderEmails: v.boolean(),
-    complianceEmails: v.boolean(),
     optOutAll: v.boolean(),
     timezone: v.optional(v.string()),
   },

@@ -16,6 +16,7 @@ import {
 } from "./card";
 import { CalendarIcon, ExternalLinkIcon } from "lucide-react";
 import { Badge } from "./badge";
+import { StatusBadge } from "./status-badge";
 import { Button } from "./button";
 
 type Interview = Doc<"interviews">;
@@ -39,10 +40,7 @@ function MeetingCard({ interview }: { interview: Interview }) {
             {formattedDate}
           </div>
 
-          <Badge
-            variant={getInterviewStatusBadgeVariant(status)}>
-            {getInterviewStatusLabel(status)}
-          </Badge>
+          <StatusBadge status={status} />
         </div>
 
         <CardTitle>{interview.title}</CardTitle>

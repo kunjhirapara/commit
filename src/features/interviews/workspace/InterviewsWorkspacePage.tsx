@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useState, useEffect } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { toast } from "sonner";
 import RoleGuard from "@/components/auth/RoleGuard";
@@ -48,7 +48,7 @@ function InterviewsWorkspacePage() {
   const [overrideReason, setOverrideReason] = useState("");
   const deferredSearch = useDeferredValue(search);
 
-  const adminDashboard = useQuery(api.admin.getAdminDashboard, {
+  const adminDashboardRaw = useQuery(api.admin.getAdminDashboard, {
     search: deferredSearch || undefined,
     stage: stage === "all" ? undefined : stage,
   }) as
@@ -58,6 +58,17 @@ function InterviewsWorkspacePage() {
         pipeline: DashboardInterview[];
       }
     | undefined;
+
+  const [adminDashboard, setAdminDashboard] = useState(adminDashboardRaw);
+
+  useEffect(() => {
+    if (adminDashboardRaw) {
+      setAdminDashboard(adminDashboardRaw);
+    }
+  }, [adminDashboardRaw]);
+
+  const isFetching = adminDashboardRaw === undefined;
+
   const bulkUpdateInterviews = useMutation(api.admin.bulkUpdateInterviews);
   const manualOverrideInterview = useMutation(api.admin.manualOverrideInterview);
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
@@ -169,6 +180,7 @@ function InterviewsWorkspacePage() {
       ) : (
         <>
 
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Throughput" value={adminDashboard.analytics.throughput} />
         <MetricCard
@@ -210,14 +222,20 @@ function InterviewsWorkspacePage() {
               onSearchChange={setSearch}
               onStageChange={setStage}
             />
-            <PipelineInterviewList
-              canEditInterviews={canEditInterviews}
-              interviews={adminDashboard.pipeline}
-              role={role}
-              selectedInterviewIds={selectedInterviewIds}
-              onSelectionChange={handleSelectionChange}
-              onStatusUpdate={handleStatusUpdate}
-            />
+            {isFetching ? (
+              <div className="py-10 flex items-center justify-center">
+                <LoaderUI />
+              </div>
+            ) : (
+              <PipelineInterviewList
+                canEditInterviews={canEditInterviews}
+                interviews={adminDashboard.pipeline}
+                role={role}
+                selectedInterviewIds={selectedInterviewIds}
+                onSelectionChange={handleSelectionChange}
+                onStatusUpdate={handleStatusUpdate}
+              />
+            )}
           </CardContent>
         </Card>
 

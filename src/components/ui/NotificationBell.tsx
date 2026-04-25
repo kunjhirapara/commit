@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useConvexAuth } from "convex/react";
 import { BellIcon, CheckIcon, CheckCheckIcon } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
 import { Badge } from "./badge";
@@ -36,7 +36,8 @@ const formatRelativeTime = (timestamp: number) => {
 };
 
 function NotificationBell() {
-  const notifications = useQuery(api.notifications.getMyNotifications, {});
+  const { isAuthenticated } = useConvexAuth();
+  const notifications = useQuery(api.notifications.getMyNotifications, isAuthenticated ? {} : "skip");
   const markAsRead = useMutation(api.notifications.markNotificationAsRead);
   const markAllAsRead = useMutation(api.notifications.markAllNotificationsAsRead);
 
@@ -93,14 +94,14 @@ function NotificationBell() {
                 Read all
               </Button>
             ) : null}
-            <Button variant="ghost" size="sm" asChild>
+            <Button size="sm" asChild>
               <Link href="/settings">Settings</Link>
             </Button>
           </div>
         </div>
         <DropdownMenuSeparator />
         {dropdownNotifications.length > 0 ? (
-          <ScrollArea className="max-h-[26rem]">
+          <div className="max-h-[26rem] overflow-y-auto pr-1">
             <div className="space-y-1 p-2">
               {dropdownNotifications.map((notification) => {
                 const unread = notification.status !== "read";
@@ -168,7 +169,7 @@ function NotificationBell() {
                 );
               })}
             </div>
-          </ScrollArea>
+          </div>
         ) : (
           <div className="px-4 py-8 text-center">
             <p className="text-sm font-medium">No notifications yet</p>
