@@ -5,12 +5,14 @@ const userRole = v.union(
   v.literal("candidate"),
   v.literal("interviewer"),
   v.literal("recruiter"),
+  v.literal("developer"),
   v.literal("admin"),
 );
 
 const privilegedInvitationRole = v.union(
   v.literal("interviewer"),
   v.literal("recruiter"),
+  v.literal("developer"),
   v.literal("admin"),
 );
 
@@ -33,6 +35,20 @@ const notificationStatus = v.union(
   v.literal("pending"),
   v.literal("sent"),
   v.literal("read"),
+  v.literal("failed"),
+  v.literal("suppressed"),
+);
+const notificationChannel = v.union(
+  v.literal("in_app"),
+  v.literal("email"),
+);
+const notificationCategory = v.union(
+  v.literal("interview_schedule"),
+  v.literal("interview_update"),
+  v.literal("interview_reminder"),
+  v.literal("feedback_reminder"),
+  v.literal("compliance"),
+  v.literal("system"),
 );
 
 const feedbackState = v.union(v.literal("draft"), v.literal("submitted"));
@@ -54,6 +70,60 @@ const healthStatus = v.union(
   v.literal("degraded"),
   v.literal("unhealthy"),
 );
+const backgroundJobStatus = v.union(
+  v.literal("queued"),
+  v.literal("running"),
+  v.literal("completed"),
+  v.literal("failed"),
+  v.literal("dead_letter"),
+  v.literal("cancelled"),
+);
+const backgroundJobKind = v.union(
+  v.literal("interview_reminder"),
+  v.literal("interview_cleanup"),
+  v.literal("interview_reconcile"),
+  v.literal("webhook_retry"),
+  v.literal("delayed_processing"),
+);
+const recoveryOperationStatus = v.union(
+  v.literal("open"),
+  v.literal("resolved"),
+);
+const recoveryOperationMode = v.union(
+  v.literal("automatic"),
+  v.literal("manual"),
+);
+const backupSnapshotStatus = v.union(
+  v.literal("available"),
+  v.literal("restored"),
+  v.literal("failed"),
+);
+const backupSnapshotKind = v.union(
+  v.literal("automatic"),
+  v.literal("manual"),
+  v.literal("restore_drill"),
+);
+const policyDocumentType = v.union(
+  v.literal("terms"),
+  v.literal("privacy"),
+  v.literal("recording"),
+);
+const gdprRequestType = v.union(
+  v.literal("export"),
+  v.literal("delete"),
+);
+const gdprRequestStatus = v.union(
+  v.literal("requested"),
+  v.literal("in_review"),
+  v.literal("completed"),
+  v.literal("rejected"),
+);
+const deploymentStatus = v.union(
+  v.literal("proposed"),
+  v.literal("approved"),
+  v.literal("deployed"),
+  v.literal("rolled_back"),
+);
 
 export default defineSchema({
   users: defineTable({
@@ -61,10 +131,26 @@ export default defineSchema({
     email: v.string(),
     image: v.optional(v.string()),
     role: userRole,
+    customRoleId: v.optional(v.id("roleDefinitions")),
     clerkId: v.string(),
+    skills: v.optional(v.array(v.string())),
+    availabilitySummary: v.optional(v.string()),
+    permissionTags: v.optional(v.array(v.string())),
+    isActive: v.optional(v.boolean()),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"]),
+
+  roleDefinitions: defineTable({
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    permissions: v.array(v.string()),
+    createdBy: v.string(),
+    updatedBy: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_slug", ["slug"]),
 
   interviews: defineTable({
     title: v.string(),
@@ -89,9 +175,11 @@ export default defineSchema({
     cancellationReason: v.optional(v.string()),
     rescheduleReason: v.optional(v.string()),
     reminderSentAt: v.optional(v.number()),
+    feedbackReminderSentAt: v.optional(v.number()),
     recordingConsentRequired: v.optional(v.boolean()),
     recordingConsentCapturedAt: v.optional(v.number()),
     recordingConsentCapturedBy: v.optional(v.string()),
+    complianceJurisdiction: v.optional(v.string()),
     recordingDisclosure: v.optional(v.string()),
     recordingRetentionDays: v.optional(v.number()),
     notesRetentionDays: v.optional(v.number()),
@@ -201,17 +289,39 @@ export default defineSchema({
     recipientClerkId: v.string(),
     interviewId: v.optional(v.id("interviews")),
     type: v.string(),
+    channel: v.optional(notificationChannel),
+    category: v.optional(notificationCategory),
     title: v.string(),
     message: v.string(),
     status: notificationStatus,
     scheduledFor: v.number(),
     sentAt: v.optional(v.number()),
     readAt: v.optional(v.number()),
+    deliveryAttempts: v.optional(v.number()),
+    nextRetryAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    recipientEmail: v.optional(v.string()),
+    timezone: v.optional(v.string()),
+    providerMessageId: v.optional(v.string()),
     metadata: v.optional(v.string()),
   })
+    .index("by_recipient_channel", ["recipientClerkId", "channel"])
     .index("by_recipient_status", ["recipientClerkId", "status"])
     .index("by_recipient_scheduled_for", ["recipientClerkId", "scheduledFor"])
     .index("by_status", ["status"]),
+
+  notificationPreferences: defineTable({
+    userClerkId: v.string(),
+    emailEnabled: v.boolean(),
+    inAppEnabled: v.boolean(),
+    interviewScheduleEmails: v.boolean(),
+    interviewReminderEmails: v.boolean(),
+    feedbackReminderEmails: v.boolean(),
+    complianceEmails: v.boolean(),
+    optOutAll: v.boolean(),
+    timezone: v.optional(v.string()),
+    updatedAt: v.number(),
+  }).index("by_user_clerk_id", ["userClerkId"]),
 
   operationalEvents: defineTable({
     source: v.union(
@@ -247,4 +357,125 @@ export default defineSchema({
   })
     .index("by_provider_checked_at", ["provider", "checkedAt"])
     .index("by_status_checked_at", ["status", "checkedAt"]),
+
+  webhookEvents: defineTable({
+    provider: v.string(),
+    eventId: v.string(),
+    eventType: v.string(),
+    status: v.union(
+      v.literal("received"),
+      v.literal("processed"),
+      v.literal("duplicate"),
+      v.literal("failed"),
+    ),
+    attemptCount: v.number(),
+    nextRetryAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    payload: v.optional(v.string()),
+    createdAt: v.number(),
+    processedAt: v.optional(v.number()),
+    correlationId: v.optional(v.string()),
+  })
+    .index("by_provider_event_id", ["provider", "eventId"])
+    .index("by_status_created_at", ["status", "createdAt"]),
+
+  backgroundJobs: defineTable({
+    kind: backgroundJobKind,
+    status: backgroundJobStatus,
+    runAt: v.number(),
+    attemptCount: v.number(),
+    maxAttempts: v.number(),
+    payload: v.optional(v.string()),
+    lastError: v.optional(v.string()),
+    lastAttemptAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    deadLetterReason: v.optional(v.string()),
+    relatedId: v.optional(v.string()),
+  })
+    .index("by_status_run_at", ["status", "runAt"])
+    .index("by_kind_created_at", ["kind", "createdAt"]),
+
+  recoveryOperations: defineTable({
+    status: recoveryOperationStatus,
+    mode: recoveryOperationMode,
+    scope: v.string(),
+    summary: v.string(),
+    detail: v.optional(v.string()),
+    referenceId: v.optional(v.string()),
+    externalId: v.optional(v.string()),
+    attempts: v.number(),
+    createdAt: v.number(),
+    resolvedAt: v.optional(v.number()),
+    resolution: v.optional(v.string()),
+  })
+    .index("by_status_created_at", ["status", "createdAt"])
+    .index("by_scope_created_at", ["scope", "createdAt"]),
+
+  backupSnapshots: defineTable({
+    kind: backupSnapshotKind,
+    status: backupSnapshotStatus,
+    summary: v.string(),
+    scope: v.string(),
+    storageLocation: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdBy: v.optional(v.string()),
+    createdAt: v.number(),
+    restoredAt: v.optional(v.number()),
+  })
+    .index("by_status_created_at", ["status", "createdAt"])
+    .index("by_kind_created_at", ["kind", "createdAt"]),
+
+  policyAcknowledgements: defineTable({
+    userClerkId: v.string(),
+    documentType: policyDocumentType,
+    version: v.string(),
+    acceptedAt: v.number(),
+    jurisdiction: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+  })
+    .index("by_user_document", ["userClerkId", "documentType"])
+    .index("by_document_accepted_at", ["documentType", "acceptedAt"]),
+
+  gdprRequests: defineTable({
+    requesterClerkId: v.string(),
+    type: gdprRequestType,
+    status: gdprRequestStatus,
+    reason: v.optional(v.string()),
+    exportPayload: v.optional(v.string()),
+    resolution: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index("by_requester_created_at", ["requesterClerkId", "createdAt"])
+    .index("by_status_created_at", ["status", "createdAt"]),
+
+  dataAccessLogs: defineTable({
+    actorClerkId: v.string(),
+    actorRole: userRole,
+    accessType: v.string(),
+    targetType: v.string(),
+    targetId: v.optional(v.string()),
+    justification: v.optional(v.string()),
+    metadata: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_actor_created_at", ["actorClerkId", "createdAt"])
+    .index("by_target_type_created_at", ["targetType", "createdAt"]),
+
+  deploymentChanges: defineTable({
+    title: v.string(),
+    summary: v.string(),
+    status: deploymentStatus,
+    environment: v.string(),
+    proposedBy: v.string(),
+    approvedBy: v.optional(v.string()),
+    notes: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    deployedAt: v.optional(v.number()),
+  })
+    .index("by_status_created_at", ["status", "createdAt"])
+    .index("by_environment_created_at", ["environment", "createdAt"]),
 });

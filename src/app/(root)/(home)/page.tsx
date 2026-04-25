@@ -11,6 +11,7 @@ import LoaderUI from "@/components/ui/LoaderUI";
 import { Loader2Icon } from "lucide-react";
 import MeetingCard from "@/components/ui/MeetingCard";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
+import { Button } from "@/components/ui/button";
 import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 
 export default function Home() {
@@ -21,7 +22,7 @@ export default function Home() {
     isInterviewer,
     isCandidate,
     isLoading,
-    isPrivileged,
+    canAccessDeveloperTools,
     canScheduleInterviews,
     canViewRecordings,
   } = useUserRole();
@@ -44,6 +45,9 @@ export default function Home() {
     }
   };
 
+  const showOperatorActions =
+    isInterviewer || canScheduleInterviews || canViewRecordings;
+
   if (isLoading) return <LoaderUI />;
   return (
     <div className="container max-w-7xl mx-auto p-6">
@@ -54,13 +58,12 @@ export default function Home() {
         <p className="text-muted-foreground mt-2">
           {isCandidate
             ? "Access your upcoming interviews and preparations"
-            : "Manage interviews, reviews, and hiring operations securely"}
+            : canAccessDeveloperTools
+              ? "Monitor engineering health, delivery operations, and deployments"
+              : "Manage interviews, reviews, and hiring operations securely"}
         </p>
       </div>
-      <div className="mb-8">
-        <NotificationsPanel />
-      </div>
-      {isPrivileged ? (
+      {showOperatorActions ? (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
             {QUICK_ACTIONS.filter((action) => {
@@ -84,6 +87,19 @@ export default function Home() {
             isJoinMeeting={modalType === "join"}
           />
         </>
+      ) : canAccessDeveloperTools ? (
+        <div className="rounded-2xl border border-border/70 bg-card p-6 shadow-sm">
+          <h2 className="text-2xl font-semibold">Developer workspace</h2>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            Observability, reliability, notification delivery, and deployment
+            controls are now organized inside the new dashboard workspace.
+          </p>
+          <Button
+            className="mt-4"
+            onClick={() => router.push("/dashboard/developer")}>
+            Open developer workspace
+          </Button>
+        </div>
       ) : (
         <>
           <div>
@@ -111,7 +127,10 @@ export default function Home() {
             )}
           </div>
         </>
-      )}
+      )}{" "}
+      <div className="mt-8">
+        <NotificationsPanel />
+      </div>
     </div>
   );
 }

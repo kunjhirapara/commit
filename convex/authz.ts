@@ -4,12 +4,14 @@ export const USER_ROLES = [
   "candidate",
   "interviewer",
   "recruiter",
+  "developer",
   "admin",
 ] as const;
 
 export const PRIVILEGED_INVITATION_ROLES = [
   "interviewer",
   "recruiter",
+  "developer",
   "admin",
 ] as const;
 
@@ -17,22 +19,31 @@ export type UserRole = (typeof USER_ROLES)[number];
 export type PrivilegedInvitationRole =
   (typeof PRIVILEGED_INVITATION_ROLES)[number];
 
-export type Permission =
-  | "viewUsers"
-  | "viewDashboard"
-  | "viewRecordings"
-  | "viewObservability"
-  | "scheduleInterviews"
-  | "editInterviews"
-  | "cancelInterviews"
-  | "manageRoles"
-  | "manageInvitations";
+export const PERMISSION_VALUES = [
+  "viewUsers",
+  "viewDashboard",
+  "viewRecordings",
+  "viewObservability",
+  "viewDataAccessLogs",
+  "scheduleInterviews",
+  "editInterviews",
+  "cancelInterviews",
+  "manageRoles",
+  "manageRoleCatalog",
+  "manageInvitations",
+  "manageCompliance",
+  "manageReliability",
+  "manageDeployments",
+] as const;
+
+export type Permission = (typeof PERMISSION_VALUES)[number];
 
 type UserRecord = {
   _id: string;
   clerkId: string;
   email: string;
   role: UserRole;
+  customRoleId?: string;
 };
 
 type InterviewRecord = {
@@ -50,21 +61,34 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "viewDashboard",
     "viewRecordings",
     "viewObservability",
+    "viewDataAccessLogs",
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
     "manageInvitations",
+  ],
+  developer: [
+    "viewDashboard",
+    "viewObservability",
+    "manageRoleCatalog",
+    "manageReliability",
+    "manageDeployments",
   ],
   admin: [
     "viewUsers",
     "viewDashboard",
     "viewRecordings",
     "viewObservability",
+    "viewDataAccessLogs",
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
     "manageRoles",
+    "manageRoleCatalog",
     "manageInvitations",
+    "manageCompliance",
+    "manageReliability",
+    "manageDeployments",
   ],
 };
 
@@ -124,13 +148,30 @@ export const getCurrentUserRecord = async (
 export const hasPermission = (role: UserRole, permission: Permission) =>
   PERMISSIONS[role].includes(permission);
 
+const hasCustomPermission = async (
+  ctx: any,
+  user: { customRoleId?: string },
+  permission: Permission,
+) => {
+  if (!user.customRoleId) return false;
+
+  const customRole = await ctx.db.get(user.customRoleId);
+  if (!customRole || !Array.isArray(customRole.permissions)) return false;
+
+  return customRole.permissions.includes(permission);
+};
+
 export const requirePermission = async (
   ctx: any,
   permission: Permission,
 ) => {
   const { identity, user } = await getCurrentUserRecord(ctx);
 
-  if (!hasPermission(user.role, permission)) {
+  const allowed =
+    hasPermission(user.role, permission) ||
+    (await hasCustomPermission(ctx, user, permission));
+
+  if (!allowed) {
     throw createServerError(
       new Error(`Role ${user.role} is missing permission ${permission}`),
       "You do not have permission to perform this action.",
@@ -138,6 +179,29 @@ export const requirePermission = async (
   }
 
   return { identity, user };
+};
+
+export const requireAnyPermission = async (
+  ctx: any,
+  permissions: Permission[],
+) => {
+  const { identity, user } = await getCurrentUserRecord(ctx);
+
+  for (const permission of permissions) {
+    if (
+      hasPermission(user.role, permission) ||
+      (await hasCustomPermission(ctx, user, permission))
+    ) {
+      return { identity, user };
+    }
+  }
+
+  throw createServerError(
+    new Error(
+      `Role ${user.role} is missing required permissions ${permissions.join(", ")}`,
+    ),
+    "You do not have permission to perform this action.",
+  );
 };
 
 export const canAccessInterview = (

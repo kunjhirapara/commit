@@ -1,9 +1,12 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import {
+  PERMISSION_VALUES,
+  Permission,
   UserRole,
   logAuditEvent,
   normalizeEmail,
+  requireAnyPermission,
   requirePermission,
   getCurrentUserRecord,
 } from "./authz";
@@ -139,7 +142,11 @@ export const syncUser = mutation({
 export const getCurrentUser = query({
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    return sanitizeUserForViewer(user, user);
+    const customRole = user.customRoleId ? await ctx.db.get(user.customRoleId) : null;
+    return {
+      ...sanitizeUserForViewer(user, user),
+      customRole,
+    };
   },
 });
 
@@ -147,7 +154,12 @@ export const getUsers = query({
   handler: async (ctx) => {
     const { user } = await requirePermission(ctx, "viewUsers");
     const users = await ctx.db.query("users").collect();
-    return users.map((record) => sanitizeUserForViewer(user, record));
+    return await Promise.all(
+      users.map(async (record) => ({
+        ...sanitizeUserForViewer(user, record),
+        customRole: record.customRoleId ? await ctx.db.get(record.customRoleId) : null,
+      })),
+    );
   },
 });
 export const getUserByClerkId = query({
@@ -180,6 +192,53 @@ export const getUserByClerkId = query({
 const viewerCannotInspectUser = (role: UserRole) =>
   role !== "admin" && role !== "recruiter" && role !== "interviewer";
 
+const isValidPermission = (value: string): value is Permission =>
+  PERMISSION_VALUES.includes(value as Permission);
+
+const normalizeRoleSlug = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const assertValidPermissions = (permissions: string[]) => {
+  const uniquePermissions = Array.from(new Set(permissions));
+  const invalidPermission = uniquePermissions.find((value) => !isValidPermission(value));
+
+  if (invalidPermission) {
+    throw createServerError(
+      new Error(`Invalid permission provided: ${invalidPermission}`),
+      "One of the selected permissions is not supported.",
+    );
+  }
+
+  return uniquePermissions as Permission[];
+};
+
+export const getRoleManagementDashboard = query({
+  handler: async (ctx) => {
+    await requirePermission(ctx, "manageRoleCatalog");
+    const [roles, users] = await Promise.all([
+      ctx.db.query("roleDefinitions").order("desc").collect(),
+      ctx.db.query("users").collect(),
+    ]);
+
+    const rolesById = new Map(roles.map((role) => [String(role._id), role]));
+
+    return {
+      permissionOptions: [...PERMISSION_VALUES],
+      roles,
+      users: users
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((user) => ({
+          ...user,
+          customRole: user.customRoleId ? rolesById.get(String(user.customRoleId)) ?? null : null,
+        })),
+    };
+  },
+});
+
 export const listInvitations = query({
   handler: async (ctx) => {
     await requirePermission(ctx, "manageInvitations");
@@ -193,6 +252,7 @@ export const inviteUser = mutation({
     role: v.union(
       v.literal("interviewer"),
       v.literal("recruiter"),
+      v.literal("developer"),
       v.literal("admin"),
     ),
   },
@@ -210,7 +270,7 @@ export const inviteUser = mutation({
     if (user.role !== "admin" && args.role !== "interviewer") {
       throw createServerError(
         new Error(`Role ${user.role} cannot invite ${args.role}`),
-        "Only admins can invite recruiters or admins.",
+        "Only admins can invite recruiters, developers, or admins.",
       );
     }
 
@@ -270,7 +330,7 @@ export const revokeInvitation = mutation({
     if (user.role !== "admin" && invitation.role !== "interviewer") {
       throw createServerError(
         new Error(`Role ${user.role} cannot revoke ${invitation.role}`),
-        "Only admins can revoke recruiter or admin invitations.",
+        "Only admins can revoke recruiter, developer, or admin invitations.",
       );
     }
 
@@ -300,11 +360,15 @@ export const updateUserRole = mutation({
       v.literal("candidate"),
       v.literal("interviewer"),
       v.literal("recruiter"),
+      v.literal("developer"),
       v.literal("admin"),
     ),
   },
   handler: async (ctx, args) => {
-    const { user } = await requirePermission(ctx, "manageRoles");
+    const { user } = await requireAnyPermission(ctx, [
+      "manageRoles",
+      "manageRoleCatalog",
+    ]);
     const targetUser = await ctx.db.get(args.userId);
 
     if (!targetUser) {
@@ -328,6 +392,151 @@ export const updateUserRole = mutation({
         previousRole: targetUser.role,
         nextRole: args.role,
         targetEmail: targetUser.email,
+      },
+    });
+  },
+});
+
+export const assignUserCustomRole = mutation({
+  args: {
+    userId: v.id("users"),
+    customRoleId: v.optional(v.id("roleDefinitions")),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requirePermission(ctx, "manageRoleCatalog");
+    const targetUser = await ctx.db.get(args.userId);
+
+    if (!targetUser) {
+      throw createServerError(
+        new Error(`User not found: ${args.userId}`),
+        "User not found.",
+      );
+    }
+
+    const customRole = args.customRoleId ? await ctx.db.get(args.customRoleId) : null;
+
+    if (args.customRoleId && !customRole) {
+      throw createServerError(
+        new Error(`Custom role not found: ${args.customRoleId}`),
+        "Custom role not found.",
+      );
+    }
+
+    await ctx.db.patch(args.userId, {
+      customRoleId: args.customRoleId,
+    });
+
+    await logAuditEvent(ctx, {
+      action: "user.custom_role_updated",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "user",
+      targetId: args.userId,
+      metadata: {
+        previousCustomRoleId: targetUser.customRoleId,
+        nextCustomRoleId: args.customRoleId,
+        nextCustomRoleName: customRole?.name,
+      },
+    });
+  },
+});
+
+export const createRoleDefinition = mutation({
+  args: {
+    name: v.string(),
+    slug: v.string(),
+    description: v.optional(v.string()),
+    permissions: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requirePermission(ctx, "manageRoleCatalog");
+    const slug = normalizeRoleSlug(args.slug || args.name);
+
+    if (!slug) {
+      throw createServerError(
+        new Error("Role slug was empty"),
+        "A valid role slug is required.",
+      );
+    }
+
+    const existing = await ctx.db
+      .query("roleDefinitions")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+
+    if (existing) {
+      throw createServerError(
+        new Error(`Role slug already exists: ${slug}`),
+        "A role with this slug already exists.",
+      );
+    }
+
+    const permissions = assertValidPermissions(args.permissions);
+    const now = Date.now();
+
+    const roleId = await ctx.db.insert("roleDefinitions", {
+      name: args.name.trim(),
+      slug,
+      description: args.description?.trim() || undefined,
+      permissions,
+      createdBy: user.clerkId,
+      updatedBy: user.clerkId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    await logAuditEvent(ctx, {
+      action: "role_definition.created",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "roleDefinition",
+      targetId: roleId,
+      metadata: {
+        slug,
+        permissions,
+      },
+    });
+
+    return roleId;
+  },
+});
+
+export const updateRoleDefinition = mutation({
+  args: {
+    roleId: v.id("roleDefinitions"),
+    name: v.string(),
+    description: v.optional(v.string()),
+    permissions: v.array(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requirePermission(ctx, "manageRoleCatalog");
+    const role = await ctx.db.get(args.roleId);
+
+    if (!role) {
+      throw createServerError(
+        new Error(`Role not found: ${args.roleId}`),
+        "Role not found.",
+      );
+    }
+
+    const permissions = assertValidPermissions(args.permissions);
+
+    await ctx.db.patch(args.roleId, {
+      name: args.name.trim(),
+      description: args.description?.trim() || undefined,
+      permissions,
+      updatedBy: user.clerkId,
+      updatedAt: Date.now(),
+    });
+
+    await logAuditEvent(ctx, {
+      action: "role_definition.updated",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "roleDefinition",
+      targetId: args.roleId,
+      metadata: {
+        permissions,
       },
     });
   },

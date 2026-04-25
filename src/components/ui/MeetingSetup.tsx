@@ -5,6 +5,7 @@ import {
 } from "@stream-io/video-react-sdk";
 import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { Card } from "./card";
 import {
   AlertTriangleIcon,
@@ -43,12 +44,14 @@ function MeetingSetup({
   const [networkLabel, setNetworkLabel] = useState("Checking network");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [hasRecordingConsent, setHasRecordingConsent] = useState(false);
+  const [hasPolicyConsent, setHasPolicyConsent] = useState(false);
 
   const call = useCall();
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
   const captureRecordingConsent = useMutation(
     api.interviews.captureRecordingConsent,
   );
+  const acknowledgePolicy = useMutation(api.compliance.acknowledgePolicy);
 
   const calendarLinks = useMemo(
     () => (interview ? getCalendarLinks(interview) : null),
@@ -119,9 +122,9 @@ function MeetingSetup({
   }, []);
 
   const handleJoin = async () => {
-    if (interview && !hasRecordingConsent) {
+    if (interview && (!hasRecordingConsent || !hasPolicyConsent)) {
       setJoinError(
-        "Please confirm recording and interview consent before joining the session.",
+        "Please confirm recording consent and accept the current policies before joining the session.",
       );
       return;
     }
@@ -129,6 +132,21 @@ function MeetingSetup({
     try {
       setJoinError(null);
       if (interview) {
+        await acknowledgePolicy({
+          documentType: "terms",
+          version: "2026-04-22",
+          jurisdiction: interview.complianceJurisdiction,
+        });
+        await acknowledgePolicy({
+          documentType: "privacy",
+          version: "2026-04-22",
+          jurisdiction: interview.complianceJurisdiction,
+        });
+        await acknowledgePolicy({
+          documentType: "recording",
+          version: "2026-04-22",
+          jurisdiction: interview.complianceJurisdiction,
+        });
         await captureRecordingConsent({
           interviewId: interview._id,
         });
@@ -347,6 +365,32 @@ function MeetingSetup({
               />
             </div>
 
+            <div className="flex items-center justify-between rounded-xl border p-4">
+              <div className="space-y-1">
+                <p className="font-medium">Terms and privacy acknowledgement</p>
+                <p className="text-sm text-muted-foreground">
+                  Review the current
+                  {" "}
+                  <Link className="underline underline-offset-4" href="/terms">
+                    Terms
+                  </Link>
+                  {" "}
+                  and
+                  {" "}
+                  <Link className="underline underline-offset-4" href="/privacy">
+                    Privacy Policy
+                  </Link>
+                  {" "}
+                  before joining. Recording disclosures are handled for your jurisdiction.
+                </p>
+              </div>
+              <Switch
+                checked={hasPolicyConsent}
+                onCheckedChange={setHasPolicyConsent}
+                aria-label="Confirm terms and privacy acknowledgement"
+              />
+            </div>
+
             {calendarLinks ? (
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" asChild>
@@ -391,7 +435,7 @@ function MeetingSetup({
                 className="w-full"
                 size="lg"
                 onClick={handleJoin}
-                disabled={!!interview && !hasRecordingConsent}>
+                disabled={!!interview && (!hasRecordingConsent || !hasPolicyConsent)}>
                 Join Interview
               </Button>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">

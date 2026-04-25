@@ -3,6 +3,7 @@ import { ModeToggle } from "./ModeToggle";
 import { CodeIcon } from "lucide-react";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import DasboardBtn from "./DasboardBtn";
+import NotificationBell from "./NotificationBell";
 
 function Navbar() {
   return (
@@ -19,7 +20,14 @@ function Navbar() {
 
         <SignedIn>
           <div className="flex items-center space-x-4 ml-auto">
+            <Link
+              href="/settings"
+              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Settings
+            </Link>
             <DasboardBtn />
+            <NotificationBell />
             <ModeToggle />
             <UserButton />
           </div>

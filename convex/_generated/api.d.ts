@@ -8,15 +8,20 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as authz from "../authz.js";
 import type * as comments from "../comments.js";
+import type * as compliance from "../compliance.js";
+import type * as emailActions from "../emailActions.js";
+import type * as emailTemplates from "../emailTemplates.js";
 import type * as errorUtils from "../errorUtils.js";
 import type * as feedback from "../feedback.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
 import type * as notifications from "../notifications.js";
 import type * as observability from "../observability.js";
+import type * as reliability from "../reliability.js";
 import type * as sessionEvents from "../sessionEvents.js";
 import type * as users from "../users.js";
 
@@ -27,15 +32,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   auditLogs: typeof auditLogs;
   authz: typeof authz;
   comments: typeof comments;
+  compliance: typeof compliance;
+  emailActions: typeof emailActions;
+  emailTemplates: typeof emailTemplates;
   errorUtils: typeof errorUtils;
   feedback: typeof feedback;
   http: typeof http;
   interviews: typeof interviews;
   notifications: typeof notifications;
   observability: typeof observability;
+  reliability: typeof reliability;
   sessionEvents: typeof sessionEvents;
   users: typeof users;
 }>;

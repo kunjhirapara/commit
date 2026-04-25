@@ -21,12 +21,18 @@ import {
   SelectValue,
 } from "./select";
 
-const ADMIN_ROLE_OPTIONS = ["interviewer", "recruiter", "admin"] as const;
+const ADMIN_ROLE_OPTIONS = [
+  "interviewer",
+  "recruiter",
+  "developer",
+  "admin",
+] as const;
 const RECRUITER_ROLE_OPTIONS = ["interviewer"] as const;
 const USER_ROLE_OPTIONS = [
   "candidate",
   "interviewer",
   "recruiter",
+  "developer",
   "admin",
 ] as const;
 const ACCESS_PANEL_LIST_HEIGHT = "h-[320px]";
@@ -38,7 +44,7 @@ function AccessManagementPanel() {
     ? ADMIN_ROLE_OPTIONS
     : RECRUITER_ROLE_OPTIONS;
   const [inviteRole, setInviteRole] = useState<
-    "interviewer" | "recruiter" | "admin"
+    "interviewer" | "recruiter" | "developer" | "admin"
   >("interviewer");
 
   const users = useQuery(

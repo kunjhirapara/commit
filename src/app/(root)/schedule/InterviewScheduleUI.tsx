@@ -59,6 +59,9 @@ function InterviewScheduleUI() {
   const interviews = useQuery(api.interviews.getAllInterviews, {}) ?? [];
   const users = useQuery(api.users.getUsers, {}) ?? [];
   const createInterview = useMutation(api.interviews.createInterview);
+  const reportProvisioningFailure = useMutation(
+    api.reliability.reportProviderProvisioningFailure,
+  );
   const rescheduleInterview = useMutation(api.interviews.rescheduleInterview);
   const cancelInterview = useMutation(api.interviews.cancelInterview);
 
@@ -151,38 +154,76 @@ function InterviewScheduleUI() {
       meetingDate.setHours(parseInt(hours), parseInt(minutes, 0));
 
       const id = crypto.randomUUID();
-      const call = client.call("default", id);
+      let streamCallId = id;
+      let nextStatus: "scheduled" | "draft" = "scheduled";
 
-      await call.getOrCreate({
-        data: {
-          starts_at: meetingDate.toISOString(),
-          custom: {
-            description: title,
-            additionalDetails: description,
+      try {
+        const call = client.call("default", id);
+
+        await call.getOrCreate({
+          data: {
+            starts_at: meetingDate.toISOString(),
+            custom: {
+              description: title,
+              additionalDetails: description,
+            },
           },
-        },
-      });
+        });
+      } catch (providerError) {
+        logError("InterviewScheduleUI.scheduleMeeting.provider", providerError, {
+          candidateId,
+          interviewerCount: interviewerIds.length,
+        });
+        nextStatus = "draft";
+        streamCallId = `pending-${id}`;
+        await reportProvisioningFailure({
+          scope: "interview_provider_provisioning",
+          summary: "Interview created in draft mode because Stream call provisioning failed.",
+          detail:
+            providerError instanceof Error
+              ? providerError.message
+              : "Unknown provider provisioning failure.",
+          externalId: id,
+        });
+      }
 
-      await createInterview({
-        title,
-        description,
-        templateId: selectedTemplate.id,
-        templateLabel: selectedTemplate.label,
-        scheduledStartTime: meetingDate.getTime(),
-        durationMinutes,
-        timezone,
-        status: "scheduled",
-        streamCallId: id,
-        candidateId,
-        interviewerIds,
-        meetingInstructions,
-        brandName,
-        browserFallbackInstructions,
-        bufferBeforeMinutes,
-        bufferAfterMinutes,
-      });
+      try {
+        await createInterview({
+          title,
+          description,
+          templateId: selectedTemplate.id,
+          templateLabel: selectedTemplate.label,
+          scheduledStartTime: meetingDate.getTime(),
+          durationMinutes,
+          timezone,
+          status: nextStatus,
+          streamCallId,
+          candidateId,
+          interviewerIds,
+          meetingInstructions,
+          brandName,
+          browserFallbackInstructions,
+          bufferBeforeMinutes,
+          bufferAfterMinutes,
+        });
+      } catch (dbError) {
+        await reportProvisioningFailure({
+          scope: "interview_database_write",
+          summary: "Interview call was provisioned but the database write failed.",
+          detail:
+            dbError instanceof Error
+              ? dbError.message
+              : "Unknown interview persistence failure.",
+          externalId: id,
+        });
+        throw dbError;
+      }
       setOpen(false);
-      toast.success("Interview scheduled successfully!");
+      toast.success(
+        nextStatus === "scheduled"
+          ? "Interview scheduled successfully!"
+          : "Provider was unavailable, so the interview was saved as a draft for recovery.",
+      );
 
       setFormData({
         title: "",

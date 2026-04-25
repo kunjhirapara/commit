@@ -70,6 +70,7 @@ const TERMINAL_STATUSES: InterviewStatus[] = [
 ];
 
 const REMINDER_WINDOW_MS = 30 * 60 * 1000;
+const FEEDBACK_REMINDER_DELAY_MS = 60 * 60 * 1000;
 const DEFAULT_DURATION_MINUTES = 60;
 const DEFAULT_TIMEZONE = "UTC";
 const DEFAULT_BUFFER_BEFORE_MINUTES = 15;
@@ -81,6 +82,13 @@ const DEFAULT_NOTES_RETENTION_DAYS = 180;
 const DEFAULT_CANDIDATE_DATA_RETENTION_DAYS = 365;
 const DEFAULT_RECORDING_DISCLOSURE =
   "This interview may be recorded for hiring review, training, and compliance purposes.";
+
+const formatDateTimeForTimezone = (timestamp: number, timezone: string) =>
+  new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: timezone,
+  }).format(new Date(timestamp));
 
 const normalizeStoredStatus = (
   status: InterviewStatus | string,
@@ -128,7 +136,9 @@ const normalizeInterview = (interview: any) => {
       interview.bufferBeforeMinutes ?? DEFAULT_BUFFER_BEFORE_MINUTES,
     bufferAfterMinutes:
       interview.bufferAfterMinutes ?? DEFAULT_BUFFER_AFTER_MINUTES,
+    feedbackReminderSentAt: interview.feedbackReminderSentAt,
     recordingConsentRequired: interview.recordingConsentRequired ?? true,
+    complianceJurisdiction: interview.complianceJurisdiction ?? "global",
     recordingDisclosure:
       interview.recordingDisclosure ?? DEFAULT_RECORDING_DISCLOSURE,
     recordingRetentionDays:
@@ -164,34 +174,6 @@ const appendLifecycleEvent = (
   },
 ];
 
-const createNotificationPayload = ({
-  recipientClerkId,
-  interviewId,
-  type,
-  title,
-  message,
-  metadata,
-  scheduledFor = Date.now(),
-}: {
-  recipientClerkId: string;
-  interviewId?: string;
-  type: string;
-  title: string;
-  message: string;
-  metadata?: Record<string, unknown>;
-  scheduledFor?: number;
-}) => ({
-  recipientClerkId,
-  interviewId,
-  type,
-  title,
-  message,
-  status: "sent" as const,
-  scheduledFor,
-  sentAt: Date.now(),
-  metadata: metadata ? JSON.stringify(metadata) : undefined,
-});
-
 const queueInterviewNotifications = async (
   ctx: any,
   args: {
@@ -199,30 +181,64 @@ const queueInterviewNotifications = async (
     candidateId: string;
     interviewerIds: string[];
     type: string;
+    category:
+      | "interview_schedule"
+      | "interview_update"
+      | "interview_reminder"
+      | "feedback_reminder";
     title: string;
     message: string;
     metadata?: Record<string, unknown>;
     scheduledFor?: number;
+    timezone?: string;
   },
 ) => {
   const recipients = [args.candidateId, ...args.interviewerIds];
 
-  await Promise.all(
-    recipients.map((recipientClerkId) =>
-      ctx.db.insert(
-        "notifications",
-        createNotificationPayload({
-          recipientClerkId,
-          interviewId: args.interviewId,
-          type: args.type,
-          title: args.title,
-          message: args.message,
-          metadata: args.metadata,
-          scheduledFor: args.scheduledFor,
-        }),
-      ),
-    ),
-  );
+  await ctx.runMutation(internal.notifications.queueInterviewNotifications, {
+    interviewId: args.interviewId,
+    recipientClerkIds: recipients,
+    type: args.type,
+    category: args.category,
+    title: args.title,
+    message: args.message,
+    scheduledFor: args.scheduledFor ?? Date.now(),
+    timezone: args.timezone,
+    metadata: args.metadata ? JSON.stringify(args.metadata) : undefined,
+  });
+};
+
+const scheduleInterviewBackgroundWork = async (
+  ctx: any,
+  args: {
+    interviewId: string;
+    scheduledStartTime: number;
+    scheduledEndTime: number;
+    retentionDays: number;
+  },
+) => {
+  const reminderRunAt = args.scheduledStartTime - REMINDER_WINDOW_MS;
+  if (reminderRunAt > Date.now()) {
+    await ctx.runMutation(internal.reliability.enqueueJob, {
+      kind: "interview_reminder",
+      runAt: reminderRunAt,
+      maxAttempts: 3,
+      payload: JSON.stringify({ interviewId: args.interviewId }),
+      relatedId: args.interviewId,
+    });
+  }
+
+  await ctx.runMutation(internal.reliability.enqueueJob, {
+    kind: "interview_cleanup",
+    runAt:
+      args.scheduledEndTime + args.retentionDays * 24 * 60 * 60 * 1000,
+    maxAttempts: 2,
+    payload: JSON.stringify({
+      interviewId: args.interviewId,
+      retentionDays: args.retentionDays,
+    }),
+    relatedId: args.interviewId,
+  });
 };
 
 const validateInterviewStatus = (status: InterviewStatus) => {
@@ -405,12 +421,17 @@ const processReminder = async (ctx: any, interview: any) => {
     candidateId: normalizedInterview.candidateId,
     interviewerIds: normalizedInterview.interviewerIds,
     type: "interview.reminder",
+    category: "interview_reminder",
     title: `${normalizedInterview.title} starts soon`,
-    message: `Your ${normalizedInterview.templateLabel.toLowerCase()} interview starts in less than 30 minutes.`,
+    message: `Your ${normalizedInterview.templateLabel.toLowerCase()} interview starts at ${formatDateTimeForTimezone(
+      normalizedInterview.scheduledStartTime,
+      normalizedInterview.timezone,
+    )} (${normalizedInterview.timezone}).`,
     metadata: {
       startTime: normalizedInterview.scheduledStartTime,
       timezone: normalizedInterview.timezone,
     },
+    timezone: normalizedInterview.timezone,
   });
 
   await ctx.db.patch(normalizedInterview._id, {
@@ -418,6 +439,64 @@ const processReminder = async (ctx: any, interview: any) => {
     lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
       type: "reminder.sent",
       note: "Automatic pre-interview reminder created.",
+    }),
+  });
+};
+
+const processFeedbackReminder = async (ctx: any, interview: any) => {
+  const normalizedInterview = normalizeInterview(interview);
+  const completedAt =
+    normalizedInterview.scheduledEndTime ?? normalizedInterview.endTime ?? normalizedInterview.startTime;
+
+  if (
+    normalizedInterview.feedbackReminderSentAt ||
+    completedAt + FEEDBACK_REMINDER_DELAY_MS > Date.now()
+  ) {
+    return;
+  }
+
+  const feedbackEntries = await ctx.db
+    .query("feedback")
+    .withIndex("by_interview_id", (q: any) => q.eq("interviewId", normalizedInterview._id))
+    .collect();
+
+  const submittedInterviewers = new Set(
+    feedbackEntries
+      .filter((entry: any) => entry.state === "submitted")
+      .map((entry: any) => entry.interviewerId),
+  );
+
+  const pendingInterviewers = normalizedInterview.interviewerIds.filter(
+    (interviewerId: string) => !submittedInterviewers.has(interviewerId),
+  );
+
+  if (pendingInterviewers.length === 0) {
+    await ctx.db.patch(normalizedInterview._id, {
+      feedbackReminderSentAt: Date.now(),
+    });
+    return;
+  }
+
+  await ctx.runMutation(internal.notifications.queueInterviewNotifications, {
+    interviewId: normalizedInterview._id,
+    recipientClerkIds: pendingInterviewers,
+    type: "feedback.reminder",
+    category: "feedback_reminder",
+    title: `${normalizedInterview.title} feedback is due`,
+    message: `Please submit your feedback for ${normalizedInterview.title}. All times are shown in ${normalizedInterview.timezone}.`,
+    scheduledFor: Date.now(),
+    timezone: normalizedInterview.timezone,
+    metadata: JSON.stringify({
+      dueAt: completedAt + 24 * 60 * 60 * 1000,
+      timezone: normalizedInterview.timezone,
+    }),
+  });
+
+  await ctx.db.patch(normalizedInterview._id, {
+    feedbackReminderSentAt: Date.now(),
+    lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
+      type: "feedback.reminder_sent",
+      note: "Automatic interviewer feedback reminder created.",
     }),
   });
 };
@@ -536,7 +615,9 @@ export const createInterview = mutation({
       startTime: args.scheduledStartTime,
       scheduledEndTime,
       reminderSentAt: undefined,
+      feedbackReminderSentAt: undefined,
       recordingConsentRequired: true,
+      complianceJurisdiction: "global",
       recordingDisclosure: DEFAULT_RECORDING_DISCLOSURE,
       recordingRetentionDays: DEFAULT_RECORDING_RETENTION_DAYS,
       notesRetentionDays: DEFAULT_NOTES_RETENTION_DAYS,
@@ -556,12 +637,17 @@ export const createInterview = mutation({
       candidateId: args.candidateId,
       interviewerIds: args.interviewerIds,
       type: "interview.scheduled",
+      category: "interview_schedule",
       title: `${args.templateLabel} interview scheduled`,
-      message: `${args.title} has been scheduled.`,
+      message: `${args.title} is scheduled for ${formatDateTimeForTimezone(
+        args.scheduledStartTime,
+        args.timezone,
+      )} (${args.timezone}).`,
       metadata: {
         startTime: args.scheduledStartTime,
         timezone: args.timezone,
       },
+      timezone: args.timezone,
     });
 
     await logAuditEvent(ctx, {
@@ -592,6 +678,13 @@ export const createInterview = mutation({
         candidateId: args.candidateId,
         interviewerCount: args.interviewerIds.length,
       }),
+    });
+
+    await scheduleInterviewBackgroundWork(ctx, {
+      interviewId,
+      scheduledStartTime: args.scheduledStartTime,
+      scheduledEndTime,
+      retentionDays: DEFAULT_RECORDING_RETENTION_DAYS,
     });
 
     return interviewId;
@@ -712,6 +805,7 @@ export const rescheduleInterview = mutation({
       timezone: args.timezone,
       rescheduleReason: args.reason,
       reminderSentAt: undefined,
+      feedbackReminderSentAt: undefined,
       lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
         type: "rescheduled",
         actorClerkId: user.clerkId,
@@ -724,13 +818,18 @@ export const rescheduleInterview = mutation({
       candidateId: normalizedInterview.candidateId,
       interviewerIds: normalizedInterview.interviewerIds,
       type: "interview.rescheduled",
+      category: "interview_update",
       title: `${normalizedInterview.title} was rescheduled`,
-      message: `The interview has been moved to a new time in ${args.timezone}.`,
+      message: `The interview has been moved to ${formatDateTimeForTimezone(
+        args.scheduledStartTime,
+        args.timezone,
+      )} (${args.timezone}).`,
       metadata: {
         previousStartTime: normalizedInterview.scheduledStartTime,
         nextStartTime: args.scheduledStartTime,
         reason: args.reason,
       },
+      timezone: args.timezone,
     });
 
     await logAuditEvent(ctx, {
@@ -744,6 +843,13 @@ export const rescheduleInterview = mutation({
         nextStartTime: args.scheduledStartTime,
         reason: args.reason,
       },
+    });
+
+    await scheduleInterviewBackgroundWork(ctx, {
+      interviewId: args.interviewId,
+      scheduledStartTime: args.scheduledStartTime,
+      scheduledEndTime,
+      retentionDays: normalizedInterview.recordingRetentionDays,
     });
   },
 });
@@ -782,6 +888,7 @@ export const cancelInterview = mutation({
       candidateId: normalizedInterview.candidateId,
       interviewerIds: normalizedInterview.interviewerIds,
       type: "interview.cancelled",
+      category: "interview_update",
       title: `${normalizedInterview.title} was cancelled`,
       message: args.reason
         ? `Interview cancelled: ${args.reason}`
@@ -789,6 +896,7 @@ export const cancelInterview = mutation({
       metadata: {
         reason: args.reason,
       },
+      timezone: normalizedInterview.timezone,
     });
 
     await logAuditEvent(ctx, {
@@ -894,6 +1002,7 @@ export const runLifecycleAutomation = mutation({
     for (const interview of interviews) {
       const syncedInterview = await syncInterviewLifecycle(ctx, interview);
       await processReminder(ctx, syncedInterview);
+      await processFeedbackReminder(ctx, syncedInterview);
       updatedCount += syncedInterview.status !== interview.status ? 1 : 0;
     }
 
