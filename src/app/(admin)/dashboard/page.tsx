@@ -1,315 +1,253 @@
 "use client";
 
-import RoleGuard from "@/components/auth/RoleGuard";
-import AccessManagementPanel from "@/components/ui/AccessManagementPanel";
-import { useMutation, useQuery } from "convex/react";
-import { api } from "../../../../convex/_generated/api";
-import { Doc, Id } from "../../../../convex/_generated/dataModel";
-import { toast } from "sonner";
-import LoaderUI from "@/components/ui/LoaderUI";
-import {
-  getCandidateInfo,
-  getInterviewStartTimeMs,
-  groupInterviews,
-} from "@/lib/utils";
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { INTERVIEW_CATEGORY } from "@/constants";
-import { Badge } from "@/components/ui/badge";
+import { useQuery } from "convex/react";
+import RoleGuard from "@/components/auth/RoleGuard";
 import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  CalendarIcon,
-  CheckCircle2Icon,
-  ClockIcon,
-  XCircleIcon,
-} from "lucide-react";
-import { format } from "date-fns";
-import { useEffect } from "react";
-import CommentDialog from "@/components/ui/CommentDialog";
-import { getDisplayErrorMessage, logError } from "@/lib/errors";
-import { useUserRole } from "@/hooks/useUserRole";
-import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
+  DashboardPageHeader,
+  MetricCard,
+  SectionIntro,
+} from "@/components/dashboard/DashboardPrimitives";
+import LoaderUI from "@/components/ui/LoaderUI";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { api } from "../../../../convex/_generated/api";
+import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
+import { useUserRole } from "@/hooks/useUserRole";
 
-type Interview = Doc<"interviews">;
-type ReviewStatus = "completed" | "passed" | "rejected";
-
-function DashboardPage() {
+function DashboardOverviewPage() {
   useLifecycleAutomation();
-  const { canScheduleInterviews, canManageInvitations } = useUserRole();
-  const users = useQuery(api.users.getUsers, {});
-  const interviews = useQuery(api.interviews.getAllInterviews, {});
-  const monitoring = useQuery(api.observability.getMonitoringDashboard, {});
-  const updateStatus = useMutation(api.interviews.updateInterviewStatus);
-  const captureHealthSnapshot = useMutation(
-    api.observability.captureHealthSnapshot,
+
+  const {
+    canAccessDeveloperTools,
+    canManageInvitations,
+    canManageRoleCatalog,
+    canManageRoles,
+    canScheduleInterviews,
+    role,
+  } = useUserRole();
+
+  const operations =
+    useQuery(
+      api.admin.getAdminDashboard,
+      role === "developer" ? "skip" : { stage: "scheduled" },
+    ) ?? null;
+  const monitoring = useQuery(
+    api.observability.getMonitoringDashboard,
+    canAccessDeveloperTools ? {} : "skip",
+  );
+  const reliability = useQuery(
+    api.reliability.getReliabilityDashboard,
+    canAccessDeveloperTools ? {} : "skip",
+  );
+  const notificationOps = useQuery(
+    api.notifications.getNotificationOperationsDashboard,
+    canAccessDeveloperTools ? {} : "skip",
   );
 
-  useEffect(() => {
-    if (!canManageInvitations) return;
-    void captureHealthSnapshot().catch(() => undefined);
-  }, [canManageInvitations, captureHealthSnapshot]);
+  if (
+    (role !== "developer" && !operations) ||
+    (canAccessDeveloperTools &&
+      (!monitoring || !reliability || !notificationOps))
+  ) {
+    return <LoaderUI />;
+  }
 
-  const handleStatusUpdate = async (
-    interviewId: Id<"interviews">,
-    status: ReviewStatus,
-  ) => {
-    try {
-      await updateStatus({ interviewId, status });
-      toast.success(`Interview marked as ${status}`);
-    } catch (error) {
-      logError("DashboardPage.handleStatusUpdate", error, {
-        interviewId,
-        status,
-      });
-      toast.error(
-        getDisplayErrorMessage(error, "Failed to update interview status."),
-      );
-    }
-  };
-
-  if (!interviews || !users) return <LoaderUI />;
-
-  const groupedInterviews = groupInterviews(interviews);
+  const workspaceLinks = [
+    {
+      href: "/dashboard/interviews",
+      title: "Interview operations",
+      description: "Pipeline triage, bulk actions, and manual interventions.",
+      visible: role === "interviewer" || role === "recruiter" || role === "admin",
+    },
+    {
+      href: "/dashboard/team",
+      title: "Team management",
+      description: "Invitations, interviewer profiles, and candidate review trails.",
+      visible: canManageInvitations || canManageRoles,
+    },
+    {
+      href: "/dashboard/developer",
+      title: "Developer console",
+      description: "System health, reliability queues, and delivery operations.",
+      visible: canAccessDeveloperTools,
+    },
+    {
+      href: "/dashboard/compliance",
+      title: "Compliance oversight",
+      description: "GDPR requests, sensitive access logs, and policy reporting.",
+      visible: canManageRoles,
+    },
+    {
+      href: "/dashboard/roles",
+      title: "Roles studio",
+      description: "Create roles, assign permissions, and update user access.",
+      visible: canManageRoleCatalog,
+    },
+  ].filter((item) => item.visible);
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="mb-8 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Interview Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
-            Review interviews, manage outcomes, and control team access.
-          </p>
-        </div>
-        {canScheduleInterviews ? (
-          <Link href="/schedule">
-            <Button>Schedule New Interview</Button>
-          </Link>
-        ) : null}
-      </div>
+    <div className="space-y-6">
+      <DashboardPageHeader
+        eyebrow="Workspace"
+        title="Modern operations dashboard"
+        description="A cleaner control center with focused pages for recruiting operations, engineering telemetry, and governance."
+        action={
+          canScheduleInterviews ? (
+            <Button asChild>
+              <Link href="/schedule">Schedule interview</Link>
+            </Button>
+          ) : null
+        }
+      />
 
-      <div className="mb-8">
+      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <NotificationsPanel />
+        <Card className="border-border/70 bg-card/80 shadow-sm">
+          <CardHeader>
+            <CardTitle>Workspace shortcuts</CardTitle>
+            <CardDescription>
+              Jump straight into the part of the system that matches your role.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {workspaceLinks.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4 transition-colors hover:bg-muted/60"
+              >
+                <p className="font-medium">{item.title}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {item.description}
+                </p>
+              </Link>
+            ))}
+          </CardContent>
+        </Card>
       </div>
 
-      {canManageInvitations ? (
-        <section className="mb-10 space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Access Management</h2>
-            <p className="text-sm text-muted-foreground">
-              Invite privileged users, update roles, and review recent audit
-              events.
-            </p>
+      {operations ? (
+        <section className="space-y-4">
+          <SectionIntro
+            title="Hiring snapshot"
+            description="Keep the top recruiting metrics on the overview, then dive into the interview workspace for the full pipeline."
+          />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            <MetricCard
+              label="Throughput"
+              value={operations.analytics.throughput}
+              hint="Completed interview flow"
+            />
+            <MetricCard
+              label="Time to hire"
+              value={`${operations.analytics.timeToHireDays}d`}
+              hint="Average from creation to interview"
+            />
+            <MetricCard
+              label="Cancellations"
+              value={operations.analytics.cancellations}
+              hint="Cancelled rounds"
+            />
+            <MetricCard
+              label="No shows"
+              value={operations.analytics.noShows}
+              hint="Missed interview count"
+            />
+            <MetricCard
+              label="Feedback pending"
+              value={operations.analytics.feedbackPending}
+              hint="Draft scorecards still open"
+            />
           </div>
-          <AccessManagementPanel />
         </section>
       ) : null}
 
-      {canManageInvitations && monitoring ? (
-        <section className="mb-10 space-y-4">
-          <div>
-            <h2 className="text-xl font-semibold">Observability</h2>
-            <p className="text-sm text-muted-foreground">
-              Track production failures, dependency health, and recent incident
-              context.
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-            <MetricCard label="Auth Failures" value={monitoring.totals.authFailures} />
+      {canAccessDeveloperTools && monitoring && reliability && notificationOps ? (
+        <section className="space-y-4">
+          <SectionIntro
+            title="Engineering snapshot"
+            description="The new developer workspace owns observability, reliability, notification delivery, and deployment flow."
+          />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <MetricCard
-              label="Scheduling Failures"
-              value={monitoring.totals.schedulingFailures}
-            />
-            <MetricCard
-              label="Webhook Failures"
-              value={monitoring.totals.webhookFailures}
-            />
-            <MetricCard label="Video Failures" value={monitoring.totals.videoFailures} />
-            <MetricCard
-              label="Critical Events"
+              label="Critical events"
               value={monitoring.totals.criticalEvents}
+              accentClassName="text-amber-600"
+              hint="Errors in the last 24 hours"
+            />
+            <MetricCard
+              label="Open recoveries"
+              value={reliability.totals.openRecoveries}
+              hint="Incidents needing operator action"
+            />
+            <MetricCard
+              label="Failed notifications"
+              value={notificationOps.totals.failed}
+              hint="Delivery retries available"
+            />
+            <MetricCard
+              label="Deployments tracked"
+              value={
+                monitoring.healthChecks.filter((check) => check.status !== "healthy")
+                  .length
+              }
+              hint="Providers needing attention"
             />
           </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
+          <div className="grid gap-4 xl:grid-cols-2">
+            <Card className="border-border/70 bg-card/80 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Integration Health</CardTitle>
+                <CardTitle>Latest health checks</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {monitoring.healthChecks.map((check) => (
                   <div
                     key={`${check.provider}-${check.checkedAt}`}
-                    className="flex items-center justify-between rounded-lg border p-3 text-sm">
-                    <span className="font-medium capitalize">{check.provider}</span>
-                    <Badge
-                      variant={
-                        check.status === "healthy"
-                          ? "default"
-                          : check.status === "degraded"
-                            ? "secondary"
-                            : "destructive"
-                      }>
-                      {check.status}
-                    </Badge>
+                    className="flex items-center justify-between rounded-2xl border border-border/70 bg-background/70 px-4 py-3 text-sm"
+                  >
+                    <div>
+                      <p className="font-medium capitalize">{check.provider}</p>
+                      <p className="text-muted-foreground">{check.message}</p>
+                    </div>
+                    <Badge variant="outline">{check.status}</Badge>
                   </div>
                 ))}
               </CardContent>
             </Card>
-            <Card>
+            <Card className="border-border/70 bg-card/80 shadow-sm">
               <CardHeader>
-                <CardTitle className="text-base">Recent Operational Events</CardTitle>
+                <CardTitle>Developer workspace focus</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
-                {monitoring.recentEvents.map((event) => (
-                  <div
-                    key={`${event.scope}-${event.createdAt}`}
-                    className="rounded-lg border p-3 text-sm">
-                    <div className="flex items-center justify-between gap-3">
-                      <span className="font-medium">{event.scope}</span>
-                      <Badge
-                        variant={
-                          event.level === "error" || event.level === "critical"
-                            ? "destructive"
-                            : event.level === "warn"
-                              ? "secondary"
-                              : "outline"
-                        }>
-                        {event.level}
-                      </Badge>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">{event.message}</p>
-                  </div>
-                ))}
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  Observability and recovery workflows now live on the developer page instead of crowding the main operations view.
+                </p>
+                <p>
+                  Deployment changes stay alongside reliability and notification delivery so engineers can work from one focused surface.
+                </p>
+                <Button asChild variant="outline" className="mt-2">
+                  <Link href="/dashboard/developer">Open developer workspace</Link>
+                </Button>
               </CardContent>
             </Card>
           </div>
         </section>
       ) : null}
-
-      <div className="space-y-8">
-        {INTERVIEW_CATEGORY.map(
-          (category) =>
-            groupedInterviews[category.id]?.length > 0 && (
-              <section key={category.id}>
-                <div className="flex items-center gap-2 mb-4">
-                  <h2 className="text-xl font-semibold">{category.title}</h2>
-                  <Badge variant={category.variant}>
-                    {groupedInterviews[category.id].length}
-                  </Badge>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {groupedInterviews[category.id].map(
-                    (interview: Interview) => {
-                      const candidateInfo = getCandidateInfo(
-                        users,
-                        interview.candidateId,
-                      );
-                      const startTime = new Date(
-                        getInterviewStartTimeMs(interview),
-                      );
-
-                      return (
-                        <Card
-                          className="hover:shadow-md transition-all"
-                          key={interview._id}>
-                          <CardHeader className="p-4">
-                            <div className="flex items-center gap-3">
-                              <Avatar className="h-10 w-10">
-                                <AvatarImage src={candidateInfo.image} />
-                                <AvatarFallback>
-                                  {candidateInfo.initials}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <CardTitle className="text-base">
-                                  {candidateInfo.name}
-                                </CardTitle>
-                                <p className="text-sm text-muted-foreground">
-                                  {interview.title}
-                                </p>
-                              </div>
-                            </div>
-                          </CardHeader>
-
-                          <CardContent className="p-4">
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <div className="flex items-center gap-1">
-                                <CalendarIcon className="h-4 w-4" />
-                                {format(startTime, "MMM dd")}
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <ClockIcon className="h-4 w-4" />
-                                {format(startTime, "hh:mm a")}
-                              </div>
-                            </div>
-                          </CardContent>
-
-                          <CardFooter className="p-4 pt-0 flex flex-col gap-3">
-                            {interview.status === "completed" && (
-                              <div className="flex gap-2 w-full">
-                                <Button
-                                  className="flex-1"
-                                  onClick={() =>
-                                    handleStatusUpdate(
-                                      interview._id,
-                                      "passed",
-                                    )
-                                  }>
-                                  <CheckCircle2Icon className="h-4 w-4 mr-2" />
-                                  Pass
-                                </Button>
-                                <Button
-                                  variant="destructive"
-                                  className="flex-1"
-                                  onClick={() =>
-                                    handleStatusUpdate(interview._id, "rejected")
-                                  }>
-                                  <XCircleIcon className="h-4 w-4 mr-2" />
-                                  Reject
-                                </Button>
-                              </div>
-                            )}
-                            <CommentDialog interviewId={interview._id} />
-                          </CardFooter>
-                        </Card>
-                      );
-                    },
-                  )}
-                </div>
-              </section>
-            ),
-        )}
-      </div>
     </div>
   );
 }
 
-function MetricCard({ label, value }: { label: string; value: number }) {
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-sm">{label}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-2xl font-semibold">{value}</CardContent>
-    </Card>
-  );
-}
-
-export default function ProtectedDashboardPage() {
+export default function ProtectedDashboardOverviewPage() {
   return (
     <RoleGuard
-      allowedRoles={["interviewer", "recruiter", "admin"]}
+      allowedRoles={["interviewer", "recruiter", "developer", "admin"]}
       title="Dashboard restricted"
-      message="Only interview staff can access the dashboard.">
-      <DashboardPage />
+      message="Only interview staff and developers can access the dashboard."
+    >
+      <DashboardOverviewPage />
     </RoleGuard>
   );
 }
