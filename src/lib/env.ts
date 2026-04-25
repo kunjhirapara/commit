@@ -9,16 +9,37 @@ const requiredServerEnvSchema = z.object({
 
 const optionalServerEnvSchema = requiredServerEnvSchema.extend({
   CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
+  // SMTP (optional in dev – emails are logged to console)
+  SMTP_HOST: z.string().min(1).optional(),
+  SMTP_PORT: z.string().optional(),
+  SMTP_SECURE: z.string().optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM_NAME: z.string().optional(),
+  SMTP_FROM_EMAIL: z.string().email().optional(),
+  // Internal API key for email route
+  INTERNAL_API_KEY: z.string().min(1).optional(),
+  // App URL for email links
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 });
 
 const productionServerEnvSchema = requiredServerEnvSchema.extend({
   CLERK_WEBHOOK_SECRET: z.string().min(1),
+  // SMTP required in production
+  SMTP_HOST: z.string().min(1),
+  SMTP_PORT: z.string().min(1),
+  SMTP_USER: z.string().min(1),
+  SMTP_PASS: z.string().min(1),
+  SMTP_FROM_EMAIL: z.string().email(),
+  INTERNAL_API_KEY: z.string().min(1),
+  NEXT_PUBLIC_APP_URL: z.string().url(),
 });
 
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_CONVEX_URL: z.string().url(),
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
   NEXT_PUBLIC_STREAM_API_KEY: z.string().min(1),
+  NEXT_PUBLIC_APP_URL: z.string().url().optional(),
 });
 
 let cachedServerEnv:
