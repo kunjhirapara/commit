@@ -3,6 +3,7 @@
 import { Controller, type UseFormReturn } from "react-hook-form";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,9 +47,7 @@ export function StructuredScorecardSection({
             Draft privately, then submit when your evaluation is complete.
           </p>
         </div>
-        <Badge variant={feedbackState === "submitted" ? "default" : "outline"}>
-          {feedbackState}
-        </Badge>
+        <StatusBadge status={feedbackState} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">

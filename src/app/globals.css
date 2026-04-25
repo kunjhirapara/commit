@@ -46,6 +46,7 @@
 }
 
 @layer base {
+
   *,
   ::after,
   ::before,
@@ -65,39 +66,40 @@
     --background: 210 40% 98%;
     /* Foreground: slate-900 */
     --foreground: 222 47% 11%;
-    
+
     /* Card: white */
     --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-    
+
     --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
-    
+
     /* Primary: Emerald-500 */
-    --primary: 160 84% 39%; 
+    --primary: 24 95% 50%;
     --primary-foreground: 0 0% 100%;
-    
+    --ring: 24 95% 50%;
+
     /* Secondary: slate-100 */
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
-    
+
     /* Muted: slate-100 */
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
-    
+
     /* Accent: slate-100 */
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    
+
     /* Destructive: red-500 */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    
+
     /* Border/Input: slate-200 */
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 160 84% 39%;
-    
+
     --radius: 0.5rem;
   }
 
@@ -106,34 +108,35 @@
     --background: 240 10% 3.9%;
     /* Foreground: zinc-50 */
     --foreground: 0 0% 98%;
-    
+
     /* Card: zinc-950 */
     --card: 240 10% 3.9%;
     --card-foreground: 0 0% 98%;
-    
+
     --popover: 240 10% 3.9%;
     --popover-foreground: 0 0% 98%;
-    
+
     /* Primary: Emerald-500 */
-    --primary: 160 84% 39%; 
-    --primary-foreground: 240 5.9% 10%;
-    
+    --primary: 24 90% 40%;
+    --primary-foreground: 0 0% 100%;
+    --ring: 24 90% 40%;
+
     /* Secondary: zinc-800 */
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
-    
+
     /* Muted: zinc-800 */
     --muted: 240 3.7% 15.9%;
     --muted-foreground: 240 5% 64.9%;
-    
+
     /* Accent: zinc-800 */
     --accent: 240 3.7% 15.9%;
     --accent-foreground: 0 0% 98%;
-    
+
     /* Destructive: red-900 */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    
+
     /* Border/Input: zinc-800 */
     --border: 240 3.7% 15.9%;
     --input: 240 3.7% 15.9%;
@@ -150,4 +153,28 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Plus Jakarta Sans', sans-serif;
   }
+}
+
+/* Custom thin scrollbars for all scrollable containers */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.3);
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
 }

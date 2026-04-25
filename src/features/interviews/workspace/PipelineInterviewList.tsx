@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import CommentDialog from "@/components/ui/CommentDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { StatusBadge } from "@/components/ui/status-badge";
 import type { DashboardInterview } from "./types";
 
 type PipelineInterviewListProps = {
@@ -34,7 +35,7 @@ export function PipelineInterviewList({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 max-h-[600px] overflow-y-auto pr-2">
       {interviews.map((interview) => {
         const checked = selectedInterviewIds.includes(String(interview._id));
 
@@ -56,7 +57,7 @@ export function PipelineInterviewList({
                     />
                   ) : null}
                   <p className="font-medium">{interview.candidateName}</p>
-                  <Badge variant="outline">{interview.normalizedStatus}</Badge>
+                  <StatusBadge status={interview.normalizedStatus} />
                   <Badge variant="secondary">{interview.templateLabel}</Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">{interview.title}</p>

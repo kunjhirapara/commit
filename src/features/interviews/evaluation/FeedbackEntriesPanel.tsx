@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getInterviewerInfo } from "@/lib/utils";
@@ -45,8 +46,8 @@ export function FeedbackEntriesPanel({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">{entry.state}</Badge>
-                      <Badge variant="outline">{entry.recommendation}</Badge>
+                      <StatusBadge status={entry.state} />
+                      <StatusBadge status={entry.recommendation} />
                     </div>
                   </div>
 

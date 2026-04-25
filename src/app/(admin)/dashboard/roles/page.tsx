@@ -9,6 +9,7 @@ import {
 } from "@/components/dashboard/DashboardPrimitives";
 import LoaderUI from "@/components/ui/LoaderUI";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -217,7 +218,7 @@ function RolesWorkspacePage() {
                     className={cn(
                       "w-full rounded-2xl border px-4 py-3 text-left transition-colors",
                       selectedRoleId === String(role._id)
-                        ? "border-emerald-500/40 bg-emerald-500/10"
+                              ? "border-primary/40 bg-primary/10"
                         : "border-border/70 bg-background/70 hover:bg-muted/50",
                     )}
                   >
@@ -298,7 +299,7 @@ function RolesWorkspacePage() {
                           className={cn(
                             "rounded-2xl border px-4 py-3 text-left transition-colors",
                             selected
-                              ? "border-emerald-500/40 bg-emerald-500/10"
+                                    ? "border-primary/40 bg-primary/10"
                               : "border-border/70 bg-background/70 hover:bg-muted/50",
                           )}
                         >
@@ -348,13 +349,11 @@ function RolesWorkspacePage() {
                         {teamMember.email || "Hidden email"}
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
-                        <Badge variant="outline">Base: {teamMember.role}</Badge>
+                        <StatusBadge status={teamMember.role} />
                         {teamMember.customRole ? (
-                          <Badge variant="secondary">
-                            Custom: {teamMember.customRole.name}
-                          </Badge>
+                          <StatusBadge status={teamMember.customRole.name} />
                         ) : (
-                          <Badge variant="secondary">No custom role</Badge>
+                          <Badge variant="outline">No custom role</Badge>
                         )}
                       </div>
                     </div>

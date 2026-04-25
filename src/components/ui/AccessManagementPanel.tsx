@@ -7,8 +7,9 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useUserRole } from "@/hooks/useUserRole";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
-import { Badge } from "./badge";
-import { Button } from "./button";
+import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
 import { Input } from "./input";
 import { Label } from "./label";
@@ -181,11 +182,11 @@ function AccessManagementPanel() {
                         <p className="text-sm font-medium">
                           {invitation.email}
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          {invitation.role}
-                        </p>
+                        <div className="mt-1">
+                          <StatusBadge status={invitation.role} />
+                        </div>
                       </div>
-                      <Badge variant="outline">{invitation.status}</Badge>
+                      <StatusBadge status={invitation.status} />
                     </div>
                     {invitation.status === "pending" ? (
                       <Button

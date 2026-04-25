@@ -11,6 +11,7 @@ import {
 import AccessManagementPanel from "@/components/ui/AccessManagementPanel";
 import LoaderUI from "@/components/ui/LoaderUI";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,17 +42,7 @@ function TeamWorkspacePage() {
     selectedCandidateId ? { candidateId: selectedCandidateId } : "skip",
   );
   const updateInterviewerProfile = useMutation(api.admin.updateInterviewerProfile);
-  const logSensitiveAccess = useMutation(api.compliance.logSensitiveAccess);
 
-  useEffect(() => {
-    if (!selectedCandidateId) return;
-    void logSensitiveAccess({
-      accessType: "candidate_history_view",
-      targetType: "candidate",
-      targetId: selectedCandidateId,
-      justification: "Reviewed candidate history in team workspace.",
-    }).catch(() => undefined);
-  }, [logSensitiveAccess, selectedCandidateId]);
 
   useEffect(() => {
     if (!selectedInterviewerId || !adminDashboard?.interviewerRoster) return;
@@ -141,7 +132,7 @@ function TeamWorkspacePage() {
                 </SelectContent>
               </Select>
             )}
-            <div className="grid gap-3">
+            <div className="grid gap-3 max-h-[600px] overflow-y-auto pr-2">
               {(candidateHistory ?? []).map((round) => (
                 <div
                   key={String(round._id)}
@@ -149,7 +140,7 @@ function TeamWorkspacePage() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium">{round.title}</span>
-                    <Badge variant="secondary">{round.normalizedStatus}</Badge>
+                    <StatusBadge status={round.normalizedStatus} />
                   </div>
                   <p className="mt-1 text-muted-foreground">
                     {round.templateLabel} · {format(new Date(round.startTime), "PPp")}

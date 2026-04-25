@@ -19,7 +19,7 @@ export function DashboardPageHeader({
     <div className="flex flex-col gap-5 rounded-[28px] border border-border/70 bg-card/80 p-6 shadow-sm backdrop-blur md:flex-row md:items-end md:justify-between">
       <div className="space-y-2">
         {eyebrow ? (
-          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-emerald-600">
+          <p className="text-xs font-semibold uppercase tracking-[0.28em] text-primary">
             {eyebrow}
           </p>
         ) : null}

@@ -7,11 +7,11 @@ import {
   ActivityIcon,
   KeyRoundIcon,
   LayoutDashboardIcon,
-  ShieldCheckIcon,
   UsersIcon,
   WorkflowIcon,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -29,7 +29,6 @@ function DashboardShell({ children }: { children: ReactNode }) {
     role,
     canAccessDeveloperTools,
     canManageInvitations,
-    canManageCompliance,
     canManageRoleCatalog,
     canManageRoles,
   } = useUserRole();
@@ -64,13 +63,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
       icon: <ActivityIcon className="size-4" />,
       visible: canAccessDeveloperTools,
     },
-    {
-      href: "/dashboard/compliance",
-      label: "Compliance",
-      description: "Governance and data access oversight",
-      icon: <ShieldCheckIcon className="size-4" />,
-      visible: canManageCompliance,
-    },
+
     {
       href: "/dashboard/roles",
       label: "Roles",
@@ -88,9 +81,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:h-fit">
           <div className="rounded-[28px] border border-border/70 bg-card/85 p-5 shadow-sm backdrop-blur">
             <div className="space-y-2">
-              <Badge variant="secondary" className="rounded-full px-3">
-                {role ?? "guest"}
-              </Badge>
+              <StatusBadge status={role ?? "guest"} className="rounded-full px-3" />
             </div>
             <nav className="mt-5 space-y-2">
               {visibleItems.map((item) => {
@@ -106,7 +97,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                     className={cn(
                       "block rounded-full border ps-3 py-3 transition-all",
                       active
-                        ? "border-emerald-500/30 bg-emerald-500/10 shadow-sm"
+                        ? "border-primary/30 bg-primary/10 shadow-sm"
                         : "border-transparent bg-muted/40 hover:border-border hover:bg-card",
                     )}>
                     <div className="flex items-center gap-3">
@@ -114,7 +105,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                         className={cn(
                           "flex size-10 shrink-0 items-center justify-center rounded-full",
                           active
-                            ? "bg-emerald-500 text-white"
+                            ? "bg-primary text-white"
                             : "bg-background text-muted-foreground",
                         )}>
                         {item.icon}
@@ -147,7 +138,7 @@ function DashboardShell({ children }: { children: ReactNode }) {
                   className={cn(
                     "whitespace-nowrap rounded-full border px-4 py-2 text-sm transition-colors",
                     active
-                      ? "border-emerald-500/40 bg-emerald-500/10 text-foreground"
+                      ? "border-primary/40 bg-primary/10 text-foreground"
                       : "border-border/70 bg-card/80 text-muted-foreground",
                   )}>
                   {item.label}

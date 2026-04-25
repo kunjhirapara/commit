@@ -1,5 +1,6 @@
 import { PencilIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -54,9 +55,7 @@ export function CommentHistoryPanel({
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Badge variant="outline">
-                        {(entry.visibility ?? "shared") as NoteVisibility}
-                      </Badge>
+                      <StatusBadge status={(entry.visibility ?? "shared") as NoteVisibility} />
                       {renderStars(entry.rating)}
                     </div>
                   </div>
