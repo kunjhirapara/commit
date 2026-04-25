@@ -38,7 +38,7 @@ export default function RecordingDisclosurePage() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>Version 2026-04-22</p>
           <p>
-            CodeSync may capture interview recordings only when the employer has enabled
+            Commit may capture interview recordings only when the employer has enabled
             recording for that workflow and disclosed the purpose to participants.
           </p>
           <p>

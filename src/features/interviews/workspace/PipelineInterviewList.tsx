@@ -24,6 +24,15 @@ export function PipelineInterviewList({
   onSelectionChange,
   onStatusUpdate,
 }: PipelineInterviewListProps) {
+  if (interviews.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground bg-muted/20 rounded-2xl border border-dashed border-border/70">
+        <p className="text-lg font-medium text-foreground">No interviews found.</p>
+        <p className="text-sm opacity-80 mt-1 max-w-sm">Try adjusting your filters or clearing your search to see more results.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-3">
       {interviews.map((interview) => {

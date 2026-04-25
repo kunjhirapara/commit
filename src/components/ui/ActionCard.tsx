@@ -19,10 +19,8 @@ function ActionCard({
     <Card
       className="group relative overflow-hidden hover:border-primary transition-all duration-300 hover:shadow-lg cursor-pointer hover:scale-[1.02]"
       onClick={onClick}>
-      {/* ACTION GRADIENT */}
-      <div
-        className={`absolute inset-0 bg-linear-to-br ${action.gradient} opacity-100 group-hover:opacity-50 transition-opacity`}
-      />
+      {/* ACTION SOLID BACKGROUND */}
+      <div className="absolute inset-0 bg-muted/30 opacity-100 group-hover:bg-muted/50 transition-colors" />
 
       {/* ACTION CONTENT WRAPPER */}
       <div className="relative p-6 size-full">

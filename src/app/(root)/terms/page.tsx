@@ -10,7 +10,7 @@ export default function TermsPage() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>Version 2026-04-22</p>
           <p>
-            CodeSync is provided for interview scheduling, communication, live
+            Commit is provided for interview scheduling, communication, live
             coding, video collaboration, and hiring evaluation workflows.
           </p>
           <p>

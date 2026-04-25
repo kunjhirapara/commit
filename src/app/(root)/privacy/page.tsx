@@ -10,7 +10,7 @@ export default function PrivacyPage() {
         <CardContent className="space-y-4 text-sm text-muted-foreground">
           <p>Version 2026-04-22</p>
           <p>
-            CodeSync stores interview scheduling details, participant identity data, evaluation notes, notification delivery state, and operational audit information to run hiring workflows safely.
+            Commit stores interview scheduling details, participant identity data, evaluation notes, notification delivery state, and operational audit information to run hiring workflows safely.
           </p>
           <p>
             Recording disclosures, retention windows, compliance jurisdiction, and candidate data handling are attached to interviews where applicable.
