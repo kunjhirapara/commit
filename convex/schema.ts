@@ -103,21 +103,6 @@ const backupSnapshotKind = v.union(
   v.literal("manual"),
   v.literal("restore_drill"),
 );
-const policyDocumentType = v.union(
-  v.literal("terms"),
-  v.literal("privacy"),
-  v.literal("recording"),
-);
-const gdprRequestType = v.union(
-  v.literal("export"),
-  v.literal("delete"),
-);
-const gdprRequestStatus = v.union(
-  v.literal("requested"),
-  v.literal("in_review"),
-  v.literal("completed"),
-  v.literal("rejected"),
-);
 const deploymentStatus = v.union(
   v.literal("proposed"),
   v.literal("approved"),
@@ -425,31 +410,6 @@ export default defineSchema({
   })
     .index("by_status_created_at", ["status", "createdAt"])
     .index("by_kind_created_at", ["kind", "createdAt"]),
-
-  policyAcknowledgements: defineTable({
-    userClerkId: v.string(),
-    documentType: policyDocumentType,
-    version: v.string(),
-    acceptedAt: v.number(),
-    jurisdiction: v.optional(v.string()),
-    metadata: v.optional(v.string()),
-  })
-    .index("by_user_document", ["userClerkId", "documentType"])
-    .index("by_document_accepted_at", ["documentType", "acceptedAt"]),
-
-  gdprRequests: defineTable({
-    requesterClerkId: v.string(),
-    type: gdprRequestType,
-    status: gdprRequestStatus,
-    reason: v.optional(v.string()),
-    exportPayload: v.optional(v.string()),
-    resolution: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-    completedAt: v.optional(v.number()),
-  })
-    .index("by_requester_created_at", ["requesterClerkId", "createdAt"])
-    .index("by_status_created_at", ["status", "createdAt"]),
 
   dataAccessLogs: defineTable({
     actorClerkId: v.string(),

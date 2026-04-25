@@ -1,11 +1,11 @@
 /**
- * Email HTML templates for CodeSync interview platform notifications.
+ * Email HTML templates for Commit interview platform notifications.
  *
  * Each template returns { subject, html } for use with nodemailer.
  * All date/time values are formatted in the recipient's timezone.
  */
 
-const BRAND_NAME = "CodeSync";
+const BRAND_NAME = "Commit";
 const BRAND_COLOR = "#6366f1"; // indigo-500
 const BRAND_DARK = "#312e81"; // indigo-900
 const TEXT_COLOR = "#1e293b";

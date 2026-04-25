@@ -3,9 +3,34 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../convex/_generated/api";
 import { getValidatedServerEnv } from "@/lib/env";
+import { isServerFeatureEnabled } from "@/lib/featureFlags";
+import {
+  consumeRateLimit,
+  getRateLimitHeaders,
+  getRateLimitKey,
+} from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
   try {
+    if (!isServerFeatureEnabled("telemetryIngestion")) {
+      return NextResponse.json({ ok: true, skipped: "disabled" }, { status: 202 });
+    }
+
+    if (isServerFeatureEnabled("strictApiRateLimiting")) {
+      const rateLimit = consumeRateLimit({
+        key: getRateLimitKey("telemetry", request),
+        limit: 60,
+        windowMs: 60_000,
+      });
+
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          { ok: false, error: "Rate limit exceeded" },
+          { status: 429, headers: getRateLimitHeaders(rateLimit) },
+        );
+      }
+    }
+
     const { getToken } = await auth();
     const token = await getToken({ template: "convex" });
     const body = await request.json();

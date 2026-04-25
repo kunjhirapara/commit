@@ -11,6 +11,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail, resolveEmailTemplate } from "@/lib/email";
 import type { EmailTemplateData } from "@/lib/email";
+import { isServerFeatureEnabled } from "@/lib/featureFlags";
+import {
+  consumeRateLimit,
+  getRateLimitHeaders,
+  getRateLimitKey,
+} from "@/lib/rateLimit";
 
 interface SendEmailRequest {
   type: string;
@@ -37,6 +43,28 @@ const validateApiKey = (req: NextRequest): boolean => {
 };
 
 export async function POST(req: NextRequest) {
+  if (!isServerFeatureEnabled("emailDeliveryApi")) {
+    return NextResponse.json(
+      { error: "Email delivery is currently disabled" },
+      { status: 503 },
+    );
+  }
+
+  if (isServerFeatureEnabled("strictApiRateLimiting")) {
+    const rateLimit = consumeRateLimit({
+      key: getRateLimitKey("notifications-email", req),
+      limit: 120,
+      windowMs: 60_000,
+    });
+
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { error: "Rate limit exceeded" },
+        { status: 429, headers: getRateLimitHeaders(rateLimit) },
+      );
+    }
+  }
+
   if (!validateApiKey(req)) {
     return NextResponse.json(
       { error: "Unauthorized" },

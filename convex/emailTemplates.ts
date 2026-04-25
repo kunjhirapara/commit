@@ -1,12 +1,12 @@
 /**
- * Email HTML templates for CodeSync interview platform notifications.
+ * Email HTML templates for Commit interview platform notifications.
  *
  * This file lives inside convex/ so it can be imported by "use node" actions.
  * Each template returns { subject, html } for use with nodemailer.
  * All date/time values are formatted in the recipient's timezone.
  */
 
-const BRAND_NAME = "CodeSync";
+const BRAND_NAME = "Commit";
 const BRAND_COLOR = "#6366f1";
 const BRAND_DARK = "#312e81";
 const TEXT_COLOR = "#1e293b";
@@ -129,7 +129,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `📅 Interview Scheduled: ${data.interviewTitle ?? "Upcoming Interview"}`,
+        subject: `Interview Scheduled: ${data.interviewTitle ?? "Upcoming Interview"}`,
         html: wrapLayout("Interview Scheduled", body, settings),
       };
     }
@@ -153,7 +153,7 @@ export const resolveEmailTemplate = (
         ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("View Interview", data.interviewUrl)}</div>` : ""}
       `;
       return {
-        subject: `🔄 Interview Rescheduled: ${data.interviewTitle ?? "Interview Update"}`,
+        subject: `Interview Rescheduled: ${data.interviewTitle ?? "Interview Update"}`,
         html: wrapLayout("Interview Rescheduled", body, settings),
       };
     }
@@ -174,7 +174,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `❌ Interview Cancelled: ${data.interviewTitle ?? "Interview Update"}`,
+        subject: `Interview Cancelled: ${data.interviewTitle ?? "Interview Update"}`,
         html: wrapLayout("Interview Cancelled", body, settings),
       };
     }
@@ -198,7 +198,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `⏰ Reminder: ${data.interviewTitle ?? "Interview"} starts soon`,
+        subject: `Reminder: ${data.interviewTitle ?? "Interview"} starts soon`,
         html: wrapLayout("Interview Reminder", body, settings),
       };
     }
@@ -222,7 +222,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `📝 Feedback Due: ${data.interviewTitle ?? "Interview Feedback"}`,
+        subject: `Feedback Due: ${data.interviewTitle ?? "Interview Feedback"}`,
         html: wrapLayout("Feedback Reminder", body, settings),
       };
     }

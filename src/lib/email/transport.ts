@@ -1,5 +1,5 @@
 /**
- * Nodemailer transport configuration for CodeSync.
+ * Nodemailer transport configuration for Commit.
  *
  * Uses SMTP env variables to create a reusable transport.
  * Falls back to a "no-op" mode when credentials are missing so the app
@@ -30,9 +30,9 @@ let transport: Transporter | null = null;
 const isSmtpConfigured = () =>
   Boolean(
     process.env.SMTP_HOST &&
-      process.env.SMTP_PORT &&
-      process.env.SMTP_USER &&
-      process.env.SMTP_PASS,
+    process.env.SMTP_PORT &&
+    process.env.SMTP_USER &&
+    process.env.SMTP_PASS,
   );
 
 const getTransport = (): Transporter | null => {
@@ -71,8 +71,8 @@ const getTransport = (): Transporter | null => {
 // ---------------------------------------------------------------------------
 
 export const sendEmail = async (payload: EmailPayload): Promise<EmailResult> => {
-  const fromName = process.env.SMTP_FROM_NAME ?? "CodeSync";
-  const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@codesync.dev";
+  const fromName = process.env.SMTP_FROM_NAME ?? "Commit";
+  const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@commit.dev";
 
   const mailer = getTransport();
 
@@ -99,7 +99,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailResult> => 
       html: payload.html,
       replyTo: payload.replyTo ?? fromEmail,
       headers: {
-        "X-Mailer": "CodeSync-Notification-Service",
+        "X-Mailer": "Commit-Notification-Service",
       },
     });
 

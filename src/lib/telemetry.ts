@@ -15,7 +15,7 @@ export type TelemetryEvent = {
   metadata?: Record<string, unknown>;
 };
 
-const CORRELATION_COOKIE = "codesync-correlation-id";
+const CORRELATION_COOKIE = "commit-correlation-id";
 
 const getClientCorrelationId = () => {
   if (typeof document === "undefined") return undefined;

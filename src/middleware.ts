@@ -2,7 +2,7 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 const CORRELATION_HEADER = "x-correlation-id";
-const CORRELATION_COOKIE = "codesync-correlation-id";
+const CORRELATION_COOKIE = "commit-correlation-id";
 
 export default clerkMiddleware(async (_auth, req) => {
   const correlationId =

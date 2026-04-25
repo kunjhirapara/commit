@@ -124,8 +124,8 @@ export const dispatchEmailNotification = internalAction({
     }
 
     // Send the email
-    const fromName = process.env.SMTP_FROM_NAME ?? "CodeSync";
-    const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@codesync.dev";
+    const fromName = process.env.SMTP_FROM_NAME ?? "Commit";
+    const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@commit.dev";
 
     try {
       const info = await transport.sendMail({

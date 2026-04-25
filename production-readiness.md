@@ -1,4 +1,4 @@
-# Production Readiness Checklist for CodeSync
+# Production Readiness Checklist for Commit
 
 This document lists the features and capabilities this project should have before it can realistically be called a production-level interview platform.
 

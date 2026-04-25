@@ -21,6 +21,8 @@ const optionalServerEnvSchema = requiredServerEnvSchema.extend({
   INTERNAL_API_KEY: z.string().min(1).optional(),
   // App URL for email links
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  FEATURE_FLAGS: z.string().optional(),
+  NEXT_PUBLIC_FEATURE_FLAGS: z.string().optional(),
 });
 
 const productionServerEnvSchema = requiredServerEnvSchema.extend({
@@ -33,6 +35,8 @@ const productionServerEnvSchema = requiredServerEnvSchema.extend({
   SMTP_FROM_EMAIL: z.string().email(),
   INTERNAL_API_KEY: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url(),
+  FEATURE_FLAGS: z.string().optional(),
+  NEXT_PUBLIC_FEATURE_FLAGS: z.string().optional(),
 });
 
 const clientEnvSchema = z.object({
@@ -40,6 +44,7 @@ const clientEnvSchema = z.object({
   NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
   NEXT_PUBLIC_STREAM_API_KEY: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
+  NEXT_PUBLIC_FEATURE_FLAGS: z.string().optional(),
 });
 
 let cachedServerEnv:
@@ -78,6 +83,8 @@ export const getValidatedClientEnv = () => {
     NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
       process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_STREAM_API_KEY: process.env.NEXT_PUBLIC_STREAM_API_KEY,
+    NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+    NEXT_PUBLIC_FEATURE_FLAGS: process.env.NEXT_PUBLIC_FEATURE_FLAGS,
   });
 
   if (!parsed.success) {
