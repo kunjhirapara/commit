@@ -5,7 +5,6 @@ import {
 } from "@stream-io/video-react-sdk";
 import { useMutation } from "convex/react";
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { Card } from "./card";
 import {
   AlertTriangleIcon,
@@ -44,14 +43,12 @@ function MeetingSetup({
   const [networkLabel, setNetworkLabel] = useState("Checking network");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [hasRecordingConsent, setHasRecordingConsent] = useState(false);
-  const [hasPolicyConsent, setHasPolicyConsent] = useState(false);
 
   const call = useCall();
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
   const captureRecordingConsent = useMutation(
     api.interviews.captureRecordingConsent,
   );
-  const acknowledgePolicy = useMutation(api.compliance.acknowledgePolicy);
 
   const calendarLinks = useMemo(
     () => (interview ? getCalendarLinks(interview) : null),
@@ -74,8 +71,8 @@ function MeetingSetup({
     const checkEnvironment = async () => {
       setBrowserSupported(
         typeof navigator !== "undefined" &&
-          !!navigator.mediaDevices &&
-          !!window.isSecureContext,
+        !!navigator.mediaDevices &&
+        !!window.isSecureContext,
       );
 
       if ("permissions" in navigator) {
@@ -109,8 +106,7 @@ function MeetingSetup({
 
       if (connection?.effectiveType) {
         setNetworkLabel(
-          `${connection.effectiveType.toUpperCase()} · ${
-            connection.downlink ? `${connection.downlink} Mbps` : "Bandwidth unknown"
+          `${connection.effectiveType.toUpperCase()} · ${connection.downlink ? `${connection.downlink} Mbps` : "Bandwidth unknown"
           }`,
         );
       } else {
@@ -122,9 +118,9 @@ function MeetingSetup({
   }, []);
 
   const handleJoin = async () => {
-    if (interview && (!hasRecordingConsent || !hasPolicyConsent)) {
+    if (interview && !hasRecordingConsent) {
       setJoinError(
-        "Please confirm recording consent and accept the current policies before joining the session.",
+        "Please confirm recording consent before joining the session.",
       );
       return;
     }
@@ -132,21 +128,6 @@ function MeetingSetup({
     try {
       setJoinError(null);
       if (interview) {
-        await acknowledgePolicy({
-          documentType: "terms",
-          version: "2026-04-22",
-          jurisdiction: interview.complianceJurisdiction,
-        });
-        await acknowledgePolicy({
-          documentType: "privacy",
-          version: "2026-04-22",
-          jurisdiction: interview.complianceJurisdiction,
-        });
-        await acknowledgePolicy({
-          documentType: "recording",
-          version: "2026-04-22",
-          jurisdiction: interview.complianceJurisdiction,
-        });
         await captureRecordingConsent({
           interviewId: interview._id,
         });
@@ -174,7 +155,7 @@ function MeetingSetup({
         getDisplayErrorMessage(
           error,
           interview?.browserFallbackInstructions ||
-            "We couldn't join the interview. Refresh once, confirm device permissions, and try again from a desktop Chrome browser.",
+          "We couldn't join the interview. Refresh once, confirm device permissions, and try again from a desktop Chrome browser.",
         ),
       );
     }
@@ -220,13 +201,13 @@ function MeetingSetup({
   ];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.15),_transparent_35%),linear-gradient(180deg,_rgba(15,23,42,0.03),_rgba(255,255,255,0))] p-6">
+    <div className="min-h-screen bg-background p-6">
       <div className="mx-auto grid w-full max-w-6xl gap-6 lg:grid-cols-[1.1fr_0.9fr]">
         <Card className="p-6">
           <div className="mb-4 flex items-start justify-between gap-4">
             <div>
               <p className="text-sm uppercase tracking-[0.2em] text-emerald-600">
-                {interview?.brandName || "CodeSync Interviews"}
+                {interview?.brandName || "Commit Interviews"}
               </p>
               <h1 className="mt-2 text-2xl font-semibold">
                 {interview?.title || "Interview Waiting Room"}
@@ -306,13 +287,11 @@ function MeetingSetup({
                   aria-live="polite">
                   <div className="flex items-start gap-3">
                     <div
-                      className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${
-                        item.ok ? "bg-emerald-500/10" : "bg-amber-500/10"
-                      }`}>
+                      className={`mt-0.5 flex h-9 w-9 items-center justify-center rounded-full ${item.ok ? "bg-emerald-500/10" : "bg-amber-500/10"
+                        }`}>
                       <item.icon
-                        className={`h-4 w-4 ${
-                          item.ok ? "text-emerald-600" : "text-amber-600"
-                        }`}
+                        className={`h-4 w-4 ${item.ok ? "text-emerald-600" : "text-amber-600"
+                          }`}
                       />
                     </div>
                     <div className="flex-1">
@@ -365,32 +344,6 @@ function MeetingSetup({
               />
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border p-4">
-              <div className="space-y-1">
-                <p className="font-medium">Terms and privacy acknowledgement</p>
-                <p className="text-sm text-muted-foreground">
-                  Review the current
-                  {" "}
-                  <Link className="underline underline-offset-4" href="/terms">
-                    Terms
-                  </Link>
-                  {" "}
-                  and
-                  {" "}
-                  <Link className="underline underline-offset-4" href="/privacy">
-                    Privacy Policy
-                  </Link>
-                  {" "}
-                  before joining. Recording disclosures are handled for your jurisdiction.
-                </p>
-              </div>
-              <Switch
-                checked={hasPolicyConsent}
-                onCheckedChange={setHasPolicyConsent}
-                aria-label="Confirm terms and privacy acknowledgement"
-              />
-            </div>
-
             {calendarLinks ? (
               <div className="flex gap-2">
                 <Button variant="outline" className="flex-1" asChild>
@@ -435,7 +388,7 @@ function MeetingSetup({
                 className="w-full"
                 size="lg"
                 onClick={handleJoin}
-                disabled={!!interview && (!hasRecordingConsent || !hasPolicyConsent)}>
+                disabled={!!interview && !hasRecordingConsent}>
                 Join Interview
               </Button>
               <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
