@@ -45,7 +45,7 @@ The goal is not just "more features." A production interview application needs t
 - Host controls for admitting, removing, muting, and ending sessions.
 - Session timeout handling and recovery flows.
 - Call health monitoring for latency, packet loss, and device failures.
-- Recording controls with explicit consent handling where required.
+- Host-only recording controls with clear participant disclosure.
 - Backup behavior if the video provider is degraded or unavailable.
 - Structured error handling for token generation, provider init, meeting lookup, and call creation.
 
@@ -69,7 +69,7 @@ The goal is not just "more features." A production interview application needs t
 - Secure storage and access control for recordings.
 - PII minimization and field-level access where needed.
 - Data retention policies for recordings, notes, and candidate records.
-- Consent and compliance flows for recording interviews.
+- Recording disclosure and compliance support for interviews.
 - Secrets management for Clerk, Convex, Stream, and webhooks.
 - Environment validation on boot so production fails safely if required secrets are missing.
 - Protection against ID-based data access across tenants or users.
@@ -117,7 +117,7 @@ The goal is not just "more features." A production interview application needs t
 
 ## 11. Compliance and Governance
 
-- Terms, privacy policy, and consent flows.
+- Terms, privacy policy, and recording disclosure flows.
 - Recording disclosure and jurisdiction-aware compliance support.
 - GDPR or equivalent deletion/export flows for candidate data if required by your market.
 - Data access logs for sensitive information.
