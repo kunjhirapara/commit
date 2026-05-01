@@ -107,13 +107,15 @@ const normalizeStoredStatus = (
 
 const normalizeInterview = (interview: any) => {
   const normalizedStatus = normalizeStoredStatus(interview.status);
-  const scheduledStartTime = interview.scheduledStartTime ?? interview.startTime;
+  const scheduledStartTime =
+    interview.scheduledStartTime ?? interview.startTime;
   const durationMinutes =
     interview.durationMinutes ??
     Math.max(
       DEFAULT_DURATION_MINUTES,
       Math.round(
-        ((interview.endTime ?? scheduledStartTime + DEFAULT_DURATION_MINUTES * 60 * 1000) -
+        ((interview.endTime ??
+          scheduledStartTime + DEFAULT_DURATION_MINUTES * 60 * 1000) -
           scheduledStartTime) /
           (60 * 1000),
       ),
@@ -137,8 +139,6 @@ const normalizeInterview = (interview: any) => {
     bufferAfterMinutes:
       interview.bufferAfterMinutes ?? DEFAULT_BUFFER_AFTER_MINUTES,
     feedbackReminderSentAt: interview.feedbackReminderSentAt,
-    recordingConsentRequired: interview.recordingConsentRequired ?? true,
-
     recordingDisclosure:
       interview.recordingDisclosure ?? DEFAULT_RECORDING_DISCLOSURE,
     recordingRetentionDays:
@@ -230,8 +230,7 @@ const scheduleInterviewBackgroundWork = async (
 
   await ctx.runMutation(internal.reliability.enqueueJob, {
     kind: "interview_cleanup",
-    runAt:
-      args.scheduledEndTime + args.retentionDays * 24 * 60 * 60 * 1000,
+    runAt: args.scheduledEndTime + args.retentionDays * 24 * 60 * 60 * 1000,
     maxAttempts: 2,
     payload: JSON.stringify({
       interviewId: args.interviewId,
@@ -311,7 +310,8 @@ const assertNoConflicts = async (
 
   const requestedStart =
     args.scheduledStartTime - args.bufferBeforeMinutes * 60 * 1000;
-  const requestedEnd = args.scheduledEndTime + args.bufferAfterMinutes * 60 * 1000;
+  const requestedEnd =
+    args.scheduledEndTime + args.bufferAfterMinutes * 60 * 1000;
 
   const hasConflict = interviews.some((interview: any) => {
     if (args.excludeInterviewId && interview._id === args.excludeInterviewId) {
@@ -320,8 +320,8 @@ const assertNoConflicts = async (
 
     if (TERMINAL_STATUSES.includes(interview.status)) return false;
 
-    const sharesInterviewer = interview.interviewerIds.some((interviewerId: string) =>
-      args.interviewerIds.includes(interviewerId),
+    const sharesInterviewer = interview.interviewerIds.some(
+      (interviewerId: string) => args.interviewerIds.includes(interviewerId),
     );
 
     if (!sharesInterviewer) return false;
@@ -446,7 +446,9 @@ const processReminder = async (ctx: any, interview: any) => {
 const processFeedbackReminder = async (ctx: any, interview: any) => {
   const normalizedInterview = normalizeInterview(interview);
   const completedAt =
-    normalizedInterview.scheduledEndTime ?? normalizedInterview.endTime ?? normalizedInterview.startTime;
+    normalizedInterview.scheduledEndTime ??
+    normalizedInterview.endTime ??
+    normalizedInterview.startTime;
 
   if (
     normalizedInterview.feedbackReminderSentAt ||
@@ -457,7 +459,9 @@ const processFeedbackReminder = async (ctx: any, interview: any) => {
 
   const feedbackEntries = await ctx.db
     .query("feedback")
-    .withIndex("by_interview_id", (q: any) => q.eq("interviewId", normalizedInterview._id))
+    .withIndex("by_interview_id", (q: any) =>
+      q.eq("interviewId", normalizedInterview._id),
+    )
     .collect();
 
   const submittedInterviewers = new Set(
@@ -501,15 +505,22 @@ const processFeedbackReminder = async (ctx: any, interview: any) => {
   });
 };
 
-const getRecordingRetentionExpiry = (interview: ReturnType<typeof normalizeInterview>) =>
-  interview.scheduledEndTime + interview.recordingRetentionDays * 24 * 60 * 60 * 1000;
+const getRecordingRetentionExpiry = (
+  interview: ReturnType<typeof normalizeInterview>,
+) =>
+  interview.scheduledEndTime +
+  interview.recordingRetentionDays * 24 * 60 * 60 * 1000;
 
 export const getAllInterviews = query({
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    const interviews = (await ctx.db.query("interviews").collect()).map(
-      normalizeInterview,
-    );
+    const interviews = (
+      await ctx.db
+        .query("interviews")
+        .withIndex("by_startTime")
+        .order("desc")
+        .collect()
+    ).map(normalizeInterview);
 
     return interviews.filter((interview: any) =>
       canAccessInterview(user, interview),
@@ -530,6 +541,30 @@ export const getMyInterviews = query({
   },
 });
 
+export const getCalendarInterviewsForUser = query({
+  args: {
+    userClerkId: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await getCurrentUserRecord(ctx);
+    const targetClerkId = args.userClerkId || user.clerkId;
+
+    if (targetClerkId !== user.clerkId) {
+      await requirePermission(ctx, "viewUsers");
+    }
+
+    const interviews = (await ctx.db.query("interviews").collect()).map(
+      normalizeInterview,
+    );
+
+    return interviews.filter(
+      (interview: any) =>
+        interview.candidateId === targetClerkId ||
+        interview.interviewerIds.includes(targetClerkId),
+    );
+  },
+});
+
 export const getInterviewByStreamCallId = query({
   args: { streamCallId: v.string() },
   handler: async (ctx, args) => {
@@ -540,7 +575,9 @@ export const getInterviewByStreamCallId = query({
         q.eq("streamCallId", args.streamCallId),
       )
       .first();
-    const normalizedInterview = interview ? normalizeInterview(interview) : null;
+    const normalizedInterview = interview
+      ? normalizeInterview(interview)
+      : null;
 
     if (normalizedInterview && !canAccessInterview(user, normalizedInterview)) {
       throw createServerError(
@@ -616,8 +653,6 @@ export const createInterview = mutation({
       scheduledEndTime,
       reminderSentAt: undefined,
       feedbackReminderSentAt: undefined,
-      recordingConsentRequired: true,
-
       recordingDisclosure: DEFAULT_RECORDING_DISCLOSURE,
       recordingRetentionDays: DEFAULT_RECORDING_RETENTION_DAYS,
       notesRetentionDays: DEFAULT_NOTES_RETENTION_DAYS,
@@ -806,11 +841,14 @@ export const rescheduleInterview = mutation({
       rescheduleReason: args.reason,
       reminderSentAt: undefined,
       feedbackReminderSentAt: undefined,
-      lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
-        type: "rescheduled",
-        actorClerkId: user.clerkId,
-        note: args.reason,
-      }),
+      lifecycleEvents: appendLifecycleEvent(
+        normalizedInterview.lifecycleEvents,
+        {
+          type: "rescheduled",
+          actorClerkId: user.clerkId,
+          note: args.reason,
+        },
+      ),
     });
 
     await queueInterviewNotifications(ctx, {
@@ -876,11 +914,14 @@ export const cancelInterview = mutation({
       status: "cancelled",
       endTime: Date.now(),
       cancellationReason: args.reason,
-      lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
-        type: "cancelled",
-        actorClerkId: user.clerkId,
-        note: args.reason,
-      }),
+      lifecycleEvents: appendLifecycleEvent(
+        normalizedInterview.lifecycleEvents,
+        {
+          type: "cancelled",
+          actorClerkId: user.clerkId,
+          note: args.reason,
+        },
+      ),
     });
 
     await queueInterviewNotifications(ctx, {
@@ -930,10 +971,13 @@ export const updateInterviewStatus = mutation({
       ...(TERMINAL_STATUSES.includes(normalizeStoredStatus(args.status))
         ? { endTime: Date.now() }
         : {}),
-      lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
-        type: `status.${normalizeStoredStatus(args.status)}`,
-        actorClerkId: user.clerkId,
-      }),
+      lifecycleEvents: appendLifecycleEvent(
+        normalizedInterview.lifecycleEvents,
+        {
+          type: `status.${normalizeStoredStatus(args.status)}`,
+          actorClerkId: user.clerkId,
+        },
+      ),
     });
 
     await logAuditEvent(ctx, {
@@ -949,47 +993,6 @@ export const updateInterviewStatus = mutation({
     });
 
     return result;
-  },
-});
-
-export const captureRecordingConsent = mutation({
-  args: {
-    interviewId: v.id("interviews"),
-  },
-  handler: async (ctx, args) => {
-    const { user, interview } = await requireInterviewAccess(ctx, args.interviewId);
-    const normalizedInterview = normalizeInterview(interview);
-
-    if (user.role !== "candidate") {
-      return {
-        capturedAt: normalizedInterview.recordingConsentCapturedAt ?? Date.now(),
-      };
-    }
-
-    const capturedAt = normalizedInterview.recordingConsentCapturedAt ?? Date.now();
-
-    await ctx.db.patch(args.interviewId, {
-      recordingConsentCapturedAt: capturedAt,
-      recordingConsentCapturedBy:
-        normalizedInterview.recordingConsentCapturedBy ?? user.clerkId,
-      lifecycleEvents: appendLifecycleEvent(normalizedInterview.lifecycleEvents, {
-        type: "recording.consent_captured",
-        actorClerkId: user.clerkId,
-      }),
-    });
-
-    await logAuditEvent(ctx, {
-      action: "interview.recording_consent_captured",
-      actorClerkId: user.clerkId,
-      actorEmail: user.email,
-      targetType: "interview",
-      targetId: args.interviewId,
-      metadata: {
-        recordedAt: capturedAt,
-      },
-    });
-
-    return { capturedAt };
   },
 });
 
@@ -1017,7 +1020,8 @@ const requireRecordingManifest = (
   if (Date.now() > getRecordingRetentionExpiry(interview)) return false;
 
   return (
-    (user.role === "admin" || user.role === "recruiter") ||
+    user.role === "admin" ||
+    user.role === "recruiter" ||
     (user.role === "interviewer" &&
       interview.interviewerIds.includes(user.clerkId))
   );

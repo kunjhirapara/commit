@@ -8,16 +8,20 @@ import {
 } from "@/lib/errors";
 
 const useGetCalls = () => {
-  const { user } = useUser();
+  const { user, isLoaded: isUserLoaded } = useUser();
   const client = useStreamVideoClient();
   const [calls, setCalls] = useState<Call[]>();
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [errorDetails, setErrorDetails] = useState<string | undefined>();
 
   useEffect(() => {
     const loadCalls = async () => {
-      if (!client || !user?.id) return;
+      if (!isUserLoaded) return;
+      if (!client || !user?.id) {
+        setIsLoading(false);
+        return;
+      }
 
       setIsLoading(true);
       setError(null);
@@ -52,7 +56,7 @@ const useGetCalls = () => {
     };
 
     loadCalls();
-  }, [client, user?.id]);
+  }, [client, user?.id, isUserLoaded]);
 
   const now = new Date();
 

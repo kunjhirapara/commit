@@ -3,7 +3,6 @@
 import { ReactNode, useEffect, useState } from "react";
 import { StreamVideoClient, StreamVideo } from "@stream-io/video-react-sdk";
 import { useUser } from "@clerk/nextjs";
-import LoaderUI from "../ui/LoaderUI";
 import { streamTokenProvider } from "@/actions/stream.actions";
 import ErrorState from "../ui/ErrorState";
 import {
@@ -100,7 +99,7 @@ const StreamClientProvider = ({ children }: { children: ReactNode }) => {
     );
   }
 
-  if (!streamVideoClient) return <LoaderUI />;
+  if (!streamVideoClient) return null;
 
   return <StreamVideo client={streamVideoClient}>{children}</StreamVideo>;
 };

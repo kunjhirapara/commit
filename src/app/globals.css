@@ -1,5 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-@import 'tailwindcss';
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
 @plugin 'tailwindcss-animate';
 
 @custom-variant dark (&:is(.dark *));
@@ -33,7 +33,9 @@
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
 
-  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-sans:
+    "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -42,11 +44,11 @@
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 @layer base {
-
   *,
   ::after,
   ::before,
@@ -117,9 +119,9 @@
     --popover-foreground: 0 0% 98%;
 
     /* Primary: Emerald-500 */
-    --primary: 24 90% 40%;
+    --primary: 24 90% 50%;
     --primary-foreground: 0 0% 100%;
-    --ring: 24 90% 40%;
+    --ring: 24 90% 50%;
 
     /* Secondary: zinc-800 */
     --secondary: 240 3.7% 15.9%;
@@ -151,7 +153,7 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: "Plus Jakarta Sans", sans-serif;
   }
 }
 
@@ -177,4 +179,144 @@
 * {
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+}
+
+.meeting-setup-preview .str-video__video-preview-container {
+  width: 100%;
+  height: 100%;
+}
+
+.meeting-setup-preview .str-video__video-preview {
+  object-fit: contain;
+  background: hsl(var(--background));
+}
+
+.meeting-stream-theme.str-video {
+  --str-video__font-family: "Plus Jakarta Sans", sans-serif;
+  --str-video__border-radius-circle: 999px;
+  --str-video__button-primary-base: #1f2933;
+  --str-video__button-primary-hover: #111827;
+  --str-video__button-primary-pressed: #0f172a;
+  --str-video__button-primary-active: #1f2933;
+  --str-video__button-default-hover: #111827;
+  --str-video__button-default-disabled: #94a3b8;
+  --str-video__button-secondary-base: #ea5a54;
+  --str-video__button-secondary-hover: #f0746f;
+  --str-video__button-secondary-pressed: #c64742;
+  --str-video__button-secondary-active: #ea5a54;
+  --str-video__button-tertiary-base: #ea5a54;
+  --str-video__button-tertiary-hover: #f0746f;
+  --str-video__button-tertiary-pressed: #c64742;
+  --str-video__button-tertiary-active: #ea5a54;
+  --str-video__danger-color: #ea5a54;
+  --str-video__danger-color--accent: #c64742;
+}
+
+.meeting-stream-theme.str-video[data-theme="light"] {
+  --str-video__text-color1: hsl(var(--foreground));
+  --str-video__text-color2: hsl(var(--muted-foreground));
+  --str-video__text-color3: hsl(var(--muted-foreground));
+  --str-video__background-color0: hsl(var(--background));
+  --str-video__background-color1: hsl(var(--card));
+  --str-video__background-color2: hsl(var(--muted));
+  --str-video__background-color3: hsl(var(--secondary));
+  --str-video__background-color4: #111827;
+  --str-video__background-color5: hsl(var(--muted));
+  --str-video__button-primary-base: #ffffff;
+  --str-video__button-primary-hover: #f1f5f9;
+  --str-video__button-primary-pressed: #e2e8f0;
+  --str-video__button-primary-active: #ffffff;
+  --str-video__button-default-hover: #f1f5f9;
+  --str-video__button-default-disabled: #e2e8f0;
+  --str-video__base-color6: #e4e7ea;
+  --str-video__icon-default: #1f2933;
+  --str-video__icon-hover: #111827;
+  --str-video__icon-active: #111827;
+  --str-video__icon-pressed: rgb(17 24 39 / 0.75);
+  --str-video__icon-disabled: rgb(17 24 39 / 0.42);
+}
+
+.meeting-stream-theme.str-video[data-theme="dark"] {
+  --str-video__text-color1: hsl(var(--foreground));
+  --str-video__text-color2: hsl(var(--muted-foreground));
+  --str-video__text-color3: hsl(var(--muted-foreground));
+  --str-video__background-color0: hsl(var(--background));
+  --str-video__background-color1: hsl(var(--card));
+  --str-video__background-color2: hsl(var(--secondary));
+  --str-video__background-color3: hsl(var(--muted));
+  --str-video__background-color4: hsl(var(--card));
+  --str-video__background-color5: hsl(var(--muted));
+  --str-video__button-primary-base: rgb(255 255 255 / 0.12);
+  --str-video__button-primary-hover: rgb(255 255 255 / 0.2);
+  --str-video__button-primary-pressed: rgb(255 255 255 / 0.16);
+  --str-video__button-primary-active: rgb(255 255 255 / 0.14);
+  --str-video__button-default-hover: rgb(255 255 255 / 0.2);
+  --str-video__button-default-disabled: rgb(255 255 255 / 0.08);
+  --str-video__icon-default: #ffffff;
+  --str-video__icon-hover: #ffffff;
+  --str-video__icon-active: #ffffff;
+  --str-video__icon-pressed: rgb(255 255 255 / 0.82);
+  --str-video__icon-disabled: rgb(255 255 255 / 0.5);
+}
+
+.meeting-stream-theme .str-video__call-controls__button,
+.meeting-stream-theme .str-video__composite-button__button-group {
+  border: 1px solid rgb(226 232 240);
+  box-shadow: 0 10px 24px rgb(15 23 42 / 0.1);
+}
+
+.meeting-stream-theme[data-theme="dark"] .str-video__call-controls__button,
+.meeting-stream-theme[data-theme="dark"]
+  .str-video__composite-button__button-group {
+  border-color: rgb(255 255 255 / 0.08);
+  box-shadow: 0 10px 24px rgb(0 0 0 / 0.22);
+}
+
+.meeting-stream-theme[data-theme="light"]
+  .str-video__call-controls__button--variant-danger {
+  border-color: transparent;
+}
+
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details,
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name {
+  color: #ffffff !important;
+}
+
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name
+  .str-video__participant-details__name--audio-muted,
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name
+  .str-video__participant-details__name--video-muted,
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name
+  .str-video__participant-details__name--track-paused,
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name
+  .str-video__participant-details__name--pinned,
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details
+  .str-video__participant-details__name
+  .str-video__participant-details__name--network-stats {
+  background-color: #ffffff !important;
+}
+
+.meeting-stream-theme
+  .str-video__participant-view
+  .str-video__participant-details__connection-quality {
+  background-color: #111827 !important;
 }

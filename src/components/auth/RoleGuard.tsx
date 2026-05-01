@@ -3,7 +3,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import ErrorState from "@/components/ui/ErrorState";
-import LoaderUI from "@/components/ui/LoaderUI";
 import type { AppPermission } from "@/hooks/useUserRole";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -31,7 +30,7 @@ function RoleGuard({
 }) {
   const { hasPermission, isLoading, role } = useUserRole();
 
-  if (isLoading) return <LoaderUI />;
+  if (isLoading) return null;
 
   const passesRoleCheck =
     !allowedRoles || (role ? allowedRoles.includes(role) : false);
