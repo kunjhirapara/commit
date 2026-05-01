@@ -1,22 +1,27 @@
+"use client";
+
 import {
-  CallControls,
+  CancelCallButton,
   CallingState,
   CallParticipantsList,
+  OwnCapability,
   PaginatedGridLayout,
+  ReactionsButton,
+  RecordCallButton,
+  ScreenShareButton,
   SpeakerLayout,
+  SpeakingWhileMutedNotification,
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
   useCall,
   useCallStateHooks,
 } from "@stream-io/video-react-sdk";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation } from "convex/react";
 import {
   AlertTriangleIcon,
   Clock3Icon,
   LayoutListIcon,
   LoaderIcon,
-  MicOffIcon,
-  RadioIcon,
-  ShieldAlertIcon,
-  Speaker,
   UsersIcon,
   VideoOffIcon,
 } from "lucide-react";
@@ -37,13 +42,13 @@ import {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 import { Button } from "./button";
+import ErrorState from "./ErrorState";
 import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
-import { Badge } from "./badge";
-import { Card, CardContent, CardHeader, CardTitle } from "./card";
-import { ScrollArea, ScrollBar } from "./scroll-area";
 import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { useCallEndHandler } from "@/hooks/useCallEndHandler";
+import { useUserRole } from "@/hooks/useUserRole";
 
 type Interview = Doc<"interviews">;
 
@@ -68,38 +73,48 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
   >(null);
 
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
-  const sessionEvents = useQuery(
-    api.sessionEvents.getSessionEvents,
-    interview ? { interviewId: interview._id } : "skip",
-  );
 
   const {
     useCallCallingState,
+    useCallEndedAt,
     useCallStatsReport,
-    useCallMembers,
     useParticipants,
     useLocalParticipant,
     useIsCallRecordingInProgress,
+    useHasPermissions,
   } = useCallStateHooks();
 
   const callingState = useCallCallingState();
+  const endedAt = useCallEndedAt();
+  const canJoinEndedCall = useHasPermissions(OwnCapability.JOIN_ENDED_CALL);
+  const { hasCallEnded, isRedirecting } = useCallEndHandler();
   const statsReport = useCallStatsReport();
-  const members = useCallMembers();
   const participants = useParticipants();
-  const localParticipant = useLocalParticipant();
   const isRecording = useIsCallRecordingInProgress();
+  const localParticipant = useLocalParticipant();
+  const { user: currentUser, isAdmin, isRecruiter } = useUserRole();
 
   const previousParticipantIdsRef = useRef<string[]>([]);
   const previousCallingStateRef = useRef<CallingState | null>(null);
 
-  const remoteParticipants = participants.filter(
-    (participant) => !participant.isLocalParticipant,
-  );
-
-  const isMeetingOwner = localParticipant?.userId === call?.state.createdBy?.id;
   const scheduledEndTime = interview ? getInterviewEndTimeMs(interview) : null;
   const isPastScheduledEnd =
     scheduledEndTime !== null ? Date.now() > scheduledEndTime : false;
+  const isHost =
+    !!interview &&
+    !!currentUser &&
+    (isAdmin ||
+      isRecruiter ||
+      interview.interviewerIds.includes(currentUser.clerkId) ||
+      interview.interviewerIds.includes(localParticipant?.userId ?? ""));
+  const canSendAudio = useHasPermissions(OwnCapability.SEND_AUDIO);
+  const canSendVideo = useHasPermissions(OwnCapability.SEND_VIDEO);
+  const canCreateReaction = useHasPermissions(OwnCapability.CREATE_REACTION);
+  const canScreenshare = useHasPermissions(OwnCapability.SCREENSHARE);
+  const canRecordCall = useHasPermissions(
+    OwnCapability.START_RECORD_CALL,
+    OwnCapability.STOP_RECORD_CALL,
+  );
 
   const networkHealth = useMemo(() => {
     const publisherLatency =
@@ -132,97 +147,86 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     };
   }, [callingState, isOnline, statsReport]);
 
+  /* ── network event ── */
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
     };
   }, []);
 
+  /* ── log network changes ── */
   useEffect(() => {
     if (!interview) return;
-
-    const nextEventType = isOnline ? "session.online" : "session.offline";
     void logSessionEvent({
       interviewId: interview._id,
       streamCallId: interview.streamCallId,
-      type: nextEventType,
+      type: isOnline ? "session.online" : "session.offline",
       detail: isOnline ? "Browser network restored" : "Browser network lost",
       metadata: JSON.stringify({ online: isOnline }),
-    }).catch((error) => {
-      logError("MeetingRoom.networkEvent", error, {
+    }).catch((e) =>
+      logError("MeetingRoom.networkEvent", e, {
         interviewId: interview._id,
         online: isOnline,
-      });
-    });
+      }),
+    );
   }, [interview, isOnline, logSessionEvent]);
 
+  /* ── log calling state changes ── */
   useEffect(() => {
     if (!interview) return;
     if (previousCallingStateRef.current === callingState) return;
     previousCallingStateRef.current = callingState;
-
-    const mappedDetail = CONNECTION_STATE_COPY[callingState];
-    if (!mappedDetail) return;
-
+    const detail = CONNECTION_STATE_COPY[callingState];
+    if (!detail) return;
     void logSessionEvent({
       interviewId: interview._id,
       streamCallId: interview.streamCallId,
       type: `session.${String(callingState).toLowerCase()}`,
-      detail: mappedDetail,
-      metadata: JSON.stringify({
-        state: callingState,
-      }),
-    }).catch((error) => {
-      logError("MeetingRoom.callingStateEvent", error, {
+      detail,
+      metadata: JSON.stringify({ state: callingState }),
+    }).catch((e) =>
+      logError("MeetingRoom.callingStateEvent", e, {
         interviewId: interview._id,
         callingState,
-      });
-    });
+      }),
+    );
   }, [callingState, interview, logSessionEvent]);
 
+  /* ── log participant join/leave ── */
   useEffect(() => {
     if (!interview) return;
-
-    const currentParticipantIds = participants
-      .map((participant) => participant.userId)
+    const current = participants
+      .map((p) => p.userId)
       .filter(Boolean) as string[];
-    const previousParticipantIds = previousParticipantIdsRef.current;
-
-    const joined = currentParticipantIds.filter(
-      (participantId) => !previousParticipantIds.includes(participantId),
+    const prev = previousParticipantIdsRef.current;
+    const joined = current.filter((id) => !prev.includes(id));
+    const left = prev.filter((id) => !current.includes(id));
+    previousParticipantIdsRef.current = current;
+    joined.forEach(
+      (id) =>
+        void logSessionEvent({
+          interviewId: interview._id,
+          streamCallId: interview.streamCallId,
+          type: "participant.joined",
+          detail: id,
+          metadata: JSON.stringify({ participantId: id }),
+        }).catch(() => undefined),
     );
-    const left = previousParticipantIds.filter(
-      (participantId) => !currentParticipantIds.includes(participantId),
+    left.forEach(
+      (id) =>
+        void logSessionEvent({
+          interviewId: interview._id,
+          streamCallId: interview.streamCallId,
+          type: "participant.left",
+          detail: id,
+          metadata: JSON.stringify({ participantId: id }),
+        }).catch(() => undefined),
     );
-
-    previousParticipantIdsRef.current = currentParticipantIds;
-
-    joined.forEach((participantId) => {
-      void logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
-        type: "participant.joined",
-        detail: participantId,
-        metadata: JSON.stringify({ participantId }),
-      }).catch(() => undefined);
-    });
-
-    left.forEach((participantId) => {
-      void logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
-        type: "participant.left",
-        detail: participantId,
-        metadata: JSON.stringify({ participantId }),
-      }).catch(() => undefined);
-    });
   }, [interview, logSessionEvent, participants]);
 
   if (callingState !== CallingState.JOINED)
@@ -232,13 +236,25 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
       </div>
     );
 
+  if (hasCallEnded || isRedirecting || (endedAt && !canJoinEndedCall)) {
+    return (
+      <ErrorState
+        title="Call has ended"
+        message="Redirecting you out of the meeting."
+        secondaryAction={
+          <Button onClick={() => router.replace("/call-ended")}>Go now</Button>
+        }
+      />
+    );
+  }
+
+  /* ── host actions (fixed API calls) ── */
   const handleMuteAll = async () => {
     if (!call || !interview) return;
-
     setHostActionLoading("mute");
-
     try {
-      await (call as any).muteAllUsers?.("audio");
+      // Correct Stream SDK API — no casting needed
+      await call.muteAllUsers("audio");
       await logSessionEvent({
         interviewId: interview._id,
         streamCallId: interview.streamCallId,
@@ -258,16 +274,13 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
   const handleToggleRecording = async () => {
     if (!call || !interview) return;
-
     setHostActionLoading("record");
-
     try {
       if (isRecording) {
-        await (call as any).stopRecording?.();
+        await call.stopRecording();
       } else {
-        await (call as any).startRecording?.();
+        await call.startRecording();
       }
-
       await logSessionEvent({
         interviewId: interview._id,
         streamCallId: interview.streamCallId,
@@ -276,7 +289,6 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
           ? "Host stopped recording"
           : "Host started recording",
       });
-
       toast.success(isRecording ? "Recording stopped." : "Recording started.");
     } catch (error) {
       logError("MeetingRoom.handleToggleRecording", error, {
@@ -291,25 +303,24 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     }
   };
 
-  const handleRemoveParticipant = async (participantId: string) => {
+  const handleRemoveParticipant = async (userId: string) => {
     if (!call || !interview) return;
-
     setHostActionLoading("remove");
-
     try {
-      await (call as any).blockUser?.(participantId);
+      // Correct Stream SDK call to block a user from re-joining mid-session
+      await call.blockUser(userId);
       await logSessionEvent({
         interviewId: interview._id,
         streamCallId: interview.streamCallId,
         type: "host.removed_participant",
-        detail: participantId,
-        metadata: JSON.stringify({ participantId }),
+        detail: userId,
+        metadata: JSON.stringify({ participantId: userId }),
       });
       toast.success("Participant removed from the session.");
     } catch (error) {
       logError("MeetingRoom.handleRemoveParticipant", error, {
         interviewId: interview._id,
-        participantId,
+        participantId: userId,
       });
       toast.error(
         getDisplayErrorMessage(error, "Unable to remove participant."),
@@ -319,89 +330,127 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     }
   };
 
+  /* ── render ── */
   return (
-    <div className="h-[calc(100vh-4rem-1px)]">
-      <ResizablePanelGroup orientation="horizontal">
-        <ResizablePanel defaultSize={62} minSize={40} className="relative">
+    <div className="flex h-[calc(100vh-4rem-1px)] flex-col overflow-hidden bg-background lg:flex-row">
+      <ResizablePanelGroup orientation="horizontal" className="flex-1">
+        {/* ── Video panel ── */}
+        <ResizablePanel defaultSize={25} minSize={10} className="relative">
           <div className="absolute inset-0">
-            <div className="absolute left-4 right-4 top-4 z-20 space-y-3">
-              {!isOnline || networkHealth.isDegraded ? (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950 shadow-sm">
+            {/* Status banners */}
+            <div className="absolute left-3 right-3 top-3 z-20 space-y-2">
+              {(!isOnline || networkHealth.isDegraded) && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <AlertTriangleIcon className="mt-0.5 h-5 w-5" />
-                    <div className="space-y-1">
-                      <p className="font-medium">
+                    <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <p className="font-medium text-sm">
                         {isOnline
                           ? "Call quality is degraded"
-                          : "You are offline right now"}
+                          : "You are offline"}
                       </p>
-                      <p className="text-sm text-amber-900/80">
-                        Switch to speaker view, turn off video if needed, and keep the coding panel active while connection stabilizes.
+                      <p className="text-xs text-amber-900/80 hidden sm:block">
+                        Switch to speaker view and reduce video quality if
+                        needed.
                       </p>
                     </div>
                     <Button
                       variant="outline"
                       size="sm"
-                      className="ml-auto"
+                      className="shrink-0 text-xs"
                       onClick={() => setLayout("speaker")}>
-                      Degraded Mode
+                      Fix
                     </Button>
                   </div>
                 </div>
-              ) : null}
+              )}
 
-              {isPastScheduledEnd ? (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-blue-950 shadow-sm">
+              {isPastScheduledEnd && (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950 shadow-sm">
                   <div className="flex items-start gap-3">
-                    <Clock3Icon className="mt-0.5 h-5 w-5" />
-                    <div>
-                      <p className="font-medium">Session has passed its scheduled end time</p>
-                      <p className="text-sm text-blue-900/80">
-                        Wrap up, extend deliberately, or end the session to keep interview status accurate.
+                    <Clock3Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm">
+                        Past scheduled end time
+                      </p>
+                      <p className="text-xs text-blue-900/80 hidden sm:block">
+                        Wrap up or end the session.
                       </p>
                     </div>
                   </div>
                 </div>
-              ) : null}
+              )}
             </div>
 
+            {/* Video layout */}
             {layout === "grid" ? <PaginatedGridLayout /> : <SpeakerLayout />}
+
+            {/* Participants sidebar */}
             {showParticipants && (
-              <div className="absolute right-0 top-0 h-full w-[300px] bg-background/95 backdrop-blur-sm supports-backdrop-filter:bg-background/60">
-                <CallParticipantsList onClose={() => setShowParticipants(false)} />
+              <div className="absolute right-0 top-0 h-full w-72 border-l border-border/70 bg-background/95 p-5 backdrop-blur-sm">
+                <CallParticipantsList
+                  onClose={() => setShowParticipants(false)}
+                />
               </div>
             )}
           </div>
 
-          <div className="absolute bottom-4 left-0 right-0">
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-2 flex-wrap justify-center px-4">
-                <CallControls onLeave={() => router.push("/")} />
-                <div className="flex items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" className="size-10">
-                        <LayoutListIcon className="size-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent>
-                      <DropdownMenuItem onClick={() => setLayout("grid")}>
-                        Grid View
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLayout("speaker")}>
-                        Speaker View
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="size-10"
-                    onClick={() => setShowParticipants((prev) => !prev)}>
-                    <UsersIcon className="size-4" />
-                  </Button>
-                  <EndCallButton interview={interview} />
-                </div>
+          {/* Bottom call controls */}
+          <div className="absolute bottom-0 left-0 right-0 z-10">
+            {/* Network stats bar */}
+            <div className="flex justify-center gap-4 px-4 pb-1 text-xs text-foreground/75 drop-shadow-sm dark:text-white/70">
+              <span>{Math.round(networkHealth.publisherLatency)}ms up</span>
+              <span>{Math.round(networkHealth.subscriberLatency)}ms down</span>
+              {networkHealth.packetLoss > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {networkHealth.packetLoss} lost
+                </span>
+              )}
+            </div>
+
+            <div className="bg-gradient-to-t from-background/95 via-background/55 to-transparent pb-4 pt-6 dark:from-black/70 dark:via-black/35">
+              <div className="flex items-center justify-center gap-2 flex-wrap px-4">
+                {canSendAudio ? (
+                  <SpeakingWhileMutedNotification>
+                    <ToggleAudioPublishingButton />
+                  </SpeakingWhileMutedNotification>
+                ) : null}
+                {canSendVideo ? <ToggleVideoPublishingButton /> : null}
+                {canCreateReaction ? <ReactionsButton /> : null}
+                {canScreenshare ? <ScreenShareButton /> : null}
+                {isHost && canRecordCall ? <RecordCallButton /> : null}
+                <CancelCallButton onLeave={() => router.push("/")} />
+
+                {/* Layout picker */}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="size-10 rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20">
+                      <LayoutListIcon className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => setLayout("grid")}>
+                      Grid View
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setLayout("speaker")}>
+                      Speaker View
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+
+                {/* Participants */}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="size-10 rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+                  onClick={() => setShowParticipants((p) => !p)}>
+                  <UsersIcon className="size-4" />
+                </Button>
+
+                <EndCallButton interview={interview} />
               </div>
             </div>
           </div>
@@ -409,163 +458,10 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={38} minSize={25}>
-          <div className="grid h-full gap-4 p-4 xl:grid-cols-[1.2fr_0.8fr]">
-            <div className="min-h-0 rounded-xl border">
-              <CodeEditor />
-            </div>
-
-            <div className="grid min-h-0 gap-4">
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span>Call Reliability</span>
-                    <Badge
-                      variant={networkHealth.isDegraded ? "destructive" : "secondary"}>
-                      {networkHealth.isDegraded ? "Degraded" : "Healthy"}
-                    </Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="rounded-lg border p-3">
-                    <p className="text-muted-foreground">Publisher RTT</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {Math.round(networkHealth.publisherLatency)} ms
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-muted-foreground">Subscriber RTT</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {Math.round(networkHealth.subscriberLatency)} ms
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-muted-foreground">Packet loss</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {networkHealth.packetLoss}
-                    </p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-muted-foreground">Jitter</p>
-                    <p className="mt-1 text-lg font-semibold">
-                      {Math.round(networkHealth.jitter)} ms
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {isMeetingOwner ? (
-                <Card>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="flex items-center gap-2 text-base">
-                      <ShieldAlertIcon className="h-4 w-4" />
-                      Host Controls
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Button
-                        variant="outline"
-                        onClick={handleMuteAll}
-                        disabled={hostActionLoading !== null}>
-                        <MicOffIcon className="mr-2 h-4 w-4" />
-                        Mute All
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleToggleRecording}
-                        disabled={hostActionLoading !== null}>
-                        <RadioIcon className="mr-2 h-4 w-4" />
-                        {isRecording ? "Stop Recording" : "Start Recording"}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <p className="text-sm font-medium">Participants</p>
-                      <ScrollArea className="h-32 rounded-lg border">
-                        <div className="space-y-2 p-3">
-                          {remoteParticipants.length ? (
-                            remoteParticipants.map((participant) => (
-                              <div
-                                key={participant.sessionId}
-                                className="flex items-center justify-between gap-3 rounded-lg border p-2">
-                                <div>
-                                  <p className="text-sm font-medium">
-                                    {participant.name || participant.userId}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {participant.userId}
-                                  </p>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    participant.userId &&
-                                    handleRemoveParticipant(participant.userId)
-                                  }
-                                  disabled={
-                                    hostActionLoading !== null || !participant.userId
-                                  }>
-                                  <VideoOffIcon className="mr-2 h-4 w-4" />
-                                  Remove
-                                </Button>
-                              </div>
-                            ))
-                          ) : (
-                            <p className="text-sm text-muted-foreground">
-                              No remote participants in the room.
-                            </p>
-                          )}
-                        </div>
-                        <ScrollBar orientation="vertical" />
-                      </ScrollArea>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : null}
-
-              <Card className="min-h-0">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span>Recent Session Events</span>
-                    <Badge variant="outline">{members.length} members</Badge>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="min-h-0">
-                  <ScrollArea className="h-56 rounded-lg border">
-                    <div className="space-y-2 p-3">
-                      {sessionEvents?.length ? (
-                        sessionEvents.map((event) => (
-                          <div
-                            key={event._id}
-                            className={cn(
-                              "rounded-lg border p-3 text-sm",
-                              event.type.startsWith("session.offline") &&
-                                "border-amber-300 bg-amber-50/70",
-                            )}>
-                            <div className="flex items-center justify-between gap-3">
-                              <p className="font-medium">{event.type}</p>
-                              <p className="text-xs text-muted-foreground">
-                                {new Date(event.createdAt).toLocaleTimeString()}
-                              </p>
-                            </div>
-                            <p className="mt-1 text-muted-foreground">
-                              {event.detail ?? "No additional details"}
-                            </p>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="p-3 text-sm text-muted-foreground">
-                          Session activity will appear here as participants join, reconnect, or host actions are taken.
-                        </p>
-                      )}
-                    </div>
-                    <ScrollBar orientation="vertical" />
-                  </ScrollArea>
-                </CardContent>
-              </Card>
-            </div>
+        {/* ── Code editor panel ── */}
+        <ResizablePanel defaultSize={70} minSize={10}>
+          <div className="h-full rounded-none border-l">
+            <CodeEditor />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
