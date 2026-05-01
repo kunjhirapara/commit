@@ -38,10 +38,7 @@ const notificationStatus = v.union(
   v.literal("failed"),
   v.literal("suppressed"),
 );
-const notificationChannel = v.union(
-  v.literal("in_app"),
-  v.literal("email"),
-);
+const notificationChannel = v.union(v.literal("in_app"), v.literal("email"));
 const notificationCategory = v.union(
   v.literal("interview_schedule"),
   v.literal("interview_update"),
@@ -103,7 +100,6 @@ const backupSnapshotKind = v.union(
   v.literal("restore_drill"),
 );
 
-
 export default defineSchema({
   users: defineTable({
     name: v.string(),
@@ -155,10 +151,6 @@ export default defineSchema({
     rescheduleReason: v.optional(v.string()),
     reminderSentAt: v.optional(v.number()),
     feedbackReminderSentAt: v.optional(v.number()),
-    recordingConsentRequired: v.optional(v.boolean()),
-    recordingConsentCapturedAt: v.optional(v.number()),
-    recordingConsentCapturedBy: v.optional(v.string()),
-
     recordingDisclosure: v.optional(v.string()),
     recordingRetentionDays: v.optional(v.number()),
     notesRetentionDays: v.optional(v.number()),
@@ -176,7 +168,20 @@ export default defineSchema({
   })
     .index("by_candidate_id", ["candidateId"])
     .index("by_stream_call_id", ["streamCallId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_startTime", ["startTime"]),
+
+  customCalendarEvents: defineTable({
+    title: v.string(),
+    description: v.optional(v.string()),
+    startTime: v.number(),
+    endTime: v.number(),
+    userClerkId: v.string(),
+    createdBy: v.string(),
+    updatedAt: v.number(),
+  })
+    .index("by_user_clerk_id", ["userClerkId"])
+    .index("by_user_clerk_id_start_time", ["userClerkId", "startTime"]),
 
   comments: defineTable({
     content: v.string(),
@@ -237,19 +242,25 @@ export default defineSchema({
   invitations: defineTable({
     email: v.string(),
     role: privilegedInvitationRole,
+    tokenHash: v.optional(v.string()),
     invitedBy: v.string(),
     status: v.union(
       v.literal("pending"),
       v.literal("accepted"),
       v.literal("revoked"),
+      v.literal("expired"),
     ),
     createdAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    lastSentAt: v.optional(v.number()),
     acceptedAt: v.optional(v.number()),
     acceptedBy: v.optional(v.string()),
     revokedAt: v.optional(v.number()),
+    revokedBy: v.optional(v.string()),
   })
     .index("by_email", ["email"])
     .index("by_email_status", ["email", "status"])
+    .index("by_token_hash", ["tokenHash"])
     .index("by_status", ["status"]),
 
   auditLogs: defineTable({
