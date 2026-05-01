@@ -7,12 +7,74 @@ import { useState } from "react";
 import { api } from "@/../convex/_generated/api";
 import { useRouter } from "next/navigation";
 import MeetingModal from "@/components/ui/MeetingModal";
-import LoaderUI from "@/components/ui/LoaderUI";
-import { Loader2Icon } from "lucide-react";
 import MeetingCard from "@/components/ui/MeetingCard";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Button } from "@/components/ui/button";
 import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function HomeSkeleton() {
+  return (
+    <div className="container mx-auto max-w-7xl space-y-8 p-6 animate-in fade-in duration-300">
+      <div className="flex flex-col gap-4 rounded-lg border bg-card p-6 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+        <div className="w-full max-w-xl space-y-3">
+          <Skeleton className="h-10 w-56" />
+          <Skeleton className="h-4 w-full max-w-md" />
+        </div>
+        <Skeleton className="h-10 w-32" />
+      </div>
+
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="rounded-xl border bg-card p-6 shadow-xs">
+            <Skeleton className="h-12 w-12 rounded-full" />
+            <div className="mt-4 space-y-2">
+              <Skeleton className="h-6 w-28" />
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-4/5" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="rounded-2xl border border-border/70 bg-card/80 shadow-sm">
+        <div className="flex flex-col gap-4 border-b px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-8 w-24 rounded-md" />
+          </div>
+        </div>
+        <div className="space-y-3 p-6">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/80 px-4 py-3"
+            >
+              <Skeleton className="mt-1 h-2.5 w-2.5 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="w-full max-w-md space-y-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                  <Skeleton className="h-3 w-16" />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-6 w-20 rounded-md" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Home() {
   const router = useRouter();
@@ -48,19 +110,22 @@ export default function Home() {
   const showOperatorActions =
     isInterviewer || canScheduleInterviews || canViewRecordings;
 
-  if (isLoading) return <LoaderUI />;
+  if (isLoading) return <HomeSkeleton />;
   return (
     <div className="container max-w-7xl mx-auto p-6">
-      {isCandidate &&
-        <div className="rounded-lg bg-card p-6 border shadow-xs mb-10">
-          <h1 className="text-4xl font-bold text-primary">
-            Welcome back!
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            "Access your upcoming interviews and preparations"
-          </p>
+      {isCandidate && (
+        <div className="mb-10 flex flex-col gap-4 rounded-lg border bg-card p-6 shadow-xs sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-primary">Welcome back!</h1>
+            <p className="text-muted-foreground mt-2">
+              "Access your upcoming interviews and preparations"
+            </p>
+          </div>
+          <Button variant="outline" onClick={() => router.push("/calendar")}>
+            View Calendar
+          </Button>
         </div>
-      }
+      )}
       {showOperatorActions ? (
         <>
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -109,8 +174,10 @@ export default function Home() {
 
           <div className="mt-8">
             {interviews === undefined ? (
-              <div className="flex justify-center py-12">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
+              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-48 w-full rounded-xl" />
+                ))}
               </div>
             ) : interviews.length > 0 ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
