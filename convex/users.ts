@@ -13,12 +13,87 @@ import {
 import { createServerError } from "./errorUtils";
 
 const INVITATION_LIST_LIMIT = 12;
+const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
-const sanitizeUserForViewer = <T extends {
-  clerkId: string;
-  email: string;
-  role: UserRole;
-}>(
+const encodeHex = (buffer: ArrayBuffer) =>
+  Array.from(new Uint8Array(buffer))
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
+
+const hashInvitationToken = async (token: string) => {
+  const encoded = new TextEncoder().encode(token);
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return encodeHex(digest);
+};
+
+const generateInvitationToken = () => {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
+};
+
+const resolveInvitationStatus = <
+  T extends {
+    status: "pending" | "accepted" | "revoked" | "expired";
+    expiresAt?: number;
+    createdAt: number;
+  },
+>(
+  invitation: T,
+) =>
+  invitation.status === "pending" &&
+  (invitation.expiresAt ?? invitation.createdAt + INVITATION_EXPIRY_MS) <=
+    Date.now()
+    ? "expired"
+    : invitation.status;
+
+const expireInvitation = async (
+  ctx: any,
+  invitation: any,
+) => {
+  const expiresAt =
+    invitation.expiresAt ?? invitation.createdAt + INVITATION_EXPIRY_MS;
+
+  if (invitation.status !== "pending" || expiresAt > Date.now()) {
+    return invitation.status;
+  }
+
+  await ctx.db.patch(invitation._id, {
+    status: "expired",
+  });
+
+  return "expired" as const;
+};
+
+const expireStalePendingInvitations = async (
+  ctx: any,
+  email: string,
+) => {
+  const pendingInvitations = await ctx.db
+    .query("invitations")
+    .withIndex("by_email_status", (q: any) =>
+      q.eq("email", email).eq("status", "pending"),
+    )
+    .collect();
+
+  const activeInvitations = [];
+
+  for (const invitation of pendingInvitations) {
+    const status = await expireInvitation(ctx, invitation);
+    if (status === "pending") {
+      activeInvitations.push(invitation);
+    }
+  }
+
+  return activeInvitations;
+};
+
+const sanitizeUserForViewer = <
+  T extends {
+    clerkId: string;
+    email: string;
+    role: UserRole;
+  },
+>(
   viewer: { clerkId: string; role: UserRole },
   user: T,
 ) => {
@@ -58,16 +133,11 @@ export const syncUser = mutation({
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .first();
 
-    const pendingInvitation = normalizedEmail
-      ? await ctx.db
-          .query("invitations")
-          .withIndex("by_email_status", (q) =>
-            q.eq("email", normalizedEmail).eq("status", "pending"),
-          )
-          .first()
-      : null;
+    if (normalizedEmail) {
+      await expireStalePendingInvitations(ctx, normalizedEmail);
+    }
 
-    const nextRole = pendingInvitation?.role ?? existingUser?.role ?? "candidate";
+    const nextRole = existingUser?.role ?? "candidate";
 
     if (existingUser) {
       await ctx.db.patch(existingUser._id, {
@@ -75,25 +145,6 @@ export const syncUser = mutation({
         email: normalizedEmail,
         role: nextRole,
       });
-
-      if (pendingInvitation) {
-        await ctx.db.patch(pendingInvitation._id, {
-          status: "accepted",
-          acceptedAt: Date.now(),
-          acceptedBy: args.clerkId,
-        });
-
-        await logAuditEvent(ctx, {
-          action: "invitation.accepted",
-          actorClerkId: args.clerkId,
-          actorEmail: normalizedEmail,
-          targetType: "invitation",
-          targetId: pendingInvitation._id,
-          metadata: {
-            role: pendingInvitation.role,
-          },
-        });
-      }
 
       return existingUser._id;
     }
@@ -112,28 +163,8 @@ export const syncUser = mutation({
       targetId: userId,
       metadata: {
         role: nextRole,
-        invited: !!pendingInvitation,
       },
     });
-
-    if (pendingInvitation) {
-      await ctx.db.patch(pendingInvitation._id, {
-        status: "accepted",
-        acceptedAt: Date.now(),
-        acceptedBy: args.clerkId,
-      });
-
-      await logAuditEvent(ctx, {
-        action: "invitation.accepted",
-        actorClerkId: args.clerkId,
-        actorEmail: normalizedEmail,
-        targetType: "invitation",
-        targetId: pendingInvitation._id,
-        metadata: {
-          role: pendingInvitation.role,
-        },
-      });
-    }
 
     return userId;
   },
@@ -142,7 +173,9 @@ export const syncUser = mutation({
 export const getCurrentUser = query({
   handler: async (ctx) => {
     const { user } = await getCurrentUserRecord(ctx);
-    const customRole = user.customRoleId ? await ctx.db.get(user.customRoleId) : null;
+    const customRole = user.customRoleId
+      ? await ctx.db.get(user.customRoleId)
+      : null;
     return {
       ...sanitizeUserForViewer(user, user),
       customRole,
@@ -157,7 +190,9 @@ export const getUsers = query({
     return await Promise.all(
       users.map(async (record) => ({
         ...sanitizeUserForViewer(user, record),
-        customRole: record.customRoleId ? await ctx.db.get(record.customRoleId) : null,
+        customRole: record.customRoleId
+          ? await ctx.db.get(record.customRoleId)
+          : null,
       })),
     );
   },
@@ -180,7 +215,9 @@ export const getUserByClerkId = query({
       viewerCannotInspectUser(viewer.role)
     ) {
       throw createServerError(
-        new Error(`User ${viewer.clerkId} attempted to inspect ${args.clerkId}`),
+        new Error(
+          `User ${viewer.clerkId} attempted to inspect ${args.clerkId}`,
+        ),
         "You are not allowed to view this user.",
       );
     }
@@ -202,18 +239,9 @@ const normalizeRoleSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-const assertValidPermissions = (permissions: string[]) => {
+const filterValidPermissions = (permissions: string[]) => {
   const uniquePermissions = Array.from(new Set(permissions));
-  const invalidPermission = uniquePermissions.find((value) => !isValidPermission(value));
-
-  if (invalidPermission) {
-    throw createServerError(
-      new Error(`Invalid permission provided: ${invalidPermission}`),
-      "One of the selected permissions is not supported.",
-    );
-  }
-
-  return uniquePermissions as Permission[];
+  return uniquePermissions.filter(isValidPermission) as Permission[];
 };
 
 export const getRoleManagementDashboard = query({
@@ -233,7 +261,9 @@ export const getRoleManagementDashboard = query({
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((user) => ({
           ...user,
-          customRole: user.customRoleId ? rolesById.get(String(user.customRoleId)) ?? null : null,
+          customRole: user.customRoleId
+            ? (rolesById.get(String(user.customRoleId)) ?? null)
+            : null,
         })),
     };
   },
@@ -242,7 +272,16 @@ export const getRoleManagementDashboard = query({
 export const listInvitations = query({
   handler: async (ctx) => {
     await requirePermission(ctx, "manageInvitations");
-    return await ctx.db.query("invitations").order("desc").take(INVITATION_LIST_LIMIT);
+    const invitations = await ctx.db
+      .query("invitations")
+      .order("desc")
+      .take(INVITATION_LIST_LIMIT);
+
+    return invitations.map((invitation) => ({
+      ...invitation,
+      expiresAt: invitation.expiresAt ?? invitation.createdAt + INVITATION_EXPIRY_MS,
+      status: resolveInvitationStatus(invitation),
+    }));
   },
 });
 
@@ -274,12 +313,9 @@ export const inviteUser = mutation({
       );
     }
 
-    const existingPendingInvitation = await ctx.db
-      .query("invitations")
-      .withIndex("by_email_status", (q) =>
-        q.eq("email", normalizedEmail).eq("status", "pending"),
-      )
-      .first();
+    const existingPendingInvitation = (
+      await expireStalePendingInvitations(ctx, normalizedEmail)
+    ).find((invitation) => invitation.expiresAt > Date.now());
 
     if (existingPendingInvitation) {
       throw createServerError(
@@ -288,12 +324,20 @@ export const inviteUser = mutation({
       );
     }
 
+    const invitationToken = generateInvitationToken();
+    const tokenHash = await hashInvitationToken(invitationToken);
+    const createdAt = Date.now();
+    const expiresAt = createdAt + INVITATION_EXPIRY_MS;
+
     const invitationId = await ctx.db.insert("invitations", {
       email: normalizedEmail,
       role: args.role,
+      tokenHash,
       invitedBy: user.clerkId,
       status: "pending",
-      createdAt: Date.now(),
+      createdAt,
+      expiresAt,
+      lastSentAt: createdAt,
     });
 
     await logAuditEvent(ctx, {
@@ -305,10 +349,117 @@ export const inviteUser = mutation({
       metadata: {
         email: normalizedEmail,
         role: args.role,
+        expiresAt,
       },
     });
 
-    return invitationId;
+    return {
+      invitationId,
+      invitationToken,
+      expiresAt,
+      email: normalizedEmail,
+      role: args.role,
+    };
+  },
+});
+
+export const acceptInvitation = mutation({
+  args: {
+    token: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await getCurrentUserRecord(ctx);
+    const token = args.token.trim();
+
+    if (!token) {
+      throw createServerError(
+        new Error("Invitation token was empty"),
+        "Invitation token is required.",
+      );
+    }
+
+    const tokenHash = await hashInvitationToken(token);
+    const invitation = await ctx.db
+      .query("invitations")
+      .withIndex("by_token_hash", (q) => q.eq("tokenHash", tokenHash))
+      .first();
+
+    if (!invitation) {
+      throw createServerError(
+        new Error("Invitation token not found"),
+        "This invitation is invalid.",
+      );
+    }
+
+    const effectiveStatus = await expireInvitation(ctx, invitation);
+
+    if (effectiveStatus === "expired") {
+      throw createServerError(
+        new Error(`Invitation expired for ${invitation.email}`),
+        "This invitation has expired. Ask an admin to send a new one.",
+      );
+    }
+
+    if (effectiveStatus !== "pending") {
+      throw createServerError(
+        new Error(
+          `Invitation is not pending: ${String(invitation._id)} (${effectiveStatus})`,
+        ),
+        "This invitation is no longer available.",
+      );
+    }
+
+    const normalizedUserEmail = normalizeEmail(user.email);
+
+    if (normalizedUserEmail !== invitation.email) {
+      throw createServerError(
+        new Error(
+          `Invitation email mismatch. Invitation=${invitation.email} user=${normalizedUserEmail}`,
+        ),
+        "Sign in with the invited email address to accept this invitation.",
+      );
+    }
+
+    await ctx.db.patch(user._id, {
+      role: invitation.role,
+    });
+
+    await ctx.db.patch(invitation._id, {
+      status: "accepted",
+      acceptedAt: Date.now(),
+      acceptedBy: user.clerkId,
+    });
+
+    await logAuditEvent(ctx, {
+      action: "invitation.accepted",
+      actorClerkId: user.clerkId,
+      actorEmail: normalizedUserEmail,
+      targetType: "invitation",
+      targetId: invitation._id,
+      metadata: {
+        role: invitation.role,
+        previousRole: user.role,
+      },
+    });
+
+    await logAuditEvent(ctx, {
+      action: "user.role_updated",
+      actorClerkId: user.clerkId,
+      actorEmail: normalizedUserEmail,
+      targetType: "user",
+      targetId: user._id,
+      metadata: {
+        previousRole: user.role,
+        nextRole: invitation.role,
+        source: "invitation_acceptance",
+      },
+    });
+
+    return {
+      role: invitation.role,
+      email: invitation.email,
+      expiresAt: invitation.expiresAt,
+    };
   },
 });
 
@@ -334,9 +485,21 @@ export const revokeInvitation = mutation({
       );
     }
 
+    const effectiveStatus = await expireInvitation(ctx, invitation);
+
+    if (effectiveStatus !== "pending") {
+      throw createServerError(
+        new Error(
+          `Invitation is not revokable: ${String(args.invitationId)} (${effectiveStatus})`,
+        ),
+        "Only pending invitations can be revoked.",
+      );
+    }
+
     await ctx.db.patch(args.invitationId, {
       status: "revoked",
       revokedAt: Date.now(),
+      revokedBy: user.clerkId,
     });
 
     await logAuditEvent(ctx, {
@@ -413,7 +576,9 @@ export const assignUserCustomRole = mutation({
       );
     }
 
-    const customRole = args.customRoleId ? await ctx.db.get(args.customRoleId) : null;
+    const customRole = args.customRoleId
+      ? await ctx.db.get(args.customRoleId)
+      : null;
 
     if (args.customRoleId && !customRole) {
       throw createServerError(
@@ -471,7 +636,7 @@ export const createRoleDefinition = mutation({
       );
     }
 
-    const permissions = assertValidPermissions(args.permissions);
+    const permissions = filterValidPermissions(args.permissions);
     const now = Date.now();
 
     const roleId = await ctx.db.insert("roleDefinitions", {
@@ -519,7 +684,7 @@ export const updateRoleDefinition = mutation({
       );
     }
 
-    const permissions = assertValidPermissions(args.permissions);
+    const permissions = filterValidPermissions(args.permissions);
 
     await ctx.db.patch(args.roleId, {
       name: args.name.trim(),
@@ -537,6 +702,50 @@ export const updateRoleDefinition = mutation({
       targetId: args.roleId,
       metadata: {
         permissions,
+      },
+    });
+  },
+});
+
+export const deleteRoleDefinition = mutation({
+  args: {
+    roleId: v.id("roleDefinitions"),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requirePermission(ctx, "manageRoleCatalog");
+
+    const role = await ctx.db.get(args.roleId);
+    if (!role) {
+      throw createServerError(
+        new Error(`Role not found: ${args.roleId}`),
+        "Role not found.",
+      );
+    }
+
+    // Check if any users are currently assigned to this role
+    const usersWithRole = await ctx.db
+      .query("users")
+      .filter((q) => q.eq(q.field("customRoleId"), args.roleId))
+      .collect();
+
+    // Remove the custom role from any users that have it assigned
+    for (const userRecord of usersWithRole) {
+      await ctx.db.patch(userRecord._id, {
+        customRoleId: undefined,
+      });
+    }
+
+    await ctx.db.delete(args.roleId);
+
+    await logAuditEvent(ctx, {
+      action: "role_definition.deleted",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "roleDefinition",
+      targetId: args.roleId,
+      metadata: {
+        slug: role.slug,
+        usersAffected: usersWithRole.length,
       },
     });
   },
