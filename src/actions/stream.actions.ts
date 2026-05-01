@@ -2,7 +2,7 @@
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { StreamClient } from "@stream-io/node-sdk";
-import { fetchQuery } from "convex/nextjs";
+import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
 import { createPublicError, logError, requireEnvVar } from "@/lib/errors";
 import { getValidatedServerEnv } from "@/lib/env";
@@ -114,5 +114,94 @@ export const listAuthorizedRecordings = async (): Promise<AuthorizedRecording[]>
       error,
       "Unable to load authorized recordings right now.",
     );
+  }
+};
+
+export const endInterviewMeeting = async ({
+  streamCallId,
+}: {
+  streamCallId: string;
+}) => {
+  try {
+    const { userId, getToken } = await auth();
+    const env = getValidatedServerEnv();
+
+    if (!userId) {
+      throw new Error("User not authenticated");
+    }
+
+    const token = await getToken({ template: "convex" });
+    const convexAuth = {
+      token: token ?? undefined,
+      url: env.NEXT_PUBLIC_CONVEX_URL,
+    };
+
+    const streamClient = new StreamClient(
+      env.NEXT_PUBLIC_STREAM_API_KEY,
+      env.STREAM_SECRET_KEY,
+    );
+    const streamCall = streamClient.video.call("default", streamCallId);
+
+    const [interview, viewer] = await Promise.all([
+      fetchQuery(
+        api.interviews.getInterviewByStreamCallId,
+        { streamCallId },
+        convexAuth,
+      ),
+      fetchQuery(api.users.getCurrentUser, {}, convexAuth),
+    ]);
+
+    if (interview) {
+      const isHost =
+        viewer.role === "admin" ||
+        (viewer.role === "interviewer" &&
+          interview.interviewerIds.includes(viewer.clerkId));
+
+      if (!isHost) {
+        throw new Error("Only the host can end this meeting.");
+      }
+
+      // Soft-delete the call so the meeting URL no longer resolves via Stream.
+      // Stream will end the active session for everyone before deleting it.
+      await streamCall.delete({ hard: false });
+
+      await Promise.all([
+        fetchMutation(
+          api.sessionEvents.logSessionEvent,
+          {
+            interviewId: interview._id,
+            streamCallId,
+            type: "host.ended_session",
+            detail: "Host ended the session for everyone",
+          },
+          convexAuth,
+        ),
+        fetchMutation(
+          api.interviews.updateInterviewStatus,
+          {
+            interviewId: interview._id,
+            status: "completed",
+          },
+          convexAuth,
+        ),
+      ]);
+    } else {
+      const response = await streamCall.get();
+      const createdById = response.call.created_by?.id;
+      const isStreamHost = createdById === userId || viewer.role === "admin";
+
+      if (!isStreamHost) {
+        throw new Error("Only the host can end this meeting.");
+      }
+
+      // No backing interview record exists, so fall back to Stream ownership
+      // and remove the call from the API entirely for future joins.
+      await streamCall.delete({ hard: false });
+    }
+
+    return { ok: true };
+  } catch (error) {
+    logError("endInterviewMeeting", error, { streamCallId });
+    throw createPublicError(error, "Failed to end meeting.");
   }
 };
