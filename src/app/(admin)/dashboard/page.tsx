@@ -8,15 +8,133 @@ import {
   MetricCard,
   SectionIntro,
 } from "@/components/dashboard/DashboardPrimitives";
-import LoaderUI from "@/components/ui/LoaderUI";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { useUserRole } from "@/hooks/useUserRole";
+
+function DashboardOverviewSkeleton() {
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="rounded-[28px] border border-border/70 bg-card/80 p-6 shadow-sm">
+        <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+          <div className="space-y-3">
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-8 w-72" />
+            <Skeleton className="h-4 w-full max-w-2xl" />
+          </div>
+          <Skeleton className="h-10 w-40 rounded-md" />
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-2xl border border-border/70 bg-card/80 shadow-sm">
+          <div className="flex flex-col gap-4 border-b px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-6 w-48" />
+              <Skeleton className="h-4 w-64" />
+            </div>
+            <div className="flex gap-2">
+              <Skeleton className="h-6 w-20 rounded-full" />
+              <Skeleton className="h-8 w-24 rounded-md" />
+            </div>
+          </div>
+          <div className="space-y-3 p-6">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="flex items-start gap-3 rounded-2xl border border-border/60 bg-background/80 px-4 py-3"
+              >
+                <Skeleton className="mt-1 h-2.5 w-2.5 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="w-full max-w-md space-y-2">
+                      <Skeleton className="h-4 w-2/3" />
+                      <Skeleton className="h-4 w-full" />
+                    </div>
+                    <Skeleton className="h-3 w-16" />
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <Skeleton className="h-3 w-20" />
+                    <Skeleton className="h-6 w-20 rounded-md" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <Card className="border-border/70 bg-card/80 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-6 w-44" />
+            <Skeleton className="h-4 w-full max-w-xs" />
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-2xl border border-border/70 bg-background/70 px-4 py-4"
+              >
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="mt-2 h-4 w-full" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-full max-w-xl" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Card key={i} className="border-border/70 bg-card/80 shadow-sm">
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
+                <Skeleton className="h-8 w-16" />
+              </CardHeader>
+              <CardContent className="pt-0">
+                <Skeleton className="h-4 w-28" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-2">
+          {[1, 2].map((i) => (
+            <Card key={i} className="border-border/70 bg-card/80 shadow-sm">
+              <CardHeader>
+                <Skeleton className="h-6 w-44" />
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[1, 2, 3].map((item) => (
+                  <div
+                    key={item}
+                    className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="w-full space-y-2">
+                        <Skeleton className="h-4 w-32" />
+                        <Skeleton className="h-4 w-full" />
+                      </div>
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function DashboardOverviewPage() {
   useLifecycleAutomation();
@@ -81,6 +199,10 @@ function DashboardOverviewPage() {
     },
   ].filter((item) => item.visible);
 
+  if (isLoading) {
+    return <DashboardOverviewSkeleton />;
+  }
+
   return (
     <div className="space-y-6">
       <DashboardPageHeader
@@ -121,13 +243,6 @@ function DashboardOverviewPage() {
           </CardContent>
         </Card>
       </div>
-
-      {isLoading ? (
-        <div className="py-20 flex justify-center">
-          <LoaderUI />
-        </div>
-      ) : (
-        <>
 
       {operations ? (
         <section className="space-y-4">
@@ -243,8 +358,6 @@ function DashboardOverviewPage() {
           </div>
         </section>
       ) : null}
-        </>
-      )}
     </div>
   );
 }

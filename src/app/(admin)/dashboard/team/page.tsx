@@ -9,13 +9,12 @@ import {
   SectionIntro,
 } from "@/components/dashboard/DashboardPrimitives";
 import AccessManagementPanel from "@/components/ui/AccessManagementPanel";
-import LoaderUI from "@/components/ui/LoaderUI";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "../../../../../convex/_generated/api";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
@@ -27,6 +26,75 @@ const splitCsv = (value: string) =>
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+
+function TeamWorkspaceSkeleton() {
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="rounded-[28px] border border-border/70 bg-card/80 p-6 shadow-sm">
+        <div className="space-y-3">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-full max-w-2xl" />
+        </div>
+      </div>
+
+      <section className="space-y-4">
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-44" />
+          <Skeleton className="h-4 w-full max-w-xl" />
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="lg:col-span-1">
+              <CardHeader>
+                <Skeleton className="h-6 w-40" />
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[1, 2, 3].map((field) => (
+                  <div key={field} className="space-y-2">
+                    <Skeleton className="h-4 w-24" />
+                    <Skeleton className="h-10 w-full rounded-md" />
+                  </div>
+                ))}
+                <Skeleton className="h-10 w-full rounded-md" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
+        {[1, 2].map((i) => (
+          <Card key={i} className="border-border/70 bg-card/80 shadow-sm">
+            <CardHeader>
+              <Skeleton className="h-6 w-44" />
+              <Skeleton className="h-4 w-full max-w-xs" />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Skeleton className="h-10 w-full rounded-md" />
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, item) => (
+                  <div
+                    key={item}
+                    className="rounded-2xl border border-border/70 bg-background/70 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="w-full space-y-2">
+                        <Skeleton className="h-4 w-40" />
+                        <Skeleton className="h-4 w-full max-w-xs" />
+                      </div>
+                      <Skeleton className="h-6 w-20 rounded-full" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </section>
+    </div>
+  );
+}
 
 function TeamWorkspacePage() {
   const { canManageRoles } = useUserRole();
@@ -99,15 +167,13 @@ function TeamWorkspacePage() {
       <section className="space-y-4">
         <SectionIntro
           title="Access management"
-          description="Create invitations, review pending access, and update team roles without crowding the rest of the dashboard."
+          description="Send email-based role invitations, review pending or expired access, and update active team roles without crowding the rest of the dashboard."
         />
         <AccessManagementPanel />
       </section>
 
       {!adminDashboard ? (
-        <div className="py-20 flex justify-center">
-          <LoaderUI />
-        </div>
+        <TeamWorkspaceSkeleton />
       ) : (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
         <Card className="border-border/70 bg-card/80 shadow-sm">

@@ -2,7 +2,6 @@
 
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import LoaderUI from "@/components/ui/LoaderUI";
 import {
   Card,
   CardContent,
@@ -22,6 +21,43 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { COMMON_TIMEZONES } from "@/constants";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function SettingsSkeleton() {
+  return (
+    <div className="container mx-auto max-w-5xl space-y-8 py-10 animate-in fade-in duration-300">
+      <div>
+        <Skeleton className="mb-2 h-9 w-32" />
+        <Skeleton className="h-4 w-64" />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <Skeleton className="mb-2 h-6 w-52" />
+          <Skeleton className="h-4 w-full max-w-sm" />
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2 py-4">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-10 w-full rounded-md" />
+          </div>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card/60 px-5 py-4"
+            >
+              <div className="min-w-0 flex-1 space-y-2">
+                <Skeleton className="h-5 w-52" />
+                <Skeleton className="h-4 w-full max-w-md" />
+              </div>
+              <Skeleton className="h-6 w-11 rounded-full" />
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const preferences = useQuery(
@@ -32,7 +68,7 @@ export default function SettingsPage() {
     api.notifications.updateMyNotificationPreferences,
   );
 
-  if (!preferences) return <LoaderUI />;
+  if (!preferences) return <SettingsSkeleton />;
 
   const handlePreferenceToggle = async (next: Partial<typeof preferences>) => {
     try {
@@ -71,8 +107,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Notification Preferences</CardTitle>
           <CardDescription>
-            Choose which interview and reminder updates should
-            reach you.
+            Choose which interview and reminder updates should reach you.
           </CardDescription>
         </CardHeader>
 
@@ -144,7 +179,6 @@ export default function SettingsPage() {
               handlePreferenceToggle({ feedbackReminderEmails: value })
             }
           />
-
         </CardContent>
       </Card>
     </div>

@@ -34,10 +34,7 @@ import {
 import MeetingCard from "@/components/ui/MeetingCard";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
-import {
-  getInterviewStartTimeMs,
-  getInterviewTimezone,
-} from "@/lib/utils";
+import { getInterviewStartTimeMs, getInterviewTimezone } from "@/lib/utils";
 
 type Interview = Doc<"interviews">;
 
@@ -56,8 +53,8 @@ function InterviewScheduleUI() {
 
   useLifecycleAutomation();
 
-  const interviews = useQuery(api.interviews.getAllInterviews, {}) ?? [];
-  const users = useQuery(api.users.getUsers, {}) ?? [];
+  const interviews = useQuery(api.interviews.getAllInterviews, {});
+  const users = useQuery(api.users.getUsers, {});
   const createInterview = useMutation(api.interviews.createInterview);
   const reportProvisioningFailure = useMutation(
     api.reliability.reportProviderProvisioningFailure,
@@ -65,11 +62,14 @@ function InterviewScheduleUI() {
   const rescheduleInterview = useMutation(api.interviews.rescheduleInterview);
   const cancelInterview = useMutation(api.interviews.cancelInterview);
 
-  const candidates = users?.filter((u) => u.role === "candidate");
-  const interviewers = users?.filter(
-    (u) =>
-      u.role === "interviewer" || u.role === "recruiter" || u.role === "admin",
-  );
+  const candidates = users?.filter((u) => u.role === "candidate") ?? [];
+  const interviewers =
+    users?.filter(
+      (u) =>
+        u.role === "interviewer" ||
+        u.role === "recruiter" ||
+        u.role === "admin",
+    ) ?? [];
 
   const defaultTemplate = INTERVIEW_TEMPLATES[0];
   const [formData, setFormData] = useState<{
@@ -119,8 +119,9 @@ function InterviewScheduleUI() {
   });
 
   const selectedTemplate =
-    INTERVIEW_TEMPLATES.find((template) => template.id === formData.templateId) ??
-    defaultTemplate;
+    INTERVIEW_TEMPLATES.find(
+      (template) => template.id === formData.templateId,
+    ) ?? defaultTemplate;
 
   const scheduleMeeting = async () => {
     if (!client) return;
@@ -170,15 +171,20 @@ function InterviewScheduleUI() {
           },
         });
       } catch (providerError) {
-        logError("InterviewScheduleUI.scheduleMeeting.provider", providerError, {
-          candidateId,
-          interviewerCount: interviewerIds.length,
-        });
+        logError(
+          "InterviewScheduleUI.scheduleMeeting.provider",
+          providerError,
+          {
+            candidateId,
+            interviewerCount: interviewerIds.length,
+          },
+        );
         nextStatus = "draft";
         streamCallId = `pending-${id}`;
         await reportProvisioningFailure({
           scope: "interview_provider_provisioning",
-          summary: "Interview created in draft mode because Stream call provisioning failed.",
+          summary:
+            "Interview created in draft mode because Stream call provisioning failed.",
           detail:
             providerError instanceof Error
               ? providerError.message
@@ -209,7 +215,8 @@ function InterviewScheduleUI() {
       } catch (dbError) {
         await reportProvisioningFailure({
           scope: "interview_database_write",
-          summary: "Interview call was provisioned but the database write failed.",
+          summary:
+            "Interview call was provisioned but the database write failed.",
           detail:
             dbError instanceof Error
               ? dbError.message
@@ -323,9 +330,7 @@ function InterviewScheduleUI() {
       logError("InterviewScheduleUI.handleCancel", error, {
         interviewId: selectedInterview._id,
       });
-      toast.error(
-        getDisplayErrorMessage(error, "Unable to cancel interview."),
-      );
+      toast.error(getDisplayErrorMessage(error, "Unable to cancel interview."));
     } finally {
       setIsManaging(false);
     }
@@ -379,13 +384,16 @@ function InterviewScheduleUI() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Interview Template</label>
+                <label className="text-sm font-medium">
+                  Interview Template
+                </label>
                 <Select
                   value={formData.templateId}
                   onValueChange={(templateId) => {
                     const template =
-                      INTERVIEW_TEMPLATES.find((item) => item.id === templateId) ??
-                      defaultTemplate;
+                      INTERVIEW_TEMPLATES.find(
+                        (item) => item.id === templateId,
+                      ) ?? defaultTemplate;
 
                     setFormData((prev) => ({
                       ...prev,
@@ -622,7 +630,9 @@ function InterviewScheduleUI() {
                 />
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Meeting Instructions</label>
+                <label className="text-sm font-medium">
+                  Meeting Instructions
+                </label>
                 <Textarea
                   value={formData.meetingInstructions}
                   onChange={(event) =>
@@ -669,13 +679,35 @@ function InterviewScheduleUI() {
         </Dialog>
       </div>
 
-      {!interviews ? (
-        <div className="flex justify-center py-12">
-          <Loader2Icon className="size-8 animate-spin text-muted-foreground" />
+      {interviews === undefined ? (
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 p-4">
+          {Array.from({ length: 9 }).map((_, i) => (
+            <div key={i} className="space-y-3">
+              <div className="rounded-xl border bg-card p-4 space-y-3 animate-pulse">
+                {/* Header row */}
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-1/2 rounded bg-muted" />
+                  <div className="h-5 w-16 rounded-full bg-muted" />
+                </div>
+                {/* Meta lines */}
+                <div className="space-y-2">
+                  <div className="h-3 w-3/4 rounded bg-muted" />
+                  <div className="h-3 w-1/2 rounded bg-muted" />
+                </div>
+                {/* Avatar row */}
+                <div className="flex gap-2 pt-1">
+                  <div className="h-8 w-8 rounded-full bg-muted" />
+                  <div className="h-8 w-8 rounded-full bg-muted" />
+                </div>
+              </div>
+              {/* Skeleton for the Manage Lifecycle button */}
+              <div className="h-9 w-full rounded-md bg-muted animate-pulse" />
+            </div>
+          ))}
         </div>
       ) : interviews.length > 0 ? (
         <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 p-4">
             {interviews.map((interview) => (
               <div key={interview._id} className="space-y-3">
                 <MeetingCard interview={interview} />
@@ -715,7 +747,9 @@ function InterviewScheduleUI() {
                 <Calendar
                   mode="single"
                   selected={manageData.date}
-                  onSelect={(date) => date && setManageData({ ...manageData, date })}
+                  onSelect={(date) =>
+                    date && setManageData({ ...manageData, date })
+                  }
                   disabled={(date) => date < new Date()}
                   className="rounded-md border"
                 />
@@ -725,7 +759,9 @@ function InterviewScheduleUI() {
                   <label className="text-sm font-medium">New Time</label>
                   <Select
                     value={manageData.time}
-                    onValueChange={(time) => setManageData({ ...manageData, time })}>
+                    onValueChange={(time) =>
+                      setManageData({ ...manageData, time })
+                    }>
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select time" />
                     </SelectTrigger>
@@ -758,11 +794,16 @@ function InterviewScheduleUI() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Reschedule Reason</label>
+                  <label className="text-sm font-medium">
+                    Reschedule Reason
+                  </label>
                   <Textarea
                     value={manageData.reason}
                     onChange={(event) =>
-                      setManageData({ ...manageData, reason: event.target.value })
+                      setManageData({
+                        ...manageData,
+                        reason: event.target.value,
+                      })
                     }
                     placeholder="Explain the reschedule for attendees."
                     rows={3}
