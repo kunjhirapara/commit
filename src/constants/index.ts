@@ -112,6 +112,12 @@ export const QUICK_ACTIONS = [
   },
   {
     icon: Calendar,
+    title: "Calendar",
+    description: "View your event calendar",
+    color: "blue-500",
+  },
+  {
+    icon: Calendar,
     title: "Schedule",
     description: "Plan upcoming interviews",
     color: "blue-500",
@@ -152,7 +158,7 @@ export const CODING_QUESTIONS: CodeQuestion[] = [
       java: `class Solution {
     public int[] twoSum(int[] nums, int target) {
         // Write your solution here
-        
+        return null;
     }
 }`,
     },
@@ -162,6 +168,37 @@ export const CODING_QUESTIONS: CodeQuestion[] = [
       "-109 ≤ target ≤ 109",
       "Only one valid answer exists.",
     ],
+    functionNames: { javascript: "twoSum", python: "two_sum", java: "twoSum" },
+    testCases: [
+      { args: [[2, 7, 11, 15], 9], expected: [0, 1], inputLabel: "nums = [2,7,11,15]\ntarget = 9", expectedLabel: "[0,1]" },
+      { args: [[3, 2, 4], 6], expected: [1, 2], inputLabel: "nums = [3,2,4]\ntarget = 6", expectedLabel: "[1,2]" },
+      { args: [[3, 3], 6], expected: [0, 1], inputLabel: "nums = [3,3]\ntarget = 6", expectedLabel: "[0,1]" },
+    ],
+    javaMainBody: `
+        // Test 1
+        __total__++;
+        int[] __r1__ = __sol__.twoSum(new int[]{2,7,11,15}, 9);
+        boolean __ok1__ = java.util.Arrays.equals(__r1__, new int[]{0,1});
+        if(__ok1__) __passed__++;
+        System.out.println("Test 1: " + (__ok1__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok1__){System.out.println("  Expected: [0, 1]");System.out.println("  Got:      "+java.util.Arrays.toString(__r1__));}
+
+        // Test 2
+        __total__++;
+        int[] __r2__ = __sol__.twoSum(new int[]{3,2,4}, 6);
+        boolean __ok2__ = java.util.Arrays.equals(__r2__, new int[]{1,2});
+        if(__ok2__) __passed__++;
+        System.out.println("Test 2: " + (__ok2__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok2__){System.out.println("  Expected: [1, 2]");System.out.println("  Got:      "+java.util.Arrays.toString(__r2__));}
+
+        // Test 3
+        __total__++;
+        int[] __r3__ = __sol__.twoSum(new int[]{3,3}, 6);
+        boolean __ok3__ = java.util.Arrays.equals(__r3__, new int[]{0,1});
+        if(__ok3__) __passed__++;
+        System.out.println("Test 3: " + (__ok3__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok3__){System.out.println("  Expected: [0, 1]");System.out.println("  Got:      "+java.util.Arrays.toString(__r3__));}
+`,
   },
   {
     id: "reverse-string",
@@ -193,6 +230,30 @@ export const CODING_QUESTIONS: CodeQuestion[] = [
     }
 }`,
     },
+    functionNames: { javascript: "reverseString", python: "reverse_string", java: "reverseString" },
+    testCases: [
+      { args: [["h","e","l","l","o"]], expected: ["o","l","l","e","h"], inPlace: true, inputLabel: 's = ["h","e","l","l","o"]', expectedLabel: '["o","l","l","e","h"]' },
+      { args: [["H","a","n","n","a","h"]], expected: ["h","a","n","n","a","H"], inPlace: true, inputLabel: 's = ["H","a","n","n","a","h"]', expectedLabel: '["h","a","n","n","a","H"]' },
+    ],
+    javaMainBody: `
+        // Test 1
+        __total__++;
+        char[] __a1__ = new char[]{'h','e','l','l','o'};
+        __sol__.reverseString(__a1__);
+        boolean __ok1__ = java.util.Arrays.equals(__a1__, new char[]{'o','l','l','e','h'});
+        if(__ok1__) __passed__++;
+        System.out.println("Test 1: " + (__ok1__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok1__){System.out.println("  Expected: ['o','l','l','e','h']");System.out.println("  Got:      "+java.util.Arrays.toString(__a1__));}
+
+        // Test 2
+        __total__++;
+        char[] __a2__ = new char[]{'H','a','n','n','a','h'};
+        __sol__.reverseString(__a2__);
+        boolean __ok2__ = java.util.Arrays.equals(__a2__, new char[]{'h','a','n','n','a','H'});
+        if(__ok2__) __passed__++;
+        System.out.println("Test 2: " + (__ok2__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok2__){System.out.println("  Expected: ['h','a','n','n','a','H']");System.out.println("  Got:      "+java.util.Arrays.toString(__a2__));}
+`,
   },
   {
     id: "palindrome-number",
@@ -224,10 +285,46 @@ export const CODING_QUESTIONS: CodeQuestion[] = [
       java: `class Solution {
     public boolean isPalindrome(int x) {
         // Write your solution here
-        
+        return false;
     }
 }`,
     },
+    functionNames: { javascript: "isPalindrome", python: "is_palindrome", java: "isPalindrome" },
+    testCases: [
+      { args: [121],  expected: true,  inputLabel: "x = 121",  expectedLabel: "true"  },
+      { args: [-121], expected: false, inputLabel: "x = -121", expectedLabel: "false" },
+      { args: [10],   expected: false, inputLabel: "x = 10",   expectedLabel: "false" },
+      { args: [0],    expected: true,  inputLabel: "x = 0",    expectedLabel: "true"  },
+    ],
+    javaMainBody: `
+        // Test 1
+        __total__++;
+        boolean __ok1__ = (__sol__.isPalindrome(121) == true);
+        if(__ok1__) __passed__++;
+        System.out.println("Test 1: " + (__ok1__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok1__){System.out.println("  Expected: true");System.out.println("  Got:      "+__sol__.isPalindrome(121));}
+
+        // Test 2
+        __total__++;
+        boolean __ok2__ = (__sol__.isPalindrome(-121) == false);
+        if(__ok2__) __passed__++;
+        System.out.println("Test 2: " + (__ok2__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok2__){System.out.println("  Expected: false");System.out.println("  Got:      "+__sol__.isPalindrome(-121));}
+
+        // Test 3
+        __total__++;
+        boolean __ok3__ = (__sol__.isPalindrome(10) == false);
+        if(__ok3__) __passed__++;
+        System.out.println("Test 3: " + (__ok3__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok3__){System.out.println("  Expected: false");System.out.println("  Got:      "+__sol__.isPalindrome(10));}
+
+        // Test 4
+        __total__++;
+        boolean __ok4__ = (__sol__.isPalindrome(0) == true);
+        if(__ok4__) __passed__++;
+        System.out.println("Test 4: " + (__ok4__ ? "\u2713 PASS" : "\u2717 FAIL"));
+        if(!__ok4__){System.out.println("  Expected: true");System.out.println("  Got:      "+__sol__.isPalindrome(0));}
+`,
   },
 ];
 
@@ -252,6 +349,18 @@ export interface CodeQuestion {
     java: string;
   };
   constraints?: string[];
+  /** Per-language names of the function under test */
+  functionNames: { javascript: string; python: string; java: string };
+  /** Structured test cases for the auto test runner */
+  testCases: Array<{
+    args: unknown[];
+    expected: unknown;
+    inPlace?: boolean;
+    inputLabel: string;
+    expectedLabel: string;
+  }>;
+  /** Java statements injected into main() — uses __sol__, __passed__, __total__ */
+  javaMainBody: string;
 }
 
 export type QuickActionType = (typeof QUICK_ACTIONS)[number];
