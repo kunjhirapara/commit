@@ -33,7 +33,6 @@ export const PERMISSION_VALUES = [
   "manageInvitations",
 
   "manageReliability",
-
 ] as const;
 
 export type Permission = (typeof PERMISSION_VALUES)[number];
@@ -82,6 +81,7 @@ const PERMISSIONS: Record<UserRole, Permission[]> = {
     "scheduleInterviews",
     "editInterviews",
     "cancelInterviews",
+
     "manageRoles",
     "manageRoleCatalog",
     "manageInvitations",
@@ -123,9 +123,7 @@ export const logAuditEvent = async (
   });
 };
 
-export const getCurrentUserRecord = async (
-  ctx: any,
-) => {
+export const getCurrentUserRecord = async (ctx: any) => {
   const identity = await requireIdentity(ctx);
   const user = await ctx.db
     .query("users")
@@ -158,10 +156,7 @@ const hasCustomPermission = async (
   return customRole.permissions.includes(permission);
 };
 
-export const requirePermission = async (
-  ctx: any,
-  permission: Permission,
-) => {
+export const requirePermission = async (ctx: any, permission: Permission) => {
   const { identity, user } = await getCurrentUserRecord(ctx);
 
   const allowed =
@@ -282,7 +277,10 @@ export const requireInterviewReviewAccess = async (
   return { identity, user, interview };
 };
 
-export const requireRecordingAccess = async (ctx: any, interviewId: unknown) => {
+export const requireRecordingAccess = async (
+  ctx: any,
+  interviewId: unknown,
+) => {
   const { identity, user, interview } = await requireInterviewAccess(
     ctx,
     interviewId,

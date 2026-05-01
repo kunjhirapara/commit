@@ -168,6 +168,87 @@ export const dispatchEmailNotification = internalAction({
   },
 });
 
+export const sendRoleInvitationEmail = internalAction({
+  args: {
+    invitationId: v.id("invitations"),
+    email: v.string(),
+    role: v.union(
+      v.literal("interviewer"),
+      v.literal("recruiter"),
+      v.literal("developer"),
+      v.literal("admin"),
+    ),
+    invitedByName: v.string(),
+    invitationToken: v.string(),
+    expiresAt: v.number(),
+  },
+  handler: async (_ctx, args) => {
+    const appUrl =
+      process.env.APP_URL ??
+      process.env.NEXT_PUBLIC_APP_URL ??
+      "http://localhost:3000";
+
+    const template = resolveEmailTemplate("access.role_invitation", {
+      recipientEmail: args.email,
+      inviterName: args.invitedByName,
+      invitedRole: args.role,
+      invitationUrl: `${appUrl}/accept-invitation?token=${encodeURIComponent(args.invitationToken)}`,
+      invitationExpiresAt: args.expiresAt,
+      settingsUrl: `${appUrl}/settings`,
+    });
+
+    if (!template) {
+      console.warn("[emailActions] No role invitation template found", {
+        invitationId: args.invitationId,
+        email: args.email,
+      });
+      return { success: false, error: "Invitation email template unavailable" };
+    }
+
+    const transport = getTransport();
+
+    if (!transport) {
+      console.info("[emailActions] Would send role invitation email:", {
+        invitationId: args.invitationId,
+        to: args.email,
+        subject: template.subject,
+        invitationUrl: `${appUrl}/accept-invitation?token=${args.invitationToken}`,
+      });
+      return { success: false, error: "SMTP not configured" };
+    }
+
+    const fromName = process.env.SMTP_FROM_NAME ?? "Commit";
+    const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@commit.dev";
+
+    try {
+      const info = await transport.sendMail({
+        from: `"${fromName}" <${fromEmail}>`,
+        to: args.email,
+        subject: template.subject,
+        html: template.html,
+      });
+
+      console.info("[emailActions] Role invitation email sent:", {
+        invitationId: args.invitationId,
+        to: args.email,
+        messageId: info.messageId,
+      });
+
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown email error";
+      console.error("[emailActions] Role invitation email failed:", {
+        invitationId: args.invitationId,
+        to: args.email,
+        error: errorMessage,
+      });
+
+      return { success: false, error: errorMessage };
+    }
+  },
+});
+
 // ---------------------------------------------------------------------------
 // checkEmailHealth
 // ---------------------------------------------------------------------------

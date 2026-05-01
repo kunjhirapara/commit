@@ -7,7 +7,6 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useUserRole } from "@/hooks/useUserRole";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
-import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
@@ -61,7 +60,6 @@ function AccessManagementPanel() {
     canManageRoles ? {} : "skip",
   );
 
-  const inviteUser = useMutation(api.users.inviteUser);
   const revokeInvitation = useMutation(api.users.revokeInvitation);
   const updateUserRole = useMutation(api.users.updateUserRole);
 
@@ -74,11 +72,26 @@ function AccessManagementPanel() {
     }
 
     try {
-      await inviteUser({
-        email: email.trim(),
-        role: inviteRole,
+      const response = await fetch("/api/invitations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: email.trim(),
+          role: inviteRole,
+        }),
       });
-      toast.success("Invitation created.");
+
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          result?.detail || result?.error || "Unable to create invitation.",
+        );
+      }
+
+      toast.success("Invitation created and email sent.");
       setEmail("");
     } catch (error) {
       logError("AccessManagementPanel.handleInvite", error, {
@@ -132,6 +145,10 @@ function AccessManagementPanel() {
           <CardTitle>Invite Team Member</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Sends an email invitation with a secure acceptance link. Invitations
+            expire 24 hours after they are created.
+          </p>
           <div className="space-y-2">
             <Label>Email</Label>
             <Input
@@ -167,7 +184,7 @@ function AccessManagementPanel() {
 
       <Card className="lg:col-span-1">
         <CardHeader>
-          <CardTitle>Pending Invitations</CardTitle>
+          <CardTitle>Invitations</CardTitle>
         </CardHeader>
         <CardContent>
           {invitations?.length ? (
@@ -185,6 +202,12 @@ function AccessManagementPanel() {
                         <div className="mt-1">
                           <StatusBadge status={invitation.role} />
                         </div>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          Expires{" "}
+                          {typeof invitation.expiresAt === "number"
+                            ? new Date(invitation.expiresAt).toLocaleString()
+                            : "24 hours after creation"}
+                        </p>
                       </div>
                       <StatusBadge status={invitation.status} />
                     </div>
