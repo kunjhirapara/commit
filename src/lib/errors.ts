@@ -3,6 +3,11 @@ type ErrorMetadata = Record<string, unknown>;
 const DEFAULT_PRODUCTION_MESSAGE =
   "Something went wrong. Please try again.";
 
+const CONVEX_PREFIX_PATTERN =
+  /^\[CONVEX [^\]]+\]\s*\[Request ID:[^\]]+\]\s*/;
+const STACK_TRACE_START_PATTERN = /\s+at\s+[\w$.<]/;
+const CALLED_BY_CLIENT_PATTERN = /\s*Called by client\s*$/i;
+
 const isErrorWithMessage = (
   error: unknown,
 ): error is { message: string } =>
@@ -23,6 +28,38 @@ export const getErrorMessage = (error: unknown) => {
   } catch {
     return "Unknown error";
   }
+};
+
+const normalizeWhitespace = (value: string) => value.replace(/\s+/g, " ").trim();
+
+const stripErrorLabel = (value: string) =>
+  value.replace(
+    /^(?:(?:Server Error|Uncaught Error|Error):?\s*)+/i,
+    "",
+  );
+
+export const sanitizeErrorMessage = (
+  error: unknown,
+  fallbackMessage = DEFAULT_PRODUCTION_MESSAGE,
+) => {
+  const rawMessage = getErrorMessage(error);
+
+  if (!rawMessage) return fallbackMessage;
+
+  let message = rawMessage.trim();
+
+  message = message.replace(CONVEX_PREFIX_PATTERN, "");
+  message = message.replace(CALLED_BY_CLIENT_PATTERN, "");
+
+  const stackTraceStart = message.search(STACK_TRACE_START_PATTERN);
+  if (stackTraceStart >= 0) {
+    message = message.slice(0, stackTraceStart);
+  }
+
+  message = stripErrorLabel(message);
+  message = normalizeWhitespace(message);
+
+  return message || fallbackMessage;
 };
 
 export const logError = (
@@ -64,7 +101,7 @@ export const getDisplayErrorMessage = (
   productionMessage = DEFAULT_PRODUCTION_MESSAGE,
 ) => {
   if (isDevelopmentEnvironment()) {
-    return getErrorMessage(error) || productionMessage;
+    return sanitizeErrorMessage(error, productionMessage);
   }
 
   return productionMessage;
@@ -76,7 +113,9 @@ export const createPublicError = (
 ) => new Error(getDisplayErrorMessage(error, productionMessage));
 
 export const getErrorDetails = (error: unknown) =>
-  isDevelopmentEnvironment() ? getErrorMessage(error) : undefined;
+  isDevelopmentEnvironment()
+    ? sanitizeErrorMessage(error, DEFAULT_PRODUCTION_MESSAGE)
+    : undefined;
 
 export const requireEnvVar = (name: string) => {
   const value = process.env[name];
