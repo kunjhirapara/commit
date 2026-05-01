@@ -13,7 +13,7 @@ export function StatusBadge({ status, className }: StatusBadgeProps) {
 
   if (["passed", "succeeded", "completed", "healthy", "available", "resolved", "deployed", "approved", "pass", "submitted", "sent", "accepted", "restored"].includes(s)) {
     colorClass = "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-400";
-  } else if (["failed", "rejected", "cancelled", "no_show", "unhealthy", "error", "critical", "dead_letter", "rolled_back", "reject"].includes(s)) {
+  } else if (["failed", "rejected", "cancelled", "no_show", "unhealthy", "error", "critical", "dead_letter", "rolled_back", "reject", "expired"].includes(s)) {
     colorClass = "bg-red-500/15 text-red-700 border-red-500/30 dark:text-red-400";
   } else if (["live", "running", "open", "shared"].includes(s)) {
     colorClass = "bg-sky-500/15 text-sky-700 border-sky-500/30 dark:text-sky-400";

@@ -17,12 +17,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import LoaderUI from "@/components/ui/LoaderUI";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { CommentHistoryPanel } from "./CommentHistoryPanel";
 import { FeedbackEntriesPanel } from "./FeedbackEntriesPanel";
 import { NotesComposerSection } from "./NotesComposerSection";
-import { feedbackSchema, getDefaultFeedbackValues, type FeedbackFormValues } from "./schema";
+import {
+  feedbackSchema,
+  getDefaultFeedbackValues,
+  type FeedbackFormValues,
+} from "./schema";
 import { StructuredScorecardSection } from "./StructuredScorecardSection";
 import type {
   CommentEntry,
@@ -89,7 +93,11 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
 
   const handleOpenChange = (open: boolean) => {
     if (!open && form.formState.isDirty) {
-      if (!window.confirm("You have unsaved changes. Are you sure you want to close?")) {
+      if (
+        !window.confirm(
+          "You have unsaved changes. Are you sure you want to close?",
+        )
+      ) {
         return;
       }
       form.reset();
@@ -170,8 +178,6 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
     setCommentVisibility((entry.visibility ?? "shared") as NoteVisibility);
   };
 
-
-
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
@@ -192,13 +198,23 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
         </DialogHeader>
 
         {!existingComments || !users || !feedbackEntries ? (
-          <div className="flex-1 flex items-center justify-center min-h-[400px]">
-            <LoaderUI />
+          <div className="flex-1 flex gap-6 p-4">
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-8 w-1/2" />
+              <Skeleton className="h-[300px] w-full" />
+            </div>
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-8 w-1/2" />
+              <Skeleton className="h-[300px] w-full" />
+            </div>
           </div>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] flex-1 overflow-hidden">
             <div className="space-y-6 flex flex-col h-full overflow-y-auto pr-2 pb-4 self-start">
-              <FeedbackEntriesPanel feedbackEntries={feedbackEntries} users={users} />
+              <FeedbackEntriesPanel
+                feedbackEntries={feedbackEntries}
+                users={users}
+              />
               <CommentHistoryPanel
                 comments={existingComments}
                 users={users}

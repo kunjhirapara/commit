@@ -101,6 +101,14 @@ export const captureHealthSnapshot = mutation({
     await requirePermission(ctx, "viewObservability");
 
     const now = Date.now();
+    console.log(
+      "Environment variable values:",
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+      process.env.NEXT_PUBLIC_CONVEX_URL,
+      process.env.NEXT_PUBLIC_STREAM_API_KEY,
+      process.env.STREAM_SECRET_KEY,
+      process.env.CLERK_WEBHOOK_SECRET,
+    );
     const envChecks = [
       {
         provider: "clerk",
