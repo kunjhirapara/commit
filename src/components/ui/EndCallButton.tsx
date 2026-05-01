@@ -1,11 +1,14 @@
-import { useCall, useCallStateHooks } from "@stream-io/video-react-sdk";
-import { useMutation } from "convex/react";
+import { OwnCapability, useCall, useCallStateHooks } from "@stream-io/video-react-sdk";
+import { PhoneOffIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { api } from "../../../convex/_generated/api";
 import { Doc } from "../../../convex/_generated/dataModel";
 import { Button } from "./button";
 import { toast } from "sonner";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { useUserRole } from "@/hooks/useUserRole";
+import { endInterviewMeeting } from "@/actions/stream.actions";
+import { useState } from "react";
+import { cleanupMeetingMedia } from "@/lib/meetingCleanup";
 
 export default function EndCallButton({
   interview,
@@ -14,46 +17,55 @@ export default function EndCallButton({
 }) {
   const call = useCall();
   const router = useRouter();
+  const [isEnding, setIsEnding] = useState(false);
 
-  const { useLocalParticipant } = useCallStateHooks();
-  const localParticipant = useLocalParticipant();
-  const updateInterviewStatus = useMutation(
-    api.interviews.updateInterviewStatus,
-  );
-  const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
+  const { useHasPermissions } = useCallStateHooks();
+  const canEndCall = useHasPermissions(OwnCapability.END_CALL);
+  const { user, isAdmin, isInterviewer } = useUserRole();
 
-  if (!call || !interview) return null;
+  if (!call || !canEndCall || !user) return null;
 
-  const isMeetingOwner = localParticipant?.userId === call.state.createdBy?.id;
+  const isKnownAppHost =
+    isAdmin ||
+    isInterviewer ||
+    !!interview?.interviewerIds.includes(user.clerkId);
 
-  if (!isMeetingOwner) return null;
+  if (!isKnownAppHost && interview) return null;
 
   const endCall = async () => {
     try {
-      await call.endCall();
-      await logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
-        type: "host.ended_session",
-        detail: "Host ended the session for everyone",
+      setIsEnding(true);
+      await endInterviewMeeting({
+        streamCallId: interview?.streamCallId ?? call.id,
       });
-      await updateInterviewStatus({
-        interviewId: interview._id,
-        status: "completed",
+      await cleanupMeetingMedia(call, {
+        message: "Host ended meeting",
       });
-      router.push("/");
+      router.replace("/");
       toast.success("Meeting ended for everyone");
     } catch (error) {
       logError("EndCallButton.endCall", error, {
-        interviewId: interview._id,
+        interviewId: interview?._id,
+        streamCallId: interview?.streamCallId ?? call.id,
       });
       toast.error(getDisplayErrorMessage(error, "Failed to end meeting."));
+    } finally {
+      setIsEnding(false);
     }
   };
 
   return (
-    <Button variant={"destructive"} onClick={endCall}>
-      End Meeting
+    <Button
+      type="button"
+      variant="destructive"
+      size="sm"
+      className="shrink-0 rounded-full px-3"
+      onClick={endCall}
+      disabled={isEnding}
+      aria-label="End meeting for everyone"
+      title="End meeting for everyone">
+      <PhoneOffIcon className="size-3.5" />
+      <span>{isEnding ? "Ending..." : "End"}</span>
     </Button>
   );
 }
