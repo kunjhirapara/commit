@@ -71,6 +71,10 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
   const [hostActionLoading, setHostActionLoading] = useState<
     "mute" | "record" | "remove" | null
   >(null);
+  const [recordingNoticeVisible, setRecordingNoticeVisible] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("commit-recording-notice-dismissed") !== "1";
+  });
 
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
 
@@ -330,9 +334,25 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     }
   };
 
+  const dismissRecordingNotice = () => {
+    localStorage.setItem("commit-recording-notice-dismissed", "1");
+    setRecordingNoticeVisible(false);
+  };
+
   /* ── render ── */
   return (
     <div className="flex h-[calc(100vh-4rem-1px)] flex-col overflow-hidden bg-background lg:flex-row">
+      {recordingNoticeVisible && (
+        <div className="flex shrink-0 items-center gap-3 border-b bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+          <span className="flex-1">This interview session may be recorded for evaluation purposes.</span>
+          <button
+            type="button"
+            onClick={dismissRecordingNotice}
+            className="shrink-0 text-xs underline underline-offset-2 hover:no-underline">
+            Got it
+          </button>
+        </div>
+      )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1">
         {/* ── Video panel ── */}
         <ResizablePanel defaultSize={25} minSize={10} className="relative">
@@ -461,7 +481,7 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
         {/* ── Code editor panel ── */}
         <ResizablePanel defaultSize={70} minSize={10}>
           <div className="h-full rounded-none border-l">
-            <CodeEditor />
+            <CodeEditor streamCallId={interview?.streamCallId} />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
