@@ -329,36 +329,6 @@ export const roleInvitationTemplate = (data: EmailTemplateData): EmailTemplate =
   };
 };
 
-export const roleInvitationTemplate = (data: EmailTemplateData): EmailTemplate => {
-  const tz = data.timezone ?? "UTC";
-  const expiresStr = data.invitationExpiresAt
-    ? formatDateTime(data.invitationExpiresAt, tz)
-    : "in 24 hours";
-  const name = data.recipientName ?? "there";
-
-  const body = `
-    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${BRAND_DARK};">Role Invitation</h1>
-    ${pill("ACCESS INVITE", BRAND_COLOR)}
-    <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:${TEXT_COLOR};">
-      Hi ${name}, ${data.inviterName ?? "A team admin"} invited you to join ${BRAND_NAME} as <strong>${data.invitedRole ?? "a team member"}</strong>.
-    </p>
-    <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-      ${detailRow("Invited Email", data.recipientEmail)}
-      ${detailRow("Role", data.invitedRole ?? "Team member")}
-      ${detailRow("Expires", expiresStr)}
-    </table>
-    ${data.invitationUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("Accept Invitation", data.invitationUrl)}</div>` : ""}
-    <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
-      Sign in with <strong>${data.recipientEmail}</strong> before accepting. This link expires 24 hours after it was sent.
-    </p>
-  `;
-
-  return {
-    subject: `Role Invitation: ${data.invitedRole ?? "Team Access"}`,
-    html: wrapLayout("Role Invitation", body).replace("{{settingsUrl}}", data.settingsUrl ?? "#"),
-  };
-};
-
 export const systemNotificationTemplate = (data: EmailTemplateData & { systemMessage?: string }): EmailTemplate => {
   const name = escapeHtml(data.recipientName ?? "there");
   const message = escapeHtml(data.systemMessage ?? "you have a new system notification.");

@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./authz";
-import { createServerError } from "./errorUtils";
+import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 export const getCalendarEventsForUser = query({
   args: {
