@@ -21,8 +21,8 @@ const formatTimestamp = (timestamp: number) =>
 
 function NotificationsPanel() {
   const { isAuthenticated } = useConvexAuth();
-  const notifications = useQuery(api.notifications.getMyNotifications, isAuthenticated ? {} : "skip");
-  const markAsRead = useMutation(api.notifications.markNotificationAsRead);
+  const notifications = useQuery(api.notifications.index.getMyNotifications, isAuthenticated ? {} : "skip");
+  const markAsRead = useMutation(api.notifications.index.markNotificationAsRead);
 
   if (!notifications || notifications.length === 0) return null;
 

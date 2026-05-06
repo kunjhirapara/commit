@@ -162,7 +162,7 @@ function DashboardOverviewPage() {
     canAccessDeveloperTools ? {} : "skip",
   );
   const notificationOps = useQuery(
-    api.notifications.getNotificationOperationsDashboard,
+    api.notifications.index.getNotificationOperationsDashboard,
     canAccessDeveloperTools ? {} : "skip",
   );
 
