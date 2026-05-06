@@ -61,11 +61,11 @@ function SettingsSkeleton() {
 
 export default function SettingsPage() {
   const preferences = useQuery(
-    api.notifications.getMyNotificationPreferences,
+    api.notifications.index.getMyNotificationPreferences,
     {},
   );
   const updatePreferences = useMutation(
-    api.notifications.updateMyNotificationPreferences,
+    api.notifications.index.updateMyNotificationPreferences,
   );
 
   if (!preferences) return <SettingsSkeleton />;

@@ -37,9 +37,9 @@ const formatRelativeTime = (timestamp: number) => {
 
 function NotificationBell() {
   const { isAuthenticated } = useConvexAuth();
-  const notifications = useQuery(api.notifications.getMyNotifications, isAuthenticated ? {} : "skip");
-  const markAsRead = useMutation(api.notifications.markNotificationAsRead);
-  const markAllAsRead = useMutation(api.notifications.markAllNotificationsAsRead);
+  const notifications = useQuery(api.notifications.index.getMyNotifications, isAuthenticated ? {} : "skip");
+  const markAsRead = useMutation(api.notifications.index.markNotificationAsRead);
+  const markAllAsRead = useMutation(api.notifications.index.markAllNotificationsAsRead);
 
   const unreadNotifications =
     notifications?.filter((notification) => notification.status !== "read") ??

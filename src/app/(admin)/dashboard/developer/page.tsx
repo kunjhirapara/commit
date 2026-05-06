@@ -152,7 +152,7 @@ function DeveloperWorkspacePage() {
 
   const monitoring = useQuery(api.observability.getMonitoringDashboard, {});
   const reliability = useQuery(api.reliability.getReliabilityDashboard, {});
-  const notificationOps = useQuery(api.notifications.getNotificationOperationsDashboard, {});
+  const notificationOps = useQuery(api.notifications.index.getNotificationOperationsDashboard, {});
 
 
   const captureHealthSnapshot = useMutation(api.observability.captureHealthSnapshot);
@@ -160,7 +160,7 @@ function DeveloperWorkspacePage() {
   const resolveRecoveryOperation = useMutation(api.reliability.resolveRecoveryOperation);
   const recordBackupSnapshot = useMutation(api.reliability.recordBackupSnapshot);
   const markBackupRestored = useMutation(api.reliability.markBackupRestored);
-  const retryNotification = useMutation(api.notifications.retryNotification);
+  const retryNotification = useMutation(api.notifications.index.retryNotification);
 
 
   useEffect(() => {
