@@ -68,7 +68,11 @@ function ValueBox({ label, value, accent }: { label: string; value: string; acce
 
 /* ─────────────────────────────────────────────────── main component ── */
 
-function CodeEditor() {
+interface CodeEditorProps {
+  streamCallId?: string;
+}
+
+function CodeEditor({ streamCallId }: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
   const [selectedQuestion, setSelectedQuestion] = useState(CODING_QUESTIONS[0]);
   const [language, setLanguage] = useState<"javascript" | "python" | "java">(LANGUAGES[0].id);
@@ -136,7 +140,7 @@ function CodeEditor() {
       const res  = await fetch("/api/execute", {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ language, code: fullCode }),
+        body:    JSON.stringify({ language, code: fullCode, streamCallId }),
       });
       const data: ExecutionResult = await res.json();
       setResult(data);
