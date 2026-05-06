@@ -18,6 +18,7 @@
 
 # misc
 .DS_Store
+Thumbs.db
 *.pem
 
 # debug
@@ -30,6 +31,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+.clerk
 
 # typescript
 *.tsbuildinfo
@@ -37,6 +39,10 @@ next-env.d.ts
 
 # clerk configuration (can include secrets)
 /.clerk/
+
+# convex local state
+.convex/
+
 
 agents.md
 desired_Features.md

@@ -34,7 +34,6 @@ The goal is not just "more features." A production interview application needs t
 - Candidate-friendly error states instead of blank screens or silent failures.
 - Browser compatibility checks before interview start.
 - Accessible UI with keyboard navigation, focus states, and screen reader support.
-- Mobile and low-bandwidth support for critical flows.
 - Clear in-app status for upcoming, live, completed, cancelled, and rescheduled interviews.
 - Branded candidate experience with company info and interview instructions.
 
@@ -60,14 +59,12 @@ The goal is not just "more features." A production interview application needs t
 - Candidate decision workflow with pass/reject/hold/review outcomes.
 - Comment history with author, timestamps, and edit tracking.
 - Private vs shared notes.
-- Exportable hiring packet containing notes, scorecards, and recordings.
 
-## 6. Data Security and Privacy
+## 6. Data Security
 
 - Strict server-side enforcement on who can read interviews, recordings, comments, and user lists.
 - Encryption for sensitive data in transit and at rest.
 - Secure storage and access control for recordings.
-- PII minimization and field-level access where needed.
 - Data retention policies for recordings, notes, and candidate records.
 - Recording disclosure and compliance support for interviews.
 - Secrets management for Clerk, Convex, Stream, and webhooks.
@@ -90,10 +87,8 @@ The goal is not just "more features." A production interview application needs t
 - Idempotent webhook handling.
 - Graceful fallbacks when third-party services are unavailable.
 - Background jobs for reminders, retries, cleanup, and delayed processing.
-- Backup and restore strategy for interview data.
 - Safe handling for partial failure cases, such as call created but DB write failed.
-- Dead-letter or manual recovery flow for failed background operations.
-- Disaster recovery plan and documented recovery procedures.
+- Manual recovery flow for failed background operations.
 
 ## 9. Admin and Recruiting Operations
 
@@ -103,8 +98,7 @@ The goal is not just "more features." A production interview application needs t
 - Manual override tools for fixing broken interview states.
 - Candidate profile pages with history across rounds.
 - Interviewer management with skills, availability, and role permissions.
-- Reporting on throughput, time-to-hire, cancellation rate, feedback completion, and no-shows.
-- Hiring funnel analytics by stage.
+- Reporting on throughput, cancellation rate, feedback completion, and no-shows.
 
 ## 10. Notifications and Communication
 
@@ -113,7 +107,6 @@ The goal is not just "more features." A production interview application needs t
 - Candidate notifications with timezone-aware details.
 - In-app notifications for important state changes.
 - Delivery tracking and retry handling for failed notifications.
-- Notification preferences and opt-out rules where appropriate.
 
 ## 11. Compliance and Governance
 
@@ -136,7 +129,7 @@ The goal is not just "more features." A production interview application needs t
 - Rate limiting and abuse protection for public or sensitive endpoints.
 - Performance budgets and load testing for concurrent interviews.
 
-## 13. UX Quality Bar for Production
+## 12. UX Quality Bar for Production
 
 - Empty states, loading states, and actionable error states for all main flows.
 - No silent failures and no blank pages on recoverable errors.
@@ -146,17 +139,15 @@ The goal is not just "more features." A production interview application needs t
 - Unsaved-changes protection for long feedback forms.
 - Accessibility testing across the main interview and dashboard flows.
 
-## 14. Interview-Platform-Specific Nice-to-Haves
+## 13. Interview-Platform-Specific Nice-to-Haves
 
 - Live coding collaboration with session persistence and permissions.
 - Whiteboard support for system design rounds.
 - Interview kit attachments such as problem statements and rubrics.
 - Interview playback with timestamps tied to comments.
-- AI-assisted summaries with explicit review and privacy controls.
-- Interview packet generation for hiring committees.
 - Panel interview coordination and moderator controls.
 
-## 15. Highest-Priority Gaps for This Codebase Right Now
+## 14. Highest-Priority Gaps for This Codebase Right Now
 
 Based on the current project structure, these are the most urgent items before calling it production-ready:
 
