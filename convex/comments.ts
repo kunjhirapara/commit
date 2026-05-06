@@ -5,8 +5,8 @@ import {
   requirePermission,
   requireInterviewAccess,
   requireInterviewReviewAccess,
-} from "./authz";
-import { createServerError } from "./errorUtils";
+} from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 export const addComment = mutation({
   args: {

@@ -1,6 +1,6 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requirePermission } from "./authz";
+import { requirePermission } from "./lib/authz";
 
 const telemetryLevelValidator = v.union(
   v.literal("info"),

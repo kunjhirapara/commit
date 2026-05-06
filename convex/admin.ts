@@ -5,8 +5,8 @@ import {
   getCurrentUserRecord,
   logAuditEvent,
   requirePermission,
-} from "./authz";
-import { createServerError } from "./errorUtils";
+} from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 const interviewStatusValidator = v.union(
   v.literal("draft"),

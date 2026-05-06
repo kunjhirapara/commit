@@ -1,6 +1,6 @@
 import { internalMutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { requirePermission } from "./authz";
+import { requirePermission } from "./lib/authz";
 
 const AUDIT_LOG_LIMIT = 20;
 

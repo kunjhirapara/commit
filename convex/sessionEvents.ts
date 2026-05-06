@@ -1,6 +1,6 @@
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
-import { logAuditEvent, requireInterviewAccess, requireInterviewReviewAccess } from "./authz";
+import { logAuditEvent, requireInterviewAccess, requireInterviewReviewAccess } from "./lib/authz";
 
 export const logSessionEvent = mutation({
   args: {

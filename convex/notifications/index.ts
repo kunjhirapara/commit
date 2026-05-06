@@ -1,8 +1,8 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "../_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
-import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./authz";
-import { createServerError } from "./errorUtils";
+import { internal } from "../_generated/api";
+import { getCurrentUserRecord, logAuditEvent, requirePermission } from "../lib/authz";
+import { createServerError } from "../lib/errorUtils";
 
 const notificationChannelValidator = v.union(
   v.literal("in_app"),
@@ -153,10 +153,10 @@ const createNotificationFanout = async (
   });
 
   const delay = Math.max(0, args.scheduledFor - Date.now());
-  await ctx.scheduler.runAfter(delay, internal.notifications.processNotificationDelivery, {
+  await ctx.scheduler.runAfter(delay, internal.notifications.index.processNotificationDelivery, {
     notificationId: inAppId,
   });
-  await ctx.scheduler.runAfter(delay, internal.notifications.processNotificationDelivery, {
+  await ctx.scheduler.runAfter(delay, internal.notifications.index.processNotificationDelivery, {
     notificationId: emailId,
   });
 
@@ -182,7 +182,12 @@ export const processNotificationDelivery = internalMutation({
   },
   handler: async (ctx, args) => {
     const notification = await ctx.db.get(args.notificationId);
-    if (!notification || notification.status === "read" || notification.status === "sent") {
+    if (
+      !notification ||
+      notification.status === "read" ||
+      notification.status === "sent" ||
+      notification.status === "processing"
+    ) {
       return null;
     }
 
@@ -231,14 +236,29 @@ export const processNotificationDelivery = internalMutation({
         // Parse metadata for template data
         const meta = parseMetadata(notification.metadata);
 
+        // Mark as in-flight before scheduling so concurrent retries skip this
+        // notification. deliveryAttempts is incremented here; updateNotificationDelivery
+        // must NOT add to it again. nextRetryAt serves as a recovery deadline: if
+        // dispatchEmailNotification crashes before calling updateNotificationDelivery,
+        // recoverStuckNotifications can reset this after 20 minutes.
+        const nextAttempts = (notification.deliveryAttempts ?? 0) + 1;
+        await ctx.db.patch(args.notificationId, {
+          status: "processing",
+          channel,
+          category,
+          deliveryAttempts: nextAttempts,
+          nextRetryAt: Date.now() + 20 * 60 * 1000,
+        });
+
         // Dispatch email via Convex action -> Next.js API
-        await ctx.scheduler.runAfter(0, internal.emailActions.dispatchEmailNotification, {
+        await ctx.scheduler.runAfter(0, internal.notifications.emailActions.dispatchEmailNotification, {
           notificationId: args.notificationId,
           type: notification.type,
           recipientEmail: notification.recipientEmail,
           recipientName: meta?.recipientName,
           interviewTitle: notification.title,
-          interviewDate: meta?.startTime ?? meta?.interviewDate,
+          interviewDate:
+            meta?.startTime ?? meta?.interviewDate ?? meta?.nextStartTime,
           previousDate: meta?.previousStartTime ?? meta?.previousDate,
           feedbackDueAt: meta?.dueAt ?? meta?.feedbackDueAt,
           timezone: notification.timezone,
@@ -247,14 +267,7 @@ export const processNotificationDelivery = internalMutation({
           metadata: notification.metadata,
         });
 
-        // Mark as pending delivery (the action will update to sent/failed)
-        await ctx.db.patch(args.notificationId, {
-          channel,
-          category,
-          deliveryAttempts: (notification.deliveryAttempts ?? 0) + 1,
-        });
-
-        return { status: "pending" as const };
+        return { status: "processing" as const };
       }
 
       // In-app notifications are delivered immediately
@@ -286,7 +299,7 @@ export const processNotificationDelivery = internalMutation({
       if (attempts < 5) {
         await ctx.scheduler.runAfter(
           Math.max(0, nextRetryAt - Date.now()),
-          internal.notifications.processNotificationDelivery,
+          internal.notifications.index.processNotificationDelivery,
           { notificationId: args.notificationId },
         );
       }
@@ -305,38 +318,37 @@ export const updateNotificationDelivery = internalMutation({
     status: v.union(v.literal("sent"), v.literal("failed")),
     providerMessageId: v.optional(v.string()),
     lastError: v.optional(v.string()),
-    deliveryAttempts: v.number(),
   },
   handler: async (ctx, args) => {
     const notification = await ctx.db.get(args.notificationId);
     if (!notification) return;
 
-    const totalAttempts = (notification.deliveryAttempts ?? 0) + args.deliveryAttempts;
+    // deliveryAttempts was already incremented by processNotificationDelivery
+    // when it set status to "processing". Do not add to it here.
+    const attempts = notification.deliveryAttempts ?? 1;
 
     if (args.status === "sent") {
       await ctx.db.patch(args.notificationId, {
         status: "sent",
         sentAt: Date.now(),
         providerMessageId: args.providerMessageId,
-        deliveryAttempts: totalAttempts,
         nextRetryAt: undefined,
         lastError: undefined,
       });
     } else {
-      const nextRetryAt = computeNextRetryAt(totalAttempts);
+      const nextRetryAt = computeNextRetryAt(attempts);
 
       await ctx.db.patch(args.notificationId, {
         status: "failed",
         lastError: args.lastError ?? "Email delivery failed.",
-        deliveryAttempts: totalAttempts,
         nextRetryAt,
       });
 
       // Schedule retry if under max attempts (5)
-      if (totalAttempts < 5) {
+      if (attempts < 5) {
         await ctx.scheduler.runAfter(
           Math.max(0, nextRetryAt - Date.now()),
-          internal.notifications.processNotificationDelivery,
+          internal.notifications.index.processNotificationDelivery,
           { notificationId: args.notificationId },
         );
       }
@@ -507,7 +519,7 @@ export const getLegacyNotificationBackfillStatus = query({
 export const backfillLegacyNotificationFields = mutation({
   args: {},
   handler: async (ctx) => {
-    const { user } = await getCurrentUserRecord(ctx);
+    const { user } = await requirePermission(ctx, "manageReliability");
     const notifications = await ctx.db.query("notifications").collect();
     let updatedCount = 0;
 
@@ -593,7 +605,7 @@ export const retryNotification = mutation({
       nextRetryAt: undefined,
     });
 
-    await ctx.scheduler.runAfter(0, internal.notifications.processNotificationDelivery, {
+    await ctx.scheduler.runAfter(0, internal.notifications.index.processNotificationDelivery, {
       notificationId: args.notificationId,
     });
 
@@ -614,6 +626,50 @@ export const getUnreadNotificationCount = query({
     return notifications.filter(
       (n) => n.status === "sent" || n.status === "pending",
     ).length;
+  },
+});
+
+export const recoverStuckNotifications = mutation({
+  handler: async (ctx) => {
+    const { user } = await requirePermission(ctx, "manageReliability");
+    const cutoff = Date.now() - 20 * 60 * 1000;
+
+    const stuck = await ctx.db
+      .query("notifications")
+      .withIndex("by_status", (q: any) => q.eq("status", "processing"))
+      .collect();
+
+    let recoveredCount = 0;
+    for (const n of stuck) {
+      if ((n.nextRetryAt ?? 0) < cutoff) {
+        const attempts = n.deliveryAttempts ?? 1;
+        const nextRetryAt = computeNextRetryAt(attempts);
+        await ctx.db.patch(n._id, {
+          status: "failed",
+          lastError: "Recovered from stuck processing state.",
+          nextRetryAt,
+        });
+        if (attempts < 5) {
+          await ctx.scheduler.runAfter(
+            Math.max(0, nextRetryAt - Date.now()),
+            internal.notifications.index.processNotificationDelivery,
+            { notificationId: n._id },
+          );
+        }
+        recoveredCount++;
+      }
+    }
+
+    await logAuditEvent(ctx, {
+      action: "notifications.recovered",
+      actorClerkId: user.clerkId,
+      actorEmail: user.email,
+      targetType: "notification",
+      targetId: "batch",
+      metadata: { recoveredCount },
+    });
+
+    return { recoveredCount };
   },
 });
 

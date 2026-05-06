@@ -9,8 +9,8 @@ import {
   requireAnyPermission,
   requirePermission,
   getCurrentUserRecord,
-} from "./authz";
-import { createServerError } from "./errorUtils";
+} from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 const INVITATION_LIST_LIMIT = 12;
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
