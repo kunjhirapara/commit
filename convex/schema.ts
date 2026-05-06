@@ -33,6 +33,7 @@ const interviewStatus = v.union(
 
 const notificationStatus = v.union(
   v.literal("pending"),
+  v.literal("processing"),
   v.literal("sent"),
   v.literal("read"),
   v.literal("failed"),

@@ -1,8 +1,8 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./authz";
-import { createServerError } from "./errorUtils";
+import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 const jobKindValidator = v.union(
   v.literal("interview_reminder"),
@@ -189,6 +189,21 @@ export const enqueueJob = internalMutation({
     );
 
     return jobId;
+  },
+});
+
+export const cancelQueuedJobsForInterview = internalMutation({
+  args: { interviewId: v.string() },
+  handler: async (ctx, args) => {
+    const jobs = await ctx.db.query("backgroundJobs").collect();
+    for (const job of jobs) {
+      if (
+        job.relatedId === args.interviewId &&
+        (job.status === "queued" || job.status === "running")
+      ) {
+        await ctx.db.patch(job._id, { status: "cancelled" });
+      }
+    }
   },
 });
 
