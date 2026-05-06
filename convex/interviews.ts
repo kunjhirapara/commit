@@ -9,8 +9,8 @@ import {
   requireInterviewAccess,
   requireInterviewReviewAccess,
   requirePermission,
-} from "./authz";
-import { createServerError } from "./errorUtils";
+} from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 const INTERVIEW_STATUSES = [
   "draft",
@@ -195,7 +195,7 @@ const queueInterviewNotifications = async (
 ) => {
   const recipients = [args.candidateId, ...args.interviewerIds];
 
-  await ctx.runMutation(internal.notifications.queueInterviewNotifications, {
+  await ctx.runMutation(internal.notifications.index.queueInterviewNotifications, {
     interviewId: args.interviewId,
     recipientClerkIds: recipients,
     type: args.type,
@@ -481,7 +481,7 @@ const processFeedbackReminder = async (ctx: any, interview: any) => {
     return;
   }
 
-  await ctx.runMutation(internal.notifications.queueInterviewNotifications, {
+  await ctx.runMutation(internal.notifications.index.queueInterviewNotifications, {
     interviewId: normalizedInterview._id,
     recipientClerkIds: pendingInterviewers,
     type: "feedback.reminder",
@@ -550,7 +550,9 @@ export const getCalendarInterviewsForUser = query({
     const targetClerkId = args.userClerkId || user.clerkId;
 
     if (targetClerkId !== user.clerkId) {
-      await requirePermission(ctx, "viewUsers");
+      // scheduleInterviews is held only by recruiter and admin — prevents
+      // interviewers from enumerating other users' full interview schedules.
+      await requirePermission(ctx, "scheduleInterviews");
     }
 
     const interviews = (await ctx.db.query("interviews").collect()).map(
@@ -883,6 +885,10 @@ export const rescheduleInterview = mutation({
       },
     });
 
+    await ctx.runMutation(internal.reliability.cancelQueuedJobsForInterview, {
+      interviewId: args.interviewId,
+    });
+
     await scheduleInterviewBackgroundWork(ctx, {
       interviewId: args.interviewId,
       scheduledStartTime: args.scheduledStartTime,
@@ -907,6 +913,10 @@ export const cancelInterview = mutation({
         "Interview not found.",
       );
     }
+
+    await ctx.runMutation(internal.reliability.cancelQueuedJobsForInterview, {
+      interviewId: args.interviewId,
+    });
 
     const normalizedInterview = normalizeInterview(interview);
 
