@@ -3,8 +3,8 @@ import { v } from "convex/values";
 import {
   logAuditEvent,
   requireInterviewReviewAccess,
-} from "./authz";
-import { createServerError } from "./errorUtils";
+} from "./lib/authz";
+import { createServerError } from "./lib/errorUtils";
 
 const feedbackVisibilityValidator = v.union(
   v.literal("shared"),

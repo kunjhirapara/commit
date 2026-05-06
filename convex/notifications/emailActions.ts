@@ -17,12 +17,12 @@
  *   npx convex env set SMTP_FROM_EMAIL <value>
  */
 
-import { internalAction } from "./_generated/server";
+import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
-import { internal } from "./_generated/api";
+import { internal } from "../_generated/api";
 import nodemailer from "nodemailer";
-import { resolveEmailTemplate } from "./emailTemplates";
-import type { EmailTemplateData } from "./emailTemplates";
+import { resolveEmailTemplate } from "../lib/emailTemplates";
+import type { EmailTemplateData } from "../lib/emailTemplates";
 
 // ---------------------------------------------------------------------------
 // Transport (created once per cold start)
@@ -96,11 +96,10 @@ export const dispatchEmailNotification = internalAction({
 
     if (!template) {
       console.warn(`[emailActions] No template found for type: ${args.type}`);
-      await ctx.runMutation(internal.notifications.updateNotificationDelivery, {
+      await ctx.runMutation(internal.notifications.index.updateNotificationDelivery, {
         notificationId: args.notificationId,
         status: "failed",
         lastError: `No email template for type: ${args.type}`,
-        deliveryAttempts: 1,
       });
       return { success: false, error: `No template for type: ${args.type}` };
     }
@@ -114,11 +113,10 @@ export const dispatchEmailNotification = internalAction({
         to: args.recipientEmail,
         subject: template.subject,
       });
-      await ctx.runMutation(internal.notifications.updateNotificationDelivery, {
+      await ctx.runMutation(internal.notifications.index.updateNotificationDelivery, {
         notificationId: args.notificationId,
         status: "failed",
         lastError: "SMTP not configured. Set Convex env vars: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS.",
-        deliveryAttempts: 1,
       });
       return { success: false, error: "SMTP not configured" };
     }
@@ -141,11 +139,10 @@ export const dispatchEmailNotification = internalAction({
         messageId: info.messageId,
       });
 
-      await ctx.runMutation(internal.notifications.updateNotificationDelivery, {
+      await ctx.runMutation(internal.notifications.index.updateNotificationDelivery, {
         notificationId: args.notificationId,
         status: "sent",
         providerMessageId: info.messageId,
-        deliveryAttempts: 1,
       });
 
       return { success: true, messageId: info.messageId };
@@ -156,11 +153,10 @@ export const dispatchEmailNotification = internalAction({
         error: errorMessage,
       });
 
-      await ctx.runMutation(internal.notifications.updateNotificationDelivery, {
+      await ctx.runMutation(internal.notifications.index.updateNotificationDelivery, {
         notificationId: args.notificationId,
         status: "failed",
         lastError: errorMessage,
-        deliveryAttempts: 1,
       });
 
       return { success: false, error: errorMessage };

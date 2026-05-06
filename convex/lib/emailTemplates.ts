@@ -18,13 +18,33 @@ const SUCCESS_COLOR = "#22c55e";
 const WARNING_COLOR = "#f59e0b";
 const DANGER_COLOR = "#ef4444";
 
+// User-supplied fields (recipient name, interview title, reason, etc.) flow into
+// these templates. Anything rendered as HTML must go through escapeHtml; any URL
+// rendered into an href must go through safeUrl to block javascript:/data: payloads.
+const escapeHtml = (value: unknown): string => {
+  if (value === undefined || value === null) return "";
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+const safeUrl = (value: unknown, fallback = "#"): string => {
+  if (typeof value !== "string") return fallback;
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return fallback;
+  return escapeHtml(trimmed);
+};
+
 const wrapLayout = (title: string, body: string, settingsUrl: string) => `
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>${title}</title>
+  <title>${escapeHtml(title)}</title>
 </head>
 <body style="margin:0;padding:0;background-color:${BG_COLOR};font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:${TEXT_COLOR};-webkit-font-smoothing:antialiased;">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:${BG_COLOR};">
@@ -45,7 +65,7 @@ const wrapLayout = (title: string, body: string, settingsUrl: string) => `
             <td style="padding:24px 0;text-align:center;">
               <p style="margin:0;font-size:12px;color:${MUTED_COLOR};line-height:1.6;">
                 You received this email because of your ${BRAND_NAME} account.<br />
-                <a href="${settingsUrl}" style="color:${BRAND_COLOR};text-decoration:underline;">Manage notification preferences</a>
+                <a href="${safeUrl(settingsUrl)}" style="color:${BRAND_COLOR};text-decoration:underline;">Manage notification preferences</a>
               </p>
             </td>
           </tr>
@@ -58,14 +78,16 @@ const wrapLayout = (title: string, body: string, settingsUrl: string) => `
 `;
 
 const pill = (text: string, color: string) =>
-  `<span style="display:inline-block;padding:4px 12px;border-radius:9999px;background-color:${color}15;color:${color};font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">${text}</span>`;
+  `<span style="display:inline-block;padding:4px 12px;border-radius:9999px;background-color:${color}15;color:${color};font-size:12px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;">${escapeHtml(text)}</span>`;
 
 const ctaButton = (label: string, url: string, color = BRAND_COLOR) =>
-  `<a href="${url}" style="display:inline-block;padding:12px 28px;background-color:${color};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;letter-spacing:0.02em;">${label}</a>`;
+  `<a href="${safeUrl(url)}" style="display:inline-block;padding:12px 28px;background-color:${color};color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;letter-spacing:0.02em;">${escapeHtml(label)}</a>`;
 
+// `value` is treated as already-safe HTML so callers can pass formatted dates/icons.
+// Untrusted text passed into `value` MUST be escaped at the call site.
 const detailRow = (label: string, value: string) =>
   `<tr>
-    <td style="padding:8px 0;font-size:13px;color:${MUTED_COLOR};width:130px;vertical-align:top;">${label}</td>
+    <td style="padding:8px 0;font-size:13px;color:${MUTED_COLOR};width:130px;vertical-align:top;">${escapeHtml(label)}</td>
     <td style="padding:8px 0;font-size:13px;font-weight:500;">${value}</td>
   </tr>`;
 
@@ -110,8 +132,12 @@ export const resolveEmailTemplate = (
   data: EmailTemplateData,
 ): EmailTemplate | null => {
   const tz = data.timezone ?? "UTC";
-  const name = data.recipientName ?? "there";
+  const rawName = data.recipientName ?? "there";
+  const name = escapeHtml(rawName);
   const settings = data.settingsUrl ?? "#";
+  const rawTitle = data.interviewTitle ?? "—";
+  const title = escapeHtml(rawTitle);
+  const reason = data.reason ? escapeHtml(data.reason) : "";
 
   switch (type) {
     case "interview.scheduled": {
@@ -123,9 +149,9 @@ export const resolveEmailTemplate = (
           Hi ${name}, your interview has been scheduled. Here are the details:
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Interview", data.interviewTitle ?? "—")}
+          ${detailRow("Interview", title)}
           ${detailRow("Date & Time", dateStr)}
-          ${detailRow("Timezone", tz)}
+          ${detailRow("Timezone", escapeHtml(tz))}
         </table>
         ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("View Interview", data.interviewUrl)}</div>` : ""}
         <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
@@ -133,7 +159,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `Interview Scheduled: ${data.interviewTitle ?? "Upcoming Interview"}`,
+        subject: `Interview Scheduled: ${rawTitle}`,
         html: wrapLayout("Interview Scheduled", body, settings),
       };
     }
@@ -148,16 +174,16 @@ export const resolveEmailTemplate = (
           Hi ${name}, your interview has been rescheduled. Please review the updated details below.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Interview", data.interviewTitle ?? "—")}
+          ${detailRow("Interview", title)}
           ${detailRow("Previous Time", `<s style="color:${MUTED_COLOR};">${oldDateStr}</s>`)}
           ${detailRow("New Time", `<strong style="color:${BRAND_COLOR};">${newDateStr}</strong>`)}
-          ${detailRow("Timezone", tz)}
-          ${data.reason ? detailRow("Reason", data.reason) : ""}
+          ${detailRow("Timezone", escapeHtml(tz))}
+          ${reason ? detailRow("Reason", reason) : ""}
         </table>
         ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("View Interview", data.interviewUrl)}</div>` : ""}
       `;
       return {
-        subject: `Interview Rescheduled: ${data.interviewTitle ?? "Interview Update"}`,
+        subject: `Interview Rescheduled: ${rawTitle}`,
         html: wrapLayout("Interview Rescheduled", body, settings),
       };
     }
@@ -170,15 +196,15 @@ export const resolveEmailTemplate = (
           Hi ${name}, unfortunately the following interview has been cancelled.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Interview", data.interviewTitle ?? "—")}
-          ${data.reason ? detailRow("Reason", data.reason) : detailRow("Reason", "No reason provided.")}
+          ${detailRow("Interview", title)}
+          ${reason ? detailRow("Reason", reason) : detailRow("Reason", "No reason provided.")}
         </table>
         <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
           If you have questions about this cancellation, please contact your recruiter.
         </p>
       `;
       return {
-        subject: `Interview Cancelled: ${data.interviewTitle ?? "Interview Update"}`,
+        subject: `Interview Cancelled: ${rawTitle}`,
         html: wrapLayout("Interview Cancelled", body, settings),
       };
     }
@@ -192,9 +218,9 @@ export const resolveEmailTemplate = (
           Hi ${name}, this is a friendly reminder that your interview is coming up shortly.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Interview", data.interviewTitle ?? "—")}
+          ${detailRow("Interview", title)}
           ${detailRow("Starts At", dateStr)}
-          ${detailRow("Timezone", tz)}
+          ${detailRow("Timezone", escapeHtml(tz))}
         </table>
         ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("Join Interview", data.interviewUrl, SUCCESS_COLOR)}</div>` : ""}
         <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
@@ -202,7 +228,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `Reminder: ${data.interviewTitle ?? "Interview"} starts soon`,
+        subject: `Reminder: ${rawTitle} starts soon`,
         html: wrapLayout("Interview Reminder", body, settings),
       };
     }
@@ -216,9 +242,9 @@ export const resolveEmailTemplate = (
           Hi ${name}, please submit your feedback for the interview below.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Interview", data.interviewTitle ?? "—")}
+          ${detailRow("Interview", title)}
           ${detailRow("Due By", dueStr)}
-          ${detailRow("Timezone", tz)}
+          ${detailRow("Timezone", escapeHtml(tz))}
         </table>
         ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("Submit Feedback", data.interviewUrl, WARNING_COLOR)}</div>` : ""}
         <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
@@ -226,7 +252,7 @@ export const resolveEmailTemplate = (
         </p>
       `;
       return {
-        subject: `Feedback Due: ${data.interviewTitle ?? "Interview Feedback"}`,
+        subject: `Feedback Due: ${rawTitle}`,
         html: wrapLayout("Feedback Reminder", body, settings),
       };
     }
@@ -235,20 +261,23 @@ export const resolveEmailTemplate = (
       const expiresAt = data.invitationExpiresAt
         ? formatDateTime(data.invitationExpiresAt, tz)
         : "in 24 hours";
+      const inviter = escapeHtml(data.inviterName ?? "A team admin");
+      const role = escapeHtml(data.invitedRole ?? "a team member");
+      const recipientEmail = escapeHtml(data.recipientEmail);
       const body = `
         <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${BRAND_DARK};">Role Invitation</h1>
         ${pill("ACCESS INVITE", BRAND_COLOR)}
         <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:${TEXT_COLOR};">
-          Hi ${name}, ${data.inviterName ?? "A team admin"} invited you to join ${BRAND_NAME} as <strong>${data.invitedRole ?? "a team member"}</strong>.
+          Hi ${name}, ${inviter} invited you to join ${BRAND_NAME} as <strong>${role}</strong>.
         </p>
         <table role="presentation" cellpadding="0" cellspacing="0" style="margin:20px 0;width:100%;border-top:1px solid ${BORDER_COLOR};">
-          ${detailRow("Invited Email", data.recipientEmail)}
-          ${detailRow("Role", data.invitedRole ?? "Team member")}
+          ${detailRow("Invited Email", recipientEmail)}
+          ${detailRow("Role", escapeHtml(data.invitedRole ?? "Team member"))}
           ${detailRow("Expires", expiresAt)}
         </table>
         ${data.invitationUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("Accept Invitation", data.invitationUrl)}</div>` : ""}
         <p style="margin:24px 0 0;font-size:13px;color:${MUTED_COLOR};line-height:1.6;">
-          Sign in with <strong>${data.recipientEmail}</strong> before accepting. This link expires 24 hours after it was sent.
+          Sign in with <strong>${recipientEmail}</strong> before accepting. This link expires 24 hours after it was sent.
         </p>
       `;
       return {
@@ -268,7 +297,7 @@ export const resolveEmailTemplate = (
           ${data.interviewUrl ? `<div style="text-align:center;margin:28px 0 8px;">${ctaButton("View Details", data.interviewUrl)}</div>` : ""}
         `;
         return {
-          subject: `${data.brandName ?? BRAND_NAME} – ${data.interviewTitle ?? "System Notification"}`,
+          subject: `${data.brandName ?? BRAND_NAME} – ${rawTitle === "—" ? "System Notification" : rawTitle}`,
           html: wrapLayout("System Notification", body, settings),
         };
       }

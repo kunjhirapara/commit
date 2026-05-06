@@ -3,7 +3,7 @@ import { httpAction } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { Webhook } from "svix";
-import { createServerError, logServerError } from "./errorUtils";
+import { createServerError, logServerError } from "./lib/errorUtils";
 
 const http = httpRouter();
 
