@@ -1,6 +1,7 @@
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { useMutation, useQuery } from "convex/react";
 import { useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { Doc } from "../../../../convex/_generated/dataModel";
 import { toast } from "sonner";
@@ -167,6 +168,13 @@ function InterviewScheduleUI() {
             custom: {
               description: title,
               additionalDetails: description,
+            },
+            settings_override: {
+              recording: {
+                mode: "available",
+                audio_only: false,
+                quality: "1080p",
+              },
             },
           },
         });
@@ -683,25 +691,21 @@ function InterviewScheduleUI() {
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 p-4">
           {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="space-y-3">
-              <div className="rounded-xl border bg-card p-4 space-y-3 animate-pulse">
-                {/* Header row */}
+              <div className="rounded-xl border bg-card p-4 space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="h-4 w-1/2 rounded bg-muted" />
-                  <div className="h-5 w-16 rounded-full bg-muted" />
+                  <Skeleton className="h-4 w-1/2" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
                 </div>
-                {/* Meta lines */}
                 <div className="space-y-2">
-                  <div className="h-3 w-3/4 rounded bg-muted" />
-                  <div className="h-3 w-1/2 rounded bg-muted" />
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
                 </div>
-                {/* Avatar row */}
                 <div className="flex gap-2 pt-1">
-                  <div className="h-8 w-8 rounded-full bg-muted" />
-                  <div className="h-8 w-8 rounded-full bg-muted" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
+                  <Skeleton className="h-8 w-8 rounded-full" />
                 </div>
               </div>
-              {/* Skeleton for the Manage Lifecycle button */}
-              <div className="h-9 w-full rounded-md bg-muted animate-pulse" />
+              <Skeleton className="h-9 w-full rounded-md" />
             </div>
           ))}
         </div>
