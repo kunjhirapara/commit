@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  CancelCallButton,
   CallingState,
   CallParticipantsList,
   OwnCapability,
@@ -19,11 +18,19 @@ import {
 import { useMutation } from "convex/react";
 import {
   AlertTriangleIcon,
+  CheckIcon,
   Clock3Icon,
+  GridIcon,
   LayoutListIcon,
   LoaderIcon,
+  MicOffIcon,
+  PhoneIcon,
+  ShieldIcon,
   UsersIcon,
-  VideoOffIcon,
+  UserXIcon,
+  VideoIcon,
+  WifiIcon,
+  XIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -39,6 +46,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 import { Button } from "./button";
@@ -49,6 +58,7 @@ import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useCallEndHandler } from "@/hooks/useCallEndHandler";
 import { useUserRole } from "@/hooks/useUserRole";
+import { cleanupMeetingMedia } from "@/lib/meetingCleanup";
 
 type Interview = Doc<"interviews">;
 
@@ -58,6 +68,46 @@ const CONNECTION_STATE_COPY: Partial<Record<CallingState, string>> = {
   [CallingState.OFFLINE]: "Network offline",
   [CallingState.MIGRATING]: "Moving you to a healthier connection",
 };
+
+function NetworkPill({
+  publisherLatency,
+  subscriberLatency,
+  packetLoss,
+  isDegraded,
+}: {
+  publisherLatency: number;
+  subscriberLatency: number;
+  packetLoss: number;
+  isDegraded: boolean;
+}) {
+  return (
+    <div
+      aria-label={`Network: ${isDegraded ? "degraded" : "good"}`}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium backdrop-blur-sm transition-colors duration-300",
+        isDegraded
+          ? "border-amber-400/40 bg-amber-950/60 text-amber-300"
+          : "border-white/10 bg-black/40 text-white/70",
+      )}>
+      <WifiIcon
+        className={cn(
+          "size-3",
+          isDegraded ? "text-amber-400" : "text-emerald-400",
+        )}
+        aria-hidden="true"
+      />
+      <span>{Math.round(publisherLatency)}↑</span>
+      <span className="opacity-50">·</span>
+      <span>{Math.round(subscriberLatency)}↓</span>
+      {packetLoss > 0 && (
+        <>
+          <span className="opacity-50">·</span>
+          <span className="text-amber-300">{packetLoss} lost</span>
+        </>
+      )}
+    </div>
+  );
+}
 
 function MeetingRoom({ interview }: { interview?: Interview }) {
   const router = useRouter();
@@ -69,12 +119,8 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
   const [hostActionLoading, setHostActionLoading] = useState<
-    "mute" | "record" | "remove" | null
+    "mute" | "remove" | null
   >(null);
-  const [recordingNoticeVisible, setRecordingNoticeVisible] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return localStorage.getItem("commit-recording-notice-dismissed") !== "1";
-  });
 
   const logSessionEvent = useMutation(api.sessionEvents.logSessionEvent);
 
@@ -84,7 +130,6 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     useCallStatsReport,
     useParticipants,
     useLocalParticipant,
-    useIsCallRecordingInProgress,
     useHasPermissions,
   } = useCallStateHooks();
 
@@ -94,9 +139,13 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
   const { hasCallEnded, isRedirecting } = useCallEndHandler();
   const statsReport = useCallStatsReport();
   const participants = useParticipants();
-  const isRecording = useIsCallRecordingInProgress();
   const localParticipant = useLocalParticipant();
-  const { user: currentUser, isAdmin, isRecruiter } = useUserRole();
+  const {
+    user: currentUser,
+    isAdmin,
+    isRecruiter,
+    isLoading: isUserLoading,
+  } = useUserRole();
 
   const previousParticipantIdsRef = useRef<string[]>([]);
   const previousCallingStateRef = useRef<CallingState | null>(null);
@@ -105,20 +154,20 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
   const isPastScheduledEnd =
     scheduledEndTime !== null ? Date.now() > scheduledEndTime : false;
   const isHost =
-    !!interview &&
-    !!currentUser &&
-    (isAdmin ||
-      isRecruiter ||
-      interview.interviewerIds.includes(currentUser.clerkId) ||
-      interview.interviewerIds.includes(localParticipant?.userId ?? ""));
+    (!!call?.state.createdBy?.id &&
+      call.state.createdBy.id === localParticipant?.userId) ||
+    // App-level: admin/recruiter role or listed as interviewer for this interview
+    (!isUserLoading &&
+      !!interview &&
+      !!currentUser &&
+      (isAdmin ||
+        isRecruiter ||
+        interview.interviewerIds.includes(currentUser.clerkId) ||
+        interview.interviewerIds.includes(localParticipant?.userId ?? "")));
   const canSendAudio = useHasPermissions(OwnCapability.SEND_AUDIO);
   const canSendVideo = useHasPermissions(OwnCapability.SEND_VIDEO);
   const canCreateReaction = useHasPermissions(OwnCapability.CREATE_REACTION);
   const canScreenshare = useHasPermissions(OwnCapability.SCREENSHARE);
-  const canRecordCall = useHasPermissions(
-    OwnCapability.START_RECORD_CALL,
-    OwnCapability.STOP_RECORD_CALL,
-  );
 
   const networkHealth = useMemo(() => {
     const publisherLatency =
@@ -151,7 +200,7 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     };
   }, [callingState, isOnline, statsReport]);
 
-  /* ── network event ── */
+  /* ── network events ── */
   useEffect(() => {
     const on = () => setIsOnline(true);
     const off = () => setIsOnline(false);
@@ -233,12 +282,24 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     );
   }, [interview, logSessionEvent, participants]);
 
-  if (callingState !== CallingState.JOINED)
+  /* ── connecting state ── */
+  if (callingState !== CallingState.JOINED) {
     return (
-      <div className="h-96 flex items-center justify-center">
-        <LoaderIcon className="size-6 animate-spin" />
+      <div className="flex h-[calc(100vh-4rem-1px)] items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex size-14 items-center justify-center rounded-2xl border border-border/70 bg-card/80 shadow-sm backdrop-blur">
+            <LoaderIcon className="size-6 animate-spin text-primary" />
+          </div>
+          <div>
+            <p className="text-sm font-medium">Connecting to your interview</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              {CONNECTION_STATE_COPY[callingState] ?? "Preparing your session…"}
+            </p>
+          </div>
+        </div>
       </div>
     );
+  }
 
   if (hasCallEnded || isRedirecting || (endedAt && !canJoinEndedCall)) {
     return (
@@ -252,12 +313,11 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     );
   }
 
-  /* ── host actions (fixed API calls) ── */
+  /* ── host actions ── */
   const handleMuteAll = async () => {
     if (!call || !interview) return;
     setHostActionLoading("mute");
     try {
-      // Correct Stream SDK API — no casting needed
       await call.muteAllUsers("audio");
       await logSessionEvent({
         interviewId: interview._id,
@@ -276,42 +336,10 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     }
   };
 
-  const handleToggleRecording = async () => {
-    if (!call || !interview) return;
-    setHostActionLoading("record");
-    try {
-      if (isRecording) {
-        await call.stopRecording();
-      } else {
-        await call.startRecording();
-      }
-      await logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
-        type: isRecording ? "recording.stopped" : "recording.started",
-        detail: isRecording
-          ? "Host stopped recording"
-          : "Host started recording",
-      });
-      toast.success(isRecording ? "Recording stopped." : "Recording started.");
-    } catch (error) {
-      logError("MeetingRoom.handleToggleRecording", error, {
-        interviewId: interview._id,
-        recording: isRecording,
-      });
-      toast.error(
-        getDisplayErrorMessage(error, "Unable to update recording right now."),
-      );
-    } finally {
-      setHostActionLoading(null);
-    }
-  };
-
   const handleRemoveParticipant = async (userId: string) => {
     if (!call || !interview) return;
     setHostActionLoading("remove");
     try {
-      // Correct Stream SDK call to block a user from re-joining mid-session
       await call.blockUser(userId);
       await logSessionEvent({
         interviewId: interview._id,
@@ -334,25 +362,25 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     }
   };
 
-  const dismissRecordingNotice = () => {
-    localStorage.setItem("commit-recording-notice-dismissed", "1");
-    setRecordingNoticeVisible(false);
+  const handleLeave = () => {
+    if (!call) return;
+
+    const leavePromise = cleanupMeetingMedia(call, {
+      message: "Participant left",
+    });
+
+    toast.promise(leavePromise, {
+      loading: "Leaving the meeting…",
+      success: "You've left the meeting.",
+      error: "Something went wrong while leaving.",
+    });
+
+    leavePromise.finally(() => router.push("/"));
   };
 
   /* ── render ── */
   return (
     <div className="flex h-[calc(100vh-4rem-1px)] flex-col overflow-hidden bg-background lg:flex-row">
-      {recordingNoticeVisible && (
-        <div className="flex shrink-0 items-center gap-3 border-b bg-amber-50 px-4 py-2.5 text-sm text-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
-          <span className="flex-1">This interview session may be recorded for evaluation purposes.</span>
-          <button
-            type="button"
-            onClick={dismissRecordingNotice}
-            className="shrink-0 text-xs underline underline-offset-2 hover:no-underline">
-            Got it
-          </button>
-        </div>
-      )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1">
         {/* ── Video panel ── */}
         <ResizablePanel defaultSize={25} minSize={10} className="relative">
@@ -360,16 +388,19 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
             {/* Status banners */}
             <div className="absolute left-3 right-3 top-3 z-20 space-y-2">
               {(!isOnline || networkHealth.isDegraded) && (
-                <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm">
+                <div
+                  role="alert"
+                  className="rounded-xl border border-amber-300/60 bg-amber-950/80 px-4 py-3 text-amber-100 shadow-lg backdrop-blur-sm">
                   <div className="flex items-start gap-3">
-                    <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <AlertTriangleIcon
+                      className="mt-0.5 size-4 shrink-0 text-amber-400"
+                      aria-hidden="true"
+                    />
                     <div className="min-w-0 flex-1 space-y-0.5">
-                      <p className="font-medium text-sm">
-                        {isOnline
-                          ? "Call quality is degraded"
-                          : "You are offline"}
+                      <p className="text-sm font-medium">
+                        {isOnline ? "Call quality degraded" : "You are offline"}
                       </p>
-                      <p className="text-xs text-amber-900/80 hidden sm:block">
+                      <p className="hidden text-xs text-amber-200/80 sm:block">
                         Switch to speaker view and reduce video quality if
                         needed.
                       </p>
@@ -377,24 +408,29 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="shrink-0 text-xs"
+                      className="shrink-0 border-amber-500/40 bg-amber-900/50 text-xs text-amber-100 hover:bg-amber-800/60"
                       onClick={() => setLayout("speaker")}>
-                      Fix
+                      Speaker view
                     </Button>
                   </div>
                 </div>
               )}
 
               {isPastScheduledEnd && (
-                <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-950 shadow-sm">
+                <div
+                  role="status"
+                  className="rounded-xl border border-blue-300/30 bg-blue-950/80 px-4 py-3 text-blue-100 shadow-lg backdrop-blur-sm">
                   <div className="flex items-start gap-3">
-                    <Clock3Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                    <Clock3Icon
+                      className="mt-0.5 size-4 shrink-0 text-blue-400"
+                      aria-hidden="true"
+                    />
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-sm">
+                      <p className="text-sm font-medium">
                         Past scheduled end time
                       </p>
-                      <p className="text-xs text-blue-900/80 hidden sm:block">
-                        Wrap up or end the session.
+                      <p className="hidden text-xs text-blue-200/80 sm:block">
+                        Wrap up or end the session when ready.
                       </p>
                     </div>
                   </div>
@@ -407,7 +443,7 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
             {/* Participants sidebar */}
             {showParticipants && (
-              <div className="absolute right-0 top-0 h-full w-72 border-l border-border/70 bg-background/95 p-5 backdrop-blur-sm">
+              <div className="absolute right-0 top-0 z-10 p-4 h-full w-72 border-l border-border/70 bg-background/95 backdrop-blur-sm">
                 <CallParticipantsList
                   onClose={() => setShowParticipants(false)}
                 />
@@ -416,20 +452,19 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
           </div>
 
           {/* Bottom call controls */}
-          <div className="absolute bottom-0 left-0 right-0 z-10">
-            {/* Network stats bar */}
-            <div className="flex justify-center gap-4 px-4 pb-1 text-xs text-foreground/75 drop-shadow-sm dark:text-white/70">
-              <span>{Math.round(networkHealth.publisherLatency)}ms up</span>
-              <span>{Math.round(networkHealth.subscriberLatency)}ms down</span>
-              {networkHealth.packetLoss > 0 && (
-                <span className="text-amber-600 dark:text-amber-400">
-                  {networkHealth.packetLoss} lost
-                </span>
-              )}
+          <div className="absolute bottom-0 left-0 right-0 z-1">
+            {/* Network stats pill */}
+            <div className="flex justify-center pb-1 pt-0">
+              <NetworkPill
+                publisherLatency={networkHealth.publisherLatency}
+                subscriberLatency={networkHealth.subscriberLatency}
+                packetLoss={networkHealth.packetLoss}
+                isDegraded={networkHealth.isDegraded}
+              />
             </div>
 
-            <div className="bg-gradient-to-t from-background/95 via-background/55 to-transparent pb-4 pt-6 dark:from-black/70 dark:via-black/35">
-              <div className="flex items-center justify-center gap-2 flex-wrap px-4">
+            <div className="bg-gradient-to-t from-background/95 via-background/55 to-transparent pb-4 pt-5 dark:from-black/80 dark:via-black/40">
+              <div className="flex flex-wrap items-center justify-center gap-2 px-4">
                 {canSendAudio ? (
                   <SpeakingWhileMutedNotification>
                     <ToggleAudioPublishingButton />
@@ -438,8 +473,15 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                 {canSendVideo ? <ToggleVideoPublishingButton /> : null}
                 {canCreateReaction ? <ReactionsButton /> : null}
                 {canScreenshare ? <ScreenShareButton /> : null}
-                {isHost && canRecordCall ? <RecordCallButton /> : null}
-                <CancelCallButton onLeave={() => router.push("/")} />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  aria-label="Leave meeting"
+                  title="Leave meeting"
+                  onClick={handleLeave}
+                  className="size-10 cursor-pointer rounded-full border-rose-300/60 bg-rose-50 text-rose-600 shadow-sm backdrop-blur hover:bg-rose-100 hover:text-rose-700 dark:border-rose-800/40 dark:bg-rose-950/40 dark:text-rose-400 dark:hover:bg-rose-900/60">
+                  <PhoneIcon className="size-4" aria-hidden="true" />
+                </Button>
 
                 {/* Layout picker */}
                 <DropdownMenu>
@@ -447,28 +489,147 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="size-10 rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20">
-                      <LayoutListIcon className="size-4" />
+                      aria-label={`Switch layout — currently ${layout === "grid" ? "grid" : "speaker"} view`}
+                      className="size-10 cursor-pointer rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur transition-colors hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20">
+                      <LayoutListIcon className="size-4" aria-hidden="true" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem onClick={() => setLayout("grid")}>
-                      Grid View
+                  <DropdownMenuContent align="center" className="min-w-[160px]">
+                    <DropdownMenuItem
+                      onClick={() => setLayout("speaker")}
+                      className="flex cursor-pointer items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <LayoutListIcon
+                          className="size-4 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        Speaker view
+                      </div>
+                      {layout === "speaker" && (
+                        <CheckIcon
+                          className="size-4 text-primary"
+                          aria-hidden="true"
+                        />
+                      )}
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setLayout("speaker")}>
-                      Speaker View
+                    <DropdownMenuItem
+                      onClick={() => setLayout("grid")}
+                      className="flex cursor-pointer items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <GridIcon
+                          className="size-4 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        Grid view
+                      </div>
+                      {layout === "grid" && (
+                        <CheckIcon
+                          className="size-4 text-primary"
+                          aria-hidden="true"
+                        />
+                      )}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Participants */}
+                {/* Participants toggle */}
                 <Button
                   variant="outline"
                   size="icon"
-                  className="size-10 rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
-                  onClick={() => setShowParticipants((p) => !p)}>
-                  <UsersIcon className="size-4" />
+                  aria-label={
+                    showParticipants
+                      ? "Hide participants"
+                      : `Show participants (${participants.length})`
+                  }
+                  aria-pressed={showParticipants}
+                  onClick={() => setShowParticipants((p) => !p)}
+                  className={cn(
+                    "relative size-10 p-5 cursor-pointer rounded-full border-slate-200 bg-white text-slate-800 shadow-sm backdrop-blur transition-colors hover:bg-slate-100 dark:border-white/15 dark:bg-white/10 dark:text-white dark:hover:bg-white/20",
+                    showParticipants &&
+                      "border-primary/40 bg-primary/10 text-primary dark:border-primary/30 dark:bg-primary/20 dark:text-primary",
+                  )}>
+                  <UsersIcon className="size-4" aria-hidden="true" />
+                  {participants.length > 0 && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[9px] font-bold text-primary-foreground">
+                      {participants.length > 9 ? "9+" : participants.length}
+                    </span>
+                  )}
                 </Button>
+
+                {/* Recording — Stream SDK button, host only */}
+                {isHost && <RecordCallButton />}
+
+                {/* Host controls — only visible to interviewers, recruiters, and admins */}
+                {isHost && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        aria-label="Host controls"
+                        title="Host controls"
+                        className="size-10 cursor-pointer rounded-full border-violet-200 bg-violet-50 text-violet-700 shadow-sm backdrop-blur hover:bg-violet-100 dark:border-violet-800/40 dark:bg-violet-950/40 dark:text-violet-300 dark:hover:bg-violet-900/60">
+                        {hostActionLoading ? (
+                          <LoaderIcon
+                            className="size-4 animate-spin"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <ShieldIcon className="size-4" aria-hidden="true" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+
+                    <DropdownMenuContent align="center" className="min-w-52.5">
+                      <DropdownMenuLabel className="text-xs text-muted-foreground">
+                        Host Controls
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+
+                      <DropdownMenuItem
+                        onClick={handleMuteAll}
+                        disabled={!!hostActionLoading}
+                        className="flex cursor-pointer items-center gap-2">
+                        <MicOffIcon
+                          className="size-4 text-muted-foreground"
+                          aria-hidden="true"
+                        />
+                        Mute all participants
+                      </DropdownMenuItem>
+
+                      {participants.filter((p) => !p.isLocalParticipant)
+                        .length > 0 && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuLabel className="text-xs text-muted-foreground">
+                            Remove participant
+                          </DropdownMenuLabel>
+                          {participants
+                            .filter((p) => !p.isLocalParticipant && p.userId)
+                            .map((p) => (
+                              <DropdownMenuItem
+                                key={p.sessionId}
+                                onClick={() =>
+                                  handleRemoveParticipant(p.userId)
+                                }
+                                disabled={!!hostActionLoading}
+                                className="flex cursor-pointer items-center gap-2 text-rose-600 focus:text-rose-600 dark:text-rose-400 dark:focus:text-rose-400">
+                                <UserXIcon
+                                  className="size-4 shrink-0"
+                                  aria-hidden="true"
+                                />
+                                <span className="truncate">
+                                  {p.name || p.userId}
+                                </span>
+                              </DropdownMenuItem>
+                            ))}
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
 
                 <EndCallButton interview={interview} />
               </div>
