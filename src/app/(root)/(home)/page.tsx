@@ -176,7 +176,21 @@ export default function Home() {
             {interviews === undefined ? (
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
                 {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-48 w-full rounded-xl" />
+                  <div key={i} className="rounded-xl border bg-card p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <Skeleton className="h-5 w-2/3" />
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Skeleton className="h-3.5 w-1/2" />
+                      <Skeleton className="h-3.5 w-2/5" />
+                    </div>
+                    <div className="flex gap-1.5 pt-1">
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                      <Skeleton className="h-7 w-7 rounded-full" />
+                    </div>
+                    <Skeleton className="h-9 w-full rounded-md" />
+                  </div>
                 ))}
               </div>
             ) : interviews.length > 0 ? (

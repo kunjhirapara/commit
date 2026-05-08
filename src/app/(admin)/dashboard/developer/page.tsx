@@ -42,30 +42,55 @@ function DeveloperWorkspaceSkeleton() {
       </div>
 
       <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
-        {[1, 2].map((i) => (
-          <Card key={i} className="border-border/70 bg-card/80 shadow-sm">
-            <CardHeader>
-              <Skeleton className="h-6 w-44" />
-              <Skeleton className="h-4 w-full max-w-xs" />
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {Array.from({ length: 5 }).map((__, item) => (
-                <div
-                  key={item}
-                  className="rounded-2xl border border-border/70 bg-background/70 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="w-full space-y-2">
-                      <Skeleton className="h-4 w-32" />
-                      <Skeleton className="h-4 w-full" />
-                    </div>
-                    <Skeleton className="h-6 w-20 rounded-full" />
-                  </div>
+        {/* Observability: 2-col health check grid + recent events stacked list */}
+        <Card className="border-border/70 bg-card/80 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-5 w-40" />
+            <Skeleton className="h-4 w-full max-w-xs" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-2 sm:grid-cols-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="mt-1.5 h-3 w-full" />
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        ))}
+            </div>
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                  </div>
+                  <Skeleton className="mt-1.5 h-3 w-full" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Delivery operations: stacked notification list */}
+        <Card className="border-border/70 bg-card/80 shadow-sm">
+          <CardHeader>
+            <Skeleton className="h-5 w-44" />
+            <Skeleton className="h-4 w-full max-w-xs" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {Array.from({ length: 5 }).map((_, item) => (
+              <div key={item} className="rounded-2xl border border-border/70 bg-background/70 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="w-full space-y-2">
+                    <Skeleton className="h-4 w-32" />
+                    <Skeleton className="h-4 w-full" />
+                  </div>
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.5fr_1fr]">
