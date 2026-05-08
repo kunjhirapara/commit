@@ -132,7 +132,7 @@ function MeetingPage() {
     };
   }, [call]);
 
-  if (!isLoaded || isCallLoading) return <MeetingLoadingSkeleton />;
+  if (!isLoaded || isCallLoading || interview === undefined) return <MeetingLoadingSkeleton />;
 
   if (!call) {
     return (
