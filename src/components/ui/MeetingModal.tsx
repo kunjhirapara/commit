@@ -2,7 +2,10 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./dialog";
 import { Input } from "./input";
 import { Button } from "./button";
+import { LoaderIcon } from "lucide-react";
+import { toast } from "sonner";
 import useMeetingActions from "@/hooks/useMeetingActions";
+import { getDisplayErrorMessage } from "@/lib/errors";
 
 interface MeetingModalProps {
   isOpen: boolean;
@@ -18,19 +21,36 @@ function MeetingModal({
   isJoinMeeting,
 }: MeetingModalProps) {
   const [meetingUrl, setMeetingUrl] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   const { createInstantMeeting: createMeeting, joinMeeting } =
     useMeetingActions();
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (isJoinMeeting) {
       const meetingId = meetingUrl.split("/").pop();
       if (meetingId) joinMeeting(meetingId);
-    } else {
-      createMeeting();
+      setMeetingUrl("");
+      onClose();
+      return;
     }
-    setMeetingUrl("");
-    onClose();
+
+    setIsLoading(true);
+    const promise = createMeeting();
+    toast.promise(promise, {
+      loading: "Starting your meeting…",
+      success: "Meeting created! Redirecting…",
+      error: (err) => getDisplayErrorMessage(err, "Failed to create meeting."),
+    });
+    try {
+      await promise;
+      setMeetingUrl("");
+      onClose();
+    } catch {
+      // error handled by toast.promise
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -56,8 +76,17 @@ function MeetingModal({
             </Button>
             <Button
               onClick={handleStart}
-              disabled={isJoinMeeting && !meetingUrl.trim()}>
-              {isJoinMeeting ? "Join Meeting" : "Start Meeting"}
+              disabled={(isJoinMeeting && !meetingUrl.trim()) || isLoading}>
+              {isLoading ? (
+                <>
+                  <LoaderIcon className="size-4 animate-spin" aria-hidden="true" />
+                  Starting…
+                </>
+              ) : isJoinMeeting ? (
+                "Join Meeting"
+              ) : (
+                "Start Meeting"
+              )}
             </Button>
           </div>
         </div>

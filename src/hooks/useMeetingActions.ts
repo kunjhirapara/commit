@@ -1,35 +1,33 @@
 import { useRouter } from "next/navigation";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { toast } from "sonner";
-import { getDisplayErrorMessage, logError } from "@/lib/errors";
 
 const useMeetingActions = () => {
   const router = useRouter();
   const client = useStreamVideoClient();
 
   const createInstantMeeting = async () => {
-    if (!client) return;
+    if (!client) throw new Error("Meeting client is not available.");
 
-    try {
-      const id = crypto.randomUUID();
-      const call = client.call("default", id, {});
-      await call.getOrCreate({
-        data: {
-          starts_at: new Date().toISOString(),
-          custom: {
-            description: "Instant Meeting",
+    const id = crypto.randomUUID();
+    const call = client.call("default", id, {});
+    await call.getOrCreate({
+      data: {
+        starts_at: new Date().toISOString(),
+        custom: {
+          description: "Instant Meeting",
+        },
+        settings_override: {
+          recording: {
+            mode: "available",
+            audio_only: false,
+            quality: "1080p",
           },
         },
-      });
+      },
+    });
 
-      router.push(`/meeting/${call.id}`);
-      toast.success("Meeting Created");
-    } catch (error) {
-      logError("useMeetingActions.createInstantMeeting", error);
-      toast.error(
-        getDisplayErrorMessage(error, "Failed to create meeting."),
-      );
-    }
+    router.push(`/meeting/${call.id}`);
   };
 
   const joinMeeting = (callId: string) => {
