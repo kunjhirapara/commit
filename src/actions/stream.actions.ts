@@ -161,9 +161,9 @@ export const endInterviewMeeting = async ({
         throw new Error("Only the host can end this meeting.");
       }
 
-      // Soft-delete the call so the meeting URL no longer resolves via Stream.
-      // Stream will end the active session for everyone before deleting it.
-      await streamCall.delete({ hard: false });
+      // End the call session for all participants without deleting the call record.
+      // Deleting would erase recordings; ending keeps them while preventing rejoin.
+      await streamCall.end();
 
       await Promise.all([
         fetchMutation(
@@ -194,9 +194,9 @@ export const endInterviewMeeting = async ({
         throw new Error("Only the host can end this meeting.");
       }
 
-      // No backing interview record exists, so fall back to Stream ownership
-      // and remove the call from the API entirely for future joins.
-      await streamCall.delete({ hard: false });
+      // No backing interview record — end the session without deleting so any
+      // recordings are preserved.
+      await streamCall.end();
     }
 
     return { ok: true };

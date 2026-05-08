@@ -33,22 +33,29 @@ export default function EndCallButton({
   if (!isKnownAppHost && interview) return null;
 
   const endCall = async () => {
-    try {
-      setIsEnding(true);
+    setIsEnding(true);
+
+    const endPromise = (async () => {
       await endInterviewMeeting({
         streamCallId: interview?.streamCallId ?? call.id,
       });
-      await cleanupMeetingMedia(call, {
-        message: "Host ended meeting",
-      });
+      await cleanupMeetingMedia(call, { message: "Host ended meeting" });
+    })();
+
+    toast.promise(endPromise, {
+      loading: "Ending the meeting for everyone…",
+      success: "Meeting ended for everyone.",
+      error: (err) => getDisplayErrorMessage(err, "Failed to end meeting."),
+    });
+
+    try {
+      await endPromise;
       router.replace("/");
-      toast.success("Meeting ended for everyone");
     } catch (error) {
       logError("EndCallButton.endCall", error, {
         interviewId: interview?._id,
         streamCallId: interview?.streamCallId ?? call.id,
       });
-      toast.error(getDisplayErrorMessage(error, "Failed to end meeting."));
     } finally {
       setIsEnding(false);
     }
