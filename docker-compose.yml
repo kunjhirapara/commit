@@ -2,15 +2,15 @@
 # 1. GitHub Actions builds the image and pushes to ghcr.io
 # 2. In Portainer: Stacks → Add Stack → "Repository" build method
 # 3. Set all environment variables in the Portainer stack env editor
-# 4. In Nginx Proxy Manager UI: add a Proxy Host pointing to commit:3000
+# 4. Host nginx proxies commit.kunjdeveloper.me → 127.0.0.1:3000
 
 services:
   app:
     image: ghcr.io/kunjhirapara/commit:${IMAGE_TAG:-latest}
     container_name: commit
     restart: unless-stopped
-    expose:
-      - "3000"
+    ports:
+      - "127.0.0.1:3000:3000"
     environment:
       NODE_ENV: production
 
@@ -49,10 +49,3 @@ services:
       retries: 3
       start_period: 60s
 
-    networks:
-      - npm
-
-networks:
-  npm:
-    name: nginx-proxy-manager_npm-network
-    external: true
