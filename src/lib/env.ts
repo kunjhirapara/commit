@@ -53,10 +53,16 @@ let cachedServerEnv:
   | null = null;
 let cachedClientEnv: z.infer<typeof clientEnvSchema> | null = null;
 
+// During `next build`, secrets are not available — only NEXT_PUBLIC_* build args are.
+// Validation runs at runtime when actual requests arrive.
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
 const formatIssues = (issues: z.ZodIssue[]) =>
   issues.map((issue) => issue.path.join(".")).join(", ");
 
 export const getValidatedServerEnv = () => {
+  if (isBuildPhase)
+    return process.env as z.infer<typeof productionServerEnvSchema>;
   if (cachedServerEnv) return cachedServerEnv;
 
   const schema =
@@ -76,6 +82,8 @@ export const getValidatedServerEnv = () => {
 };
 
 export const getValidatedClientEnv = () => {
+  if (isBuildPhase)
+    return process.env as z.infer<typeof clientEnvSchema>;
   if (cachedClientEnv) return cachedClientEnv;
 
   const parsed = clientEnvSchema.safeParse({
