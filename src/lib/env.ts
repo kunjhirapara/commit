@@ -62,7 +62,7 @@ const formatIssues = (issues: z.ZodIssue[]) =>
 
 export const getValidatedServerEnv = () => {
   if (isBuildPhase)
-    return process.env as z.infer<typeof productionServerEnvSchema>;
+    return process.env as unknown as z.infer<typeof productionServerEnvSchema>;
   if (cachedServerEnv) return cachedServerEnv;
 
   const schema =
@@ -83,7 +83,7 @@ export const getValidatedServerEnv = () => {
 
 export const getValidatedClientEnv = () => {
   if (isBuildPhase)
-    return process.env as z.infer<typeof clientEnvSchema>;
+    return process.env as unknown as z.infer<typeof clientEnvSchema>;
   if (cachedClientEnv) return cachedClientEnv;
 
   const parsed = clientEnvSchema.safeParse({
