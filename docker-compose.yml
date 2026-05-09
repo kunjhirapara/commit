@@ -1,8 +1,8 @@
 # Portainer deployment via GitHub Container Registry
 # 1. GitHub Actions builds the image and pushes to ghcr.io
-# 2. In Portainer: Stacks → Add Stack → "Repository" build method (so nginx/conf.d is available)
+# 2. In Portainer: Stacks → Add Stack → "Repository" build method
 # 3. Set all environment variables in the Portainer stack env editor
-# 4. Optional: configure a Portainer webhook for auto-redeploy on push
+# 4. In Nginx Proxy Manager UI: add a Proxy Host pointing to commit:3000
 
 services:
   app:
@@ -50,26 +50,9 @@ services:
       start_period: 60s
 
     networks:
-      - commit-net
-
-  nginx:
-    image: nginx:1.27-alpine
-    container_name: commit-nginx
-    restart: unless-stopped
-    ports:
-      - "${HTTP_PORT:-80}:80"
-      - "${HTTPS_PORT:-443}:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      # Uncomment after issuing certificates with certbot
-      # - ./certbot/conf:/etc/letsencrypt:ro
-      # - ./certbot/www:/var/www/certbot:ro
-    depends_on:
-      app:
-        condition: service_healthy
-    networks:
-      - commit-net
+      - npm
 
 networks:
-  commit-net:
-    driver: bridge
+  npm:
+    name: nginx-proxy-manager_npm-network
+    external: true
