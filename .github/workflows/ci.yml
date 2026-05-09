@@ -41,6 +41,5 @@ jobs:
 
       - name: Unit tests
         run: npm run test
-
-      - name: Build
-        run: npm run build
+      # Production build is validated in deploy.yml with real secrets;
+      # running it here with placeholder keys fails Clerk's prerender validation.
