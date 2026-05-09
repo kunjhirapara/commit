@@ -1,0 +1,57 @@
+# Portainer deployment via GitHub Container Registry
+# 1. GitHub Actions builds the image and pushes to ghcr.io
+# 2. In Portainer: Stacks → Add Stack → paste this file
+# 3. Set all environment variables in the Portainer stack env editor
+# 4. Optional: configure a Portainer webhook for auto-redeploy on push
+
+services:
+  app:
+    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
+    container_name: commit
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+
+      # Clerk — authentication
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
+      CLERK_WEBHOOK_SECRET: ${CLERK_WEBHOOK_SECRET}
+
+      # Convex — backend / database
+      NEXT_PUBLIC_CONVEX_URL: ${NEXT_PUBLIC_CONVEX_URL}
+      CONVEX_DEPLOYMENT: ${CONVEX_DEPLOYMENT}
+
+      # Stream — video / realtime
+      NEXT_PUBLIC_STREAM_API_KEY: ${NEXT_PUBLIC_STREAM_API_KEY}
+      STREAM_SECRET_KEY: ${STREAM_SECRET_KEY}
+
+      # SMTP — email notifications
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
+
+      # App
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+
+    volumes:
+      # Required: app spawns isolated Docker containers for code execution
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - commit-net
+
+networks:
+  commit-net:
+    driver: bridge
