@@ -6,7 +6,7 @@
 
 services:
   app:
-    image: ghcr.io/${GITHUB_REPOSITORY}:${IMAGE_TAG:-latest}
+    image: ghcr.io/kunjhirapara/commit:${IMAGE_TAG:-latest}
     container_name: commit
     restart: unless-stopped
     ports:
