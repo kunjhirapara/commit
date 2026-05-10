@@ -90,3 +90,14 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 Commit handles backend infrastructure largely via **Convex Cloud**.
 For the Next.js frontend, the easiest way to deploy is the [Vercel Platform](https://vercel.com).
 If you wish to maintain the secure remote code execution feature in production, you must deploy the Next.js application to an environment that supports Docker execution (e.g., AWS ECS, Google Cloud Run, or a VPS with Docker installed), as Vercel Serverless Functions do not permit local Docker daemon access.
+
+### Clerk + Convex Auth
+
+Convex validates Clerk JWTs against the issuer configured in `convex/auth.config.ts`. Set this on the Convex deployment itself, not only in `.env.local` or your Docker/Portainer environment:
+
+```bash
+npx convex env set CLERK_ISSUER_URL https://your-clerk-issuer
+npx convex deploy
+```
+
+Use the issuer from the Clerk JWT template used for Convex, and keep the JWT template audience/application ID as `convex`. If this value points at a development Clerk instance while the deployed frontend uses production Clerk keys, Convex will reject browser tokens with `No auth provider found matching the given token`.

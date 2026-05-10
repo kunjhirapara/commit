@@ -1,6 +1,6 @@
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
-import { useQuery } from "convex/react";
+import { useConvexAuth, useQuery } from "convex/react";
 
 const BASE_PERMISSIONS = {
   candidate: [],
@@ -59,12 +59,17 @@ export type AppPermission =
 
 export const useUserRole = () => {
   const { user } = useUser();
+  const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
 
-  const userData = useQuery(api.users.getCurrentUser, user ? {} : "skip");
+  const userData = useQuery(
+    api.users.getCurrentUser,
+    user && isAuthenticated ? {} : "skip",
+  );
 
   const role = userData?.role as keyof typeof BASE_PERMISSIONS | undefined;
   const customRole = userData?.customRole ?? null;
-  const isLoading = !!user && userData === undefined;
+  const isLoading =
+    !!user && (isConvexAuthLoading || (isAuthenticated && userData === undefined));
   const permissions = new Set<AppPermission>([
     ...((role ? BASE_PERMISSIONS[role] : []) as AppPermission[]),
     ...((customRole?.permissions ?? []) as AppPermission[]),
