@@ -1,7 +1,15 @@
+const clerkIssuerUrl = process.env.CLERK_ISSUER_URL;
+
+if (!clerkIssuerUrl) {
+  throw new Error(
+    "Missing CLERK_ISSUER_URL in Convex environment. Set it to your Clerk JWT issuer, for example with `npx convex env set CLERK_ISSUER_URL https://your-clerk-issuer`.",
+  );
+}
+
 export default {
   providers: [
     {
-      domain: process.env.CLERK_ISSUER_URL ?? "https://boss-peacock-93.clerk.accounts.dev",
+      domain: clerkIssuerUrl,
       applicationID: "convex",
     },
   ],

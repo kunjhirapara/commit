@@ -1,7 +1,7 @@
 "use client";
 
 import { useUser } from "@clerk/nextjs";
-import { useMutation } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect } from "react";
 import { logError } from "@/lib/errors";
@@ -12,10 +12,11 @@ import { logError } from "@/lib/errors";
  */
 export function useSyncUser() {
   const { user, isSignedIn } = useUser();
+  const { isAuthenticated, isLoading } = useConvexAuth();
   const syncUser = useMutation(api.users.syncUser);
 
   useEffect(() => {
-    if (!isSignedIn || !user) return;
+    if (isLoading || !isAuthenticated || !isSignedIn || !user) return;
 
     const sync = async () => {
       try {
@@ -31,5 +32,5 @@ export function useSyncUser() {
     };
 
     sync();
-  }, [isSignedIn, user, syncUser]);
+  }, [isAuthenticated, isLoading, isSignedIn, user, syncUser]);
 }
