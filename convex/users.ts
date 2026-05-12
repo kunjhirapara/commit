@@ -133,6 +133,23 @@ export const syncUser = mutation({
       .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
       .first();
 
+    if (!existingUser && normalizedEmail) {
+      const emailOwner = await ctx.db
+        .query("users")
+        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
+        .first();
+
+      if (emailOwner && emailOwner.clerkId !== args.clerkId) {
+        throw createServerError(
+          new Error(
+            `Email ${normalizedEmail} already owned by ${emailOwner.clerkId}; ` +
+              `tried to create ${args.clerkId}`,
+          ),
+          "An account with this email already exists. Please sign in with the provider you used the first time.",
+        );
+      }
+    }
+
     if (normalizedEmail) {
       await expireStalePendingInvitations(ctx, normalizedEmail);
     }
