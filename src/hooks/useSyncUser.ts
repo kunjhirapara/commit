@@ -1,10 +1,13 @@
 "use client";
 
-import { useUser } from "@clerk/nextjs";
+import { useClerk, useUser } from "@clerk/nextjs";
 import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useEffect } from "react";
-import { logError } from "@/lib/errors";
+import { toast } from "sonner";
+import { logError, sanitizeErrorMessage } from "@/lib/errors";
+
+const DUPLICATE_ACCOUNT_PREFIX = "An account with this email already exists";
 
 /**
  * Hook to sync the currently signed-in Clerk user to Convex.
@@ -13,6 +16,7 @@ import { logError } from "@/lib/errors";
 export function useSyncUser() {
   const { user, isSignedIn } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();
+  const { signOut } = useClerk();
   const syncUser = useMutation(api.users.syncUser);
 
   useEffect(() => {
@@ -28,9 +32,15 @@ export function useSyncUser() {
         });
       } catch (error) {
         logError("useSyncUser", error, { userId: user.id });
+
+        const message = sanitizeErrorMessage(error, "");
+        if (message.startsWith(DUPLICATE_ACCOUNT_PREFIX)) {
+          toast.error(message);
+          await signOut({ redirectUrl: "/" });
+        }
       }
     };
 
     sync();
-  }, [isAuthenticated, isLoading, isSignedIn, user, syncUser]);
+  }, [isAuthenticated, isLoading, isSignedIn, user, syncUser, signOut]);
 }
