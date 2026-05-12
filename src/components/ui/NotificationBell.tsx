@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useConvexAuth } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { BellIcon, CheckIcon, CheckCheckIcon } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import {
@@ -36,8 +37,11 @@ const formatRelativeTime = (timestamp: number) => {
 };
 
 function NotificationBell() {
-  const { isAuthenticated } = useConvexAuth();
-  const notifications = useQuery(api.notifications.index.getMyNotifications, isAuthenticated ? {} : "skip");
+  const { isLoading, user } = useUserRole();
+  const notifications = useQuery(
+    api.notifications.index.getMyNotifications,
+    isLoading || !user ? "skip" : {},
+  );
   const markAsRead = useMutation(api.notifications.index.markNotificationAsRead);
   const markAllAsRead = useMutation(api.notifications.index.markAllNotificationsAsRead);
 

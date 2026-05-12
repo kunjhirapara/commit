@@ -69,7 +69,9 @@ export const useUserRole = () => {
   const role = userData?.role as keyof typeof BASE_PERMISSIONS | undefined;
   const customRole = userData?.customRole ?? null;
   const isLoading =
-    !!user && (isConvexAuthLoading || (isAuthenticated && userData === undefined));
+    !!user &&
+    (isConvexAuthLoading ||
+      (isAuthenticated && (userData === undefined || userData === null)));
   const permissions = new Set<AppPermission>([
     ...((role ? BASE_PERMISSIONS[role] : []) as AppPermission[]),
     ...((customRole?.permissions ?? []) as AppPermission[]),

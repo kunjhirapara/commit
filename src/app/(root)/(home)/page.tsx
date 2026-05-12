@@ -84,12 +84,16 @@ export default function Home() {
     isInterviewer,
     isCandidate,
     isLoading,
+    user,
     canAccessDeveloperTools,
     canScheduleInterviews,
     canViewRecordings,
   } = useUserRole();
 
-  const interviews = useQuery(api.interviews.getMyInterviews, {});
+  const interviews = useQuery(
+    api.interviews.getMyInterviews,
+    isLoading || !user ? "skip" : {},
+  );
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<"start" | "join">();
   const handleQuickAction = (title: string) => {

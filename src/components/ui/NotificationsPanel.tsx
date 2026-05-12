@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQuery, useConvexAuth } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { BellRingIcon } from "lucide-react";
 import { api } from "../../../convex/_generated/api";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Badge } from "./badge";
 import { Button } from "./button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
@@ -20,8 +21,11 @@ const formatTimestamp = (timestamp: number) =>
   }).format(new Date(timestamp));
 
 function NotificationsPanel() {
-  const { isAuthenticated } = useConvexAuth();
-  const notifications = useQuery(api.notifications.index.getMyNotifications, isAuthenticated ? {} : "skip");
+  const { isLoading, user } = useUserRole();
+  const notifications = useQuery(
+    api.notifications.index.getMyNotifications,
+    isLoading || !user ? "skip" : {},
+  );
   const markAsRead = useMutation(api.notifications.index.markNotificationAsRead);
 
   if (!notifications || notifications.length === 0) return null;
