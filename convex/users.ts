@@ -172,7 +172,13 @@ export const syncUser = mutation({
 
 export const getCurrentUser = query({
   handler: async (ctx) => {
-    const { user } = await getCurrentUserRecord(ctx);
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+    if (!user) return null;
     const customRole = user.customRoleId
       ? await ctx.db.get(user.customRoleId)
       : null;
