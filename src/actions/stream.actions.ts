@@ -151,6 +151,10 @@ export const endInterviewMeeting = async ({
       fetchQuery(api.users.getCurrentUser, {}, convexAuth),
     ]);
 
+    if (!viewer) {
+      throw new Error("User not authenticated");
+    }
+
     if (interview) {
       const isHost =
         viewer.role === "admin" ||
