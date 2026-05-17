@@ -3,7 +3,7 @@ import ActionCard from "@/components/ui/ActionCard";
 import { QUICK_ACTIONS } from "@/constants";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "@/../convex/_generated/api";
 import { useRouter } from "next/navigation";
 import MeetingModal from "@/components/ui/MeetingModal";
@@ -12,6 +12,7 @@ import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Button } from "@/components/ui/button";
 import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { Skeleton } from "@/components/ui/skeleton";
+import { HOME_RETRY_STORAGE_KEY } from "./error";
 
 function HomeSkeleton() {
   return (
@@ -79,6 +80,12 @@ function HomeSkeleton() {
 export default function Home() {
   const router = useRouter();
   useLifecycleAutomation();
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.sessionStorage.removeItem(HOME_RETRY_STORAGE_KEY);
+    }
+  }, []);
 
   const {
     isInterviewer,

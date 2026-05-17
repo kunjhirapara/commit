@@ -1,7 +1,7 @@
 "use client";
 
 import { useClerk, useUser } from "@clerk/nextjs";
-import { useConvexAuth, useMutation, useQuery } from "convex/react";
+import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useCallback, useEffect, useRef } from "react";
 import { toast } from "sonner";
@@ -9,23 +9,22 @@ import { logError, sanitizeErrorMessage } from "@/lib/errors";
 import { retryAsync } from "@/lib/retry";
 
 const DUPLICATE_ACCOUNT_PREFIX = "An account with this email already exists";
-const MISSING_ROW_RESYNC_COOLDOWN_MS = 2_000;
 
 /**
  * Hook to sync the currently signed-in Clerk user to Convex.
  * Call this in a top-level component so it runs on every auth state change.
+ *
+ * IMPORTANT: this hook must not call any Convex `useQuery` — it renders inside
+ * the root layout (above app/error.tsx's reach), so a throwing query here would
+ * bubble straight to global-error.tsx and crash the whole signed-in shell.
+ * Reliability comes from the retry below plus the Clerk webhook in convex/http.ts.
  */
 export function useSyncUser() {
   const { user, isSignedIn } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signOut } = useClerk();
   const syncUser = useMutation(api.users.syncUser);
-  const currentUser = useQuery(
-    api.users.getCurrentUser,
-    isAuthenticated ? {} : "skip",
-  );
 
-  const lastSyncAtRef = useRef<number>(0);
   const inFlightForClerkIdRef = useRef<string | null>(null);
   const fatalToastShownRef = useRef(false);
 
@@ -41,7 +40,6 @@ export function useSyncUser() {
     ) => {
       if (inFlightForClerkIdRef.current === clerkId) return;
       inFlightForClerkIdRef.current = clerkId;
-      lastSyncAtRef.current = Date.now();
 
       try {
         await retryAsync(() => syncUser(payload), {
@@ -87,20 +85,4 @@ export function useSyncUser() {
       image: user.imageUrl ?? undefined,
     });
   }, [isAuthenticated, isLoading, isSignedIn, user, runSync]);
-
-  useEffect(() => {
-    if (isLoading || !isAuthenticated || !isSignedIn || !user) return;
-    if (currentUser !== null) return;
-    if (inFlightForClerkIdRef.current === user.id) return;
-
-    const elapsed = Date.now() - lastSyncAtRef.current;
-    if (elapsed < MISSING_ROW_RESYNC_COOLDOWN_MS) return;
-
-    void runSync(user.id, {
-      clerkId: user.id,
-      email: user.primaryEmailAddress?.emailAddress ?? "",
-      name: user.fullName ?? user.firstName ?? "",
-      image: user.imageUrl ?? undefined,
-    });
-  }, [isAuthenticated, isLoading, isSignedIn, user, currentUser, runSync]);
 }
