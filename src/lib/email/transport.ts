@@ -7,6 +7,7 @@
  */
 
 import nodemailer, { type Transporter } from "nodemailer";
+import { retryAsync, isTransientSmtpError } from "@/lib/retry";
 
 export interface EmailPayload {
   to: string;
@@ -92,16 +93,32 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailResult> => 
   }
 
   try {
-    const info = await mailer.sendMail({
-      from: `"${fromName}" <${fromEmail}>`,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-      replyTo: payload.replyTo ?? fromEmail,
-      headers: {
-        "X-Mailer": "Commit-Notification-Service",
+    const info = await retryAsync(
+      () =>
+        mailer.sendMail({
+          from: `"${fromName}" <${fromEmail}>`,
+          to: payload.to,
+          subject: payload.subject,
+          html: payload.html,
+          replyTo: payload.replyTo ?? fromEmail,
+          headers: {
+            "X-Mailer": "Commit-Notification-Service",
+          },
+        }),
+      {
+        retries: 2,
+        shouldRetry: isTransientSmtpError,
+        onRetry: (error, attempt, delayMs) => {
+          console.warn("[email/transport] Retrying send after transient failure", {
+            to: payload.to,
+            subject: payload.subject,
+            attempt,
+            delayMs,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        },
       },
-    });
+    );
 
     return {
       success: true,
@@ -111,7 +128,7 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailResult> => 
     const message =
       error instanceof Error ? error.message : "Unknown email send error";
 
-    console.error("[email/transport] Failed to send email:", {
+    console.error("[email/transport] Failed to send email after retries:", {
       to: payload.to,
       subject: payload.subject,
       error: message,
