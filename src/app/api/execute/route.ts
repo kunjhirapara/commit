@@ -48,16 +48,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Execution failed.";
+    const code = (err as NodeJS.ErrnoException)?.code;
+    // ENOENT = docker CLI missing in container. EACCES = no perms on /var/run/docker.sock.
+    // Either is an infra failure the operator needs to see — not a code error.
+    const isInfraFailure =
+      code === "ENOENT" ||
+      code === "EACCES" ||
+      /docker(.*)not found|Cannot connect to the Docker daemon|permission denied/i.test(
+        message,
+      );
     console.error("[/api/execute] Unexpected error:", message);
     return NextResponse.json(
       {
         stdout: "",
-        stderr: message,
+        stderr: isInfraFailure
+          ? `Code runner is unavailable: ${message}`
+          : message,
         exitCode: 1,
         timedOut: false,
         executionMs: 0,
+        infraError: isInfraFailure,
       },
-      { status: 200 } // Return 200 so the client can display the error inline
+      { status: isInfraFailure ? 503 : 200 },
     );
   }
 }

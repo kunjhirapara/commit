@@ -31,6 +31,7 @@ import { Editor } from "@monaco-editor/react";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 
 /* ─────────────────────────────────────────────────────────── types ── */
 
@@ -40,6 +41,7 @@ interface ExecutionResult {
   exitCode: number;
   timedOut: boolean;
   executionMs: number;
+  infraError?: boolean;
 }
 
 type RunStatus = "idle" | "running" | "success" | "error";
@@ -145,10 +147,20 @@ function CodeEditor({ streamCallId }: CodeEditorProps) {
       const data: ExecutionResult = await res.json();
       setResult(data);
       setRunStatus(data.exitCode === 0 ? "success" : "error");
+      if (data.infraError || res.status === 503) {
+        toast.error("Code runner unavailable", {
+          description: data.stderr || "The execution backend is not reachable.",
+        });
+      } else if (!res.ok) {
+        toast.error("Run failed", {
+          description: data.stderr || `Server returned ${res.status}.`,
+        });
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error.";
       setResult({ stdout: "", stderr: msg, exitCode: 1, timedOut: false, executionMs: 0 });
       setRunStatus("error");
+      toast.error("Run failed", { description: msg });
     }
   }, [code, language, runStatus, selectedQuestion]);
 

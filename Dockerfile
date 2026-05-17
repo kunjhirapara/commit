@@ -33,8 +33,17 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME="0.0.0.0"
 
+# Required so /api/execute can spawn ephemeral runtime containers via the
+# mounted /var/run/docker.sock. Without this the spawn fails with ENOENT.
+RUN apk add --no-cache docker-cli
+
+# DOCKER_GID must match the host's docker group GID; the nextjs user is added
+# to it so it can write to the mounted docker socket without root.
+ARG DOCKER_GID=999
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser  --system --uid 1001 nextjs && \
+    addgroup --system --gid ${DOCKER_GID} docker && \
+    addgroup nextjs docker
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
