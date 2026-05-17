@@ -3,12 +3,25 @@
 import { useClerk, useUser } from "@clerk/nextjs";
 import { useConvexAuth, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { logError, sanitizeErrorMessage } from "@/lib/errors";
 import { retryAsync } from "@/lib/retry";
 
 const DUPLICATE_ACCOUNT_PREFIX = "An account with this email already exists";
+
+export type UserSyncStatus =
+  | "loading"
+  | "signedOut"
+  | "syncing"
+  | "ready"
+  | "error";
+
+export type UserSyncState = {
+  status: UserSyncStatus;
+  clerkId?: string;
+  errorMessage?: string;
+};
 
 /**
  * Hook to sync the currently signed-in Clerk user to Convex.
@@ -20,13 +33,27 @@ const DUPLICATE_ACCOUNT_PREFIX = "An account with this email already exists";
  * Reliability comes from the retry below plus the Clerk webhook in convex/http.ts.
  */
 export function useSyncUser() {
-  const { user, isSignedIn } = useUser();
+  const { user, isSignedIn, isLoaded } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const { signOut } = useClerk();
   const syncUser = useMutation(api.users.syncUser);
+  const [syncState, setSyncState] = useState<UserSyncState>({
+    status: "loading",
+  });
 
   const inFlightForClerkIdRef = useRef<string | null>(null);
+  const syncedForClerkIdRef = useRef<string | null>(null);
   const fatalToastShownRef = useRef(false);
+
+  const setNextSyncState = useCallback((next: UserSyncState) => {
+    setSyncState((current) =>
+      current.status === next.status &&
+      current.clerkId === next.clerkId &&
+      current.errorMessage === next.errorMessage
+        ? current
+        : next,
+    );
+  }, []);
 
   const runSync = useCallback(
     async (
@@ -38,8 +65,14 @@ export function useSyncUser() {
         image?: string;
       },
     ) => {
+      if (syncedForClerkIdRef.current === clerkId) {
+        setNextSyncState({ status: "ready", clerkId });
+        return;
+      }
+
       if (inFlightForClerkIdRef.current === clerkId) return;
       inFlightForClerkIdRef.current = clerkId;
+      setNextSyncState({ status: "syncing", clerkId });
 
       try {
         await retryAsync(() => syncUser(payload), {
@@ -49,11 +82,19 @@ export function useSyncUser() {
             return !message.startsWith(DUPLICATE_ACCOUNT_PREFIX);
           },
         });
+        syncedForClerkIdRef.current = clerkId;
         fatalToastShownRef.current = false;
+        setNextSyncState({ status: "ready", clerkId });
       } catch (error) {
         logError("useSyncUser", error, { userId: clerkId });
 
         const message = sanitizeErrorMessage(error, "");
+        setNextSyncState({
+          status: "error",
+          clerkId,
+          errorMessage: message || "Unable to sync the signed-in user.",
+        });
+
         if (message.startsWith(DUPLICATE_ACCOUNT_PREFIX)) {
           toast.error(message);
           await signOut({ redirectUrl: "/" });
@@ -72,11 +113,31 @@ export function useSyncUser() {
         }
       }
     },
-    [syncUser, signOut],
+    [setNextSyncState, syncUser, signOut],
   );
 
   useEffect(() => {
-    if (isLoading || !isAuthenticated || !isSignedIn || !user) return;
+    const clerkId = user?.id;
+
+    if (!isLoaded || isLoading || (isSignedIn && !isAuthenticated)) {
+      setNextSyncState({ status: "loading", clerkId });
+      return;
+    }
+
+    if (!isSignedIn || !user) {
+      inFlightForClerkIdRef.current = null;
+      syncedForClerkIdRef.current = null;
+      fatalToastShownRef.current = false;
+      setNextSyncState({ status: "signedOut" });
+      return;
+    }
+
+    if (
+      syncedForClerkIdRef.current &&
+      syncedForClerkIdRef.current !== user.id
+    ) {
+      syncedForClerkIdRef.current = null;
+    }
 
     void runSync(user.id, {
       clerkId: user.id,
@@ -84,5 +145,15 @@ export function useSyncUser() {
       name: user.fullName ?? user.firstName ?? "",
       image: user.imageUrl ?? undefined,
     });
-  }, [isAuthenticated, isLoading, isSignedIn, user, runSync]);
+  }, [
+    isAuthenticated,
+    isLoaded,
+    isLoading,
+    isSignedIn,
+    user,
+    runSync,
+    setNextSyncState,
+  ]);
+
+  return syncState;
 }
