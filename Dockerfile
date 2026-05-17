@@ -38,12 +38,20 @@ ENV NODE_ENV=production \
 RUN apk add --no-cache docker-cli
 
 # DOCKER_GID must match the host's docker group GID; the nextjs user is added
-# to it so it can write to the mounted docker socket without root.
+# to that group so it can write to the mounted docker socket without root.
+# If the GID is already claimed by another Alpine system group (e.g. `ping`
+# at 999), reuse that group rather than failing the build.
 ARG DOCKER_GID=999
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser  --system --uid 1001 nextjs && \
-    addgroup --system --gid ${DOCKER_GID} docker && \
-    addgroup nextjs docker
+RUN set -eux; \
+    addgroup --system --gid 1001 nodejs; \
+    adduser  --system --uid 1001 --ingroup nodejs nextjs; \
+    if getent group "${DOCKER_GID}" >/dev/null; then \
+        existing="$(getent group "${DOCKER_GID}" | cut -d: -f1)"; \
+        addgroup nextjs "$existing"; \
+    else \
+        addgroup --system --gid "${DOCKER_GID}" docker; \
+        addgroup nextjs docker; \
+    fi
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
