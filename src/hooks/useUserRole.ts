@@ -1,6 +1,7 @@
 import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
+import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
 
 const BASE_PERMISSIONS = {
   candidate: [],
@@ -60,10 +61,16 @@ export type AppPermission =
 export const useUserRole = () => {
   const { user } = useUser();
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
+  const { status: syncStatus, clerkId: syncedClerkId } = useUserSyncStatus();
+  const isSyncedCurrentUser =
+    syncStatus === "ready" && syncedClerkId === user?.id;
+  const shouldWaitForSync =
+    !!user && (syncStatus === "loading" || syncStatus === "syncing");
+  const canQueryCurrentUser = !!user && isAuthenticated && isSyncedCurrentUser;
 
   const userData = useQuery(
     api.users.getCurrentUser,
-    user && isAuthenticated ? {} : "skip",
+    canQueryCurrentUser ? {} : "skip",
   );
 
   const role = userData?.role as keyof typeof BASE_PERMISSIONS | undefined;
@@ -71,7 +78,8 @@ export const useUserRole = () => {
   const isLoading =
     !!user &&
     (isConvexAuthLoading ||
-      (isAuthenticated && (userData === undefined || userData === null)));
+      shouldWaitForSync ||
+      (canQueryCurrentUser && userData === undefined));
   const permissions = new Set<AppPermission>([
     ...((role ? BASE_PERMISSIONS[role] : []) as AppPermission[]),
     ...((customRole?.permissions ?? []) as AppPermission[]),

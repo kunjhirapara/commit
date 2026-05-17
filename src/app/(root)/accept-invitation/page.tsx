@@ -9,6 +9,7 @@ import { api } from "../../../../convex/_generated/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
 
 const getInvitationErrorMessage = (error: unknown) => {
   const message =
@@ -37,6 +38,7 @@ export default function AcceptInvitationPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, isSignedIn } = useUser();
+  const { status: syncStatus, clerkId: syncedClerkId } = useUserSyncStatus();
   const acceptInvitation = useMutation(api.users.acceptInvitation);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedRole, setAcceptedRole] = useState<string | null>(null);
@@ -47,6 +49,8 @@ export default function AcceptInvitationPage() {
   );
 
   const invitedEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress;
+  const accountReady =
+    !!user && syncStatus === "ready" && syncedClerkId === user.id;
 
   const handleAccept = async () => {
     if (!token) {
@@ -58,6 +62,11 @@ export default function AcceptInvitationPage() {
       toast.error(
         "Sign in with the invited email address to accept this invitation.",
       );
+      return;
+    }
+
+    if (!accountReady) {
+      toast.info("We are still setting up your account. Try again in a moment.");
       return;
     }
 
@@ -110,9 +119,13 @@ export default function AcceptInvitationPage() {
           ) : (
             <Button
               className="w-full"
-              disabled={!token || isSubmitting}
+              disabled={!token || isSubmitting || !accountReady}
               onClick={handleAccept}>
-              {isSubmitting ? "Accepting invitation..." : "Accept invitation"}
+              {isSubmitting
+                ? "Accepting invitation..."
+                : accountReady
+                  ? "Accept invitation"
+                  : "Setting up account..."}
             </Button>
           )}
         </CardContent>

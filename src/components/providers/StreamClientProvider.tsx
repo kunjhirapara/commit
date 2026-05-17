@@ -6,17 +6,38 @@ import { useUser } from "@clerk/nextjs";
 import { streamTokenProvider } from "@/actions/stream.actions";
 import { logError } from "@/lib/errors";
 import { getValidatedClientEnv } from "@/lib/env";
+import { usePathname } from "next/navigation";
+import { useUserRole } from "@/hooks/useUserRole";
+
+const streamRequiredForPath = (pathname: string | null) =>
+  !!pathname &&
+  (pathname.startsWith("/meeting") ||
+    pathname.startsWith("/schedule") ||
+    pathname.startsWith("/recordings"));
 
 const StreamClientProvider = ({ children }: { children: ReactNode }) => {
   const [streamVideoClient, setStreamVideoClient] =
     useState<StreamVideoClient>();
   const [clientError, setClientError] = useState<string | null>(null);
   const { user, isLoaded } = useUser();
+  const pathname = usePathname();
+  const {
+    canScheduleInterviews,
+    canViewRecordings,
+    isInterviewer,
+    isLoading: isRoleLoading,
+  } = useUserRole();
+  const homeCanStartMeeting =
+    pathname === "/" &&
+    !isRoleLoading &&
+    (isInterviewer || canScheduleInterviews || canViewRecordings);
+  const shouldInitializeClient =
+    !!user && (streamRequiredForPath(pathname) || homeCanStartMeeting);
 
   useEffect(() => {
     if (!isLoaded) return;
 
-    if (!user) {
+    if (!shouldInitializeClient) {
       setStreamVideoClient(undefined);
       setClientError(null);
       return;
@@ -73,7 +94,7 @@ const StreamClientProvider = ({ children }: { children: ReactNode }) => {
         );
       }
     }
-  }, [user, isLoaded]);
+  }, [user, isLoaded, shouldInitializeClient]);
 
   // Stream is only required by meeting / scheduling / recordings routes.
   // Render the rest of the app (home dashboard, settings, etc.) regardless of

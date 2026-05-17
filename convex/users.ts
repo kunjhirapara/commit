@@ -10,7 +10,7 @@ import {
   requirePermission,
   getCurrentUserRecord,
 } from "./lib/authz";
-import { createServerError } from "./lib/errorUtils";
+import { createServerError, logServerError } from "./lib/errorUtils";
 
 const INVITATION_LIST_LIMIT = 12;
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -189,20 +189,25 @@ export const syncUser = mutation({
 
 export const getCurrentUser = query({
   handler: async (ctx) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return null;
-    const user = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .first();
-    if (!user) return null;
-    const customRole = user.customRoleId
-      ? await ctx.db.get(user.customRoleId)
-      : null;
-    return {
-      ...sanitizeUserForViewer(user, user),
-      customRole,
-    };
+    try {
+      const identity = await ctx.auth.getUserIdentity();
+      if (!identity) return null;
+      const user = await ctx.db
+        .query("users")
+        .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+        .first();
+      if (!user) return null;
+      const customRole = user.customRoleId
+        ? await ctx.db.get(user.customRoleId)
+        : null;
+      return {
+        ...sanitizeUserForViewer(user, user),
+        customRole,
+      };
+    } catch (error) {
+      logServerError("users.getCurrentUser", error);
+      return null;
+    }
   },
 });
 
