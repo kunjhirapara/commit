@@ -2,13 +2,15 @@
  * docker-runner.ts
  * Server-side utility that executes code inside ephemeral Docker containers.
  * Each run gets a fresh, isolated container that is force-removed on exit.
+ *
+ * Code is streamed to the container over stdin instead of via a bind mount.
+ * Bind mounts don't work when the app calls the host's docker daemon through
+ * a mounted socket: the daemon resolves paths against its own filesystem, not
+ * the calling container's, so /tmp/commit-run-xxx would mount empty.
  */
 
-import { execFile } from "child_process";
+import { spawn, execFile } from "child_process";
 import { promisify } from "util";
-import * as os from "os";
-import * as path from "path";
-import * as fs from "fs/promises";
 
 const execFileAsync = promisify(execFile);
 
@@ -24,34 +26,20 @@ const CONTAINER_LIMITS = {
   network: "none",
 };
 
-/** Maps Monaco language IDs to Docker images + file extensions */
-const LANGUAGE_CONFIG: Record<
-  string,
-  { image: string; ext: string; runCmd: (file: string) => string[] }
-> = {
+/** Maps Monaco language IDs to Docker images + the shell command to compile/run. */
+const LANGUAGE_CONFIG: Record<string, { image: string; runCmd: string }> = {
   javascript: {
     image: "node:20-alpine",
-    ext: "js",
-    runCmd: (file) => ["node", file],
+    runCmd: "cat > /tmp/solution.js && node /tmp/solution.js",
   },
   python: {
     image: "python:3.12-alpine",
-    ext: "py",
-    runCmd: (file) => ["python3", file],
+    runCmd: "cat > /tmp/solution.py && python3 /tmp/solution.py",
   },
   java: {
     image: "eclipse-temurin:21-alpine",
-    ext: "java",
-    // Java needs to compile then run; we wrap in sh -c
-    // We copy to /tmp so javac can write the .class file, since /code is read-only
-    runCmd: (file) => {
-      const base = path.basename(file, ".java");
-      return [
-        "sh",
-        "-c",
-        `cp ${file} /tmp/ && cd /tmp/ && javac ${base}.java && java ${base}`,
-      ];
-    },
+    runCmd:
+      "cat > /tmp/Solution.java && cd /tmp && javac Solution.java && java Solution",
   },
 };
 
@@ -65,7 +53,9 @@ export interface ExecutionResult {
 
 /**
  * Runs the given source code in a Docker container for the specified language.
- * The container is always removed afterwards (--rm flag).
+ * The container is always removed afterwards (--rm).
+ * Throws on infra failures (docker CLI missing, daemon unreachable) so the
+ * route layer can return 503 instead of treating them as user-code errors.
  */
 export async function runCodeInDocker(
   language: string,
@@ -82,77 +72,93 @@ export async function runCodeInDocker(
     };
   }
 
-  // Write code to a secure temp directory on the host
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "commit-run-"));
-  const fileName =
-    language === "java" ? "Solution.java" : `solution.${config.ext}`;
-  const filePath = path.join(tmpDir, fileName);
-  await fs.writeFile(filePath, code, "utf8");
-
-  const containerFilePath = `/code/${fileName}`;
-  const runCmd = config.runCmd(containerFilePath);
-
   const dockerArgs = [
     "run",
+    "-i",
     "--rm",
-    "--network",
-    CONTAINER_LIMITS.network,
-    "--memory",
-    CONTAINER_LIMITS.memory,
-    "--cpus",
-    CONTAINER_LIMITS.cpus,
-    "--read-only",
-    "--tmpfs",
-    "/tmp:size=32m",
-    "-v",
-    `${tmpDir}:/code:ro`,
+    "--network", CONTAINER_LIMITS.network,
+    "--memory", CONTAINER_LIMITS.memory,
+    "--memory-swap", CONTAINER_LIMITS.memory, // disable swap; total RAM == memory
+    "--cpus", CONTAINER_LIMITS.cpus,
+    "--pids-limit", "64",                      // stop fork bombs
+    "--security-opt", "no-new-privileges",     // no setuid escalation
+    "--cap-drop", "ALL",                       // drop every Linux capability
+    "--read-only",                             // rootfs immutable
+    "--tmpfs", "/tmp:size=32m,exec,mode=1777", // only writable surface
+    "-e", "HOME=/tmp",                          // avoid writes outside /tmp
     config.image,
-    ...runCmd,
+    "sh",
+    "-c",
+    config.runCmd,
   ];
 
-  const start = Date.now();
-  let stdout = "";
-  let stderr = "";
-  let exitCode = 0;
-  let timedOut = false;
+  return new Promise<ExecutionResult>((resolve, reject) => {
+    const start = Date.now();
+    const child = spawn("docker", dockerArgs);
 
-  try {
-    const result = await execFileAsync("docker", dockerArgs, {
-      timeout: CONTAINER_LIMITS.timeoutSeconds * 1000,
-      maxBuffer: 1024 * 256, // 256 KB output cap
-    });
-    stdout = result.stdout;
-    stderr = result.stderr;
-  } catch (err: unknown) {
-    const error = err as NodeJS.ErrnoException & {
-      code?: string | number;
-      killed?: boolean;
-      stdout?: string;
-      stderr?: string;
-    };
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+    const MAX_OUTPUT = 256 * 1024;
 
-    stdout = error.stdout ?? "";
-    stderr = error.stderr ?? "";
-    exitCode = typeof error.code === "number" ? error.code : 1;
-
-    if (error.killed || error.code === "ETIMEDOUT") {
+    const timer = setTimeout(() => {
       timedOut = true;
-      stderr = `Execution timed out after ${CONTAINER_LIMITS.timeoutSeconds} seconds.`;
-    }
-  } finally {
-    // Clean up temp directory (best-effort, don't crash if it fails)
-    await fs
-      .rm(tmpDir, { recursive: true, force: true })
-      .catch(() => undefined);
-  }
+      child.kill("SIGKILL");
+    }, CONTAINER_LIMITS.timeoutSeconds * 1000);
 
-  return {
-    stdout: stdout.slice(0, 10_000), // Hard cap on what we return to the client
-    stderr: stderr.slice(0, 4_000),
-    exitCode,
-    timedOut,
-    executionMs: Date.now() - start,
-  };
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+      if (stdout.length > MAX_OUTPUT) child.kill("SIGKILL");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+      if (stderr.length > MAX_OUTPUT) child.kill("SIGKILL");
+    });
+
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      // ENOENT / EACCES on spawn → infra problem, let the route handle it.
+      reject(err);
+    });
+
+    child.on("close", (exitCode) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+
+      // Daemon-level failures (exit 125) with no user output are infra issues.
+      const daemonUnreachable =
+        exitCode === 125 &&
+        /Cannot connect to the Docker daemon|permission denied|docker daemon/i.test(
+          stderr,
+        );
+      if (daemonUnreachable) {
+        const err = new Error(stderr.trim() || "Docker daemon unreachable.");
+        (err as NodeJS.ErrnoException).code = "EACCES";
+        reject(err);
+        return;
+      }
+
+      resolve({
+        stdout: stdout.slice(0, 10_000),
+        stderr: timedOut
+          ? `Execution timed out after ${CONTAINER_LIMITS.timeoutSeconds} seconds.`
+          : stderr.slice(0, 4_000),
+        exitCode: exitCode ?? 1,
+        timedOut,
+        executionMs: Date.now() - start,
+      });
+    });
+
+    // Pipe the source into the container.
+    child.stdin.on("error", () => {
+      /* container exited before we finished writing — handled by close */
+    });
+    child.stdin.end(code);
+  });
 }
 
 /**
