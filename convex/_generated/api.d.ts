@@ -18,6 +18,7 @@ import type * as interviews from "../interviews.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_emailTemplates from "../lib/emailTemplates.js";
 import type * as lib_errorUtils from "../lib/errorUtils.js";
+import type * as lib_retry from "../lib/retry.js";
 import type * as notifications_emailActions from "../notifications/emailActions.js";
 import type * as notifications_index from "../notifications/index.js";
 import type * as observability from "../observability.js";
@@ -42,6 +43,7 @@ declare const fullApi: ApiFromModules<{
   "lib/authz": typeof lib_authz;
   "lib/emailTemplates": typeof lib_emailTemplates;
   "lib/errorUtils": typeof lib_errorUtils;
+  "lib/retry": typeof lib_retry;
   "notifications/emailActions": typeof notifications_emailActions;
   "notifications/index": typeof notifications_index;
   observability: typeof observability;

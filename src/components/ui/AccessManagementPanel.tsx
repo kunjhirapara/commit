@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import { Id } from "../../../convex/_generated/dataModel";
 import { useUserRole } from "@/hooks/useUserRole";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
+import { retryAsync } from "@/lib/retry";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "./card";
@@ -36,6 +37,16 @@ const USER_ROLE_OPTIONS = [
   "admin",
 ] as const;
 const ACCESS_PANEL_LIST_HEIGHT = "h-[320px]";
+const RETRYABLE_INVITE_STATUSES = new Set([502, 503, 504]);
+
+class TransientInviteError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "TransientInviteError";
+    this.status = status;
+  }
+}
 
 function AccessManagementPanel() {
   const { canManageInvitations, canManageRoles, isAdmin, role } = useUserRole();
@@ -46,6 +57,7 @@ function AccessManagementPanel() {
   const [inviteRole, setInviteRole] = useState<
     "interviewer" | "recruiter" | "developer" | "admin"
   >("interviewer");
+  const [isInviting, setIsInviting] = useState(false);
 
   const users = useQuery(
     api.users.getUsers,
@@ -66,30 +78,44 @@ function AccessManagementPanel() {
   if (!canManageInvitations && !canManageRoles) return null;
 
   const handleInvite = async () => {
+    if (isInviting) return;
     if (!email.trim()) {
       toast.error("Please enter an email address.");
       return;
     }
 
+    setIsInviting(true);
     try {
-      const response = await fetch("/api/invitations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      await retryAsync(
+        async () => {
+          const response = await fetch("/api/invitations", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              email: email.trim(),
+              role: inviteRole,
+            }),
+          });
+
+          const body = await response.json().catch(() => null);
+
+          if (response.ok) return body;
+
+          const message =
+            body?.detail || body?.error || "Unable to create invitation.";
+
+          if (RETRYABLE_INVITE_STATUSES.has(response.status)) {
+            throw new TransientInviteError(response.status, message);
+          }
+          throw new Error(message);
         },
-        body: JSON.stringify({
-          email: email.trim(),
-          role: inviteRole,
-        }),
-      });
-
-      const result = await response.json().catch(() => null);
-
-      if (!response.ok) {
-        throw new Error(
-          result?.detail || result?.error || "Unable to create invitation.",
-        );
-      }
+        {
+          retries: 2,
+          shouldRetry: (error) => error instanceof TransientInviteError,
+        },
+      );
 
       toast.success("Invitation created and email sent.");
       setEmail("");
@@ -102,6 +128,8 @@ function AccessManagementPanel() {
       toast.error(
         getDisplayErrorMessage(error, "Unable to create invitation."),
       );
+    } finally {
+      setIsInviting(false);
     }
   };
 
@@ -176,8 +204,11 @@ function AccessManagementPanel() {
               </SelectContent>
             </Select>
           </div>
-          <Button className="w-full" onClick={handleInvite}>
-            Create Invitation
+          <Button
+            className="w-full"
+            onClick={handleInvite}
+            disabled={isInviting}>
+            {isInviting ? "Sending invitation…" : "Create Invitation"}
           </Button>
         </CardContent>
       </Card>

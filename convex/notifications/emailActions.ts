@@ -23,6 +23,7 @@ import { internal } from "../_generated/api";
 import nodemailer from "nodemailer";
 import { resolveEmailTemplate } from "../lib/emailTemplates";
 import type { EmailTemplateData } from "../lib/emailTemplates";
+import { retryAsync, isTransientSmtpError } from "../lib/retry";
 
 // ---------------------------------------------------------------------------
 // Transport (created once per cold start)
@@ -126,12 +127,28 @@ export const dispatchEmailNotification = internalAction({
     const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@commit.dev";
 
     try {
-      const info = await transport.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        to: args.recipientEmail,
-        subject: template.subject,
-        html: template.html,
-      });
+      const info = await retryAsync(
+        () =>
+          transport.sendMail({
+            from: `"${fromName}" <${fromEmail}>`,
+            to: args.recipientEmail,
+            subject: template.subject,
+            html: template.html,
+          }),
+        {
+          retries: 2,
+          shouldRetry: isTransientSmtpError,
+          onRetry: (error, attempt, delayMs) => {
+            console.warn("[emailActions] Retrying notification email", {
+              notificationId: args.notificationId,
+              to: args.recipientEmail,
+              attempt,
+              delayMs,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        },
+      );
 
       console.info("[emailActions] Email sent:", {
         to: args.recipientEmail,
@@ -148,7 +165,7 @@ export const dispatchEmailNotification = internalAction({
       return { success: true, messageId: info.messageId };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Unknown email error";
-      console.error("[emailActions] Email failed:", {
+      console.error("[emailActions] Email failed after retries:", {
         to: args.recipientEmail,
         error: errorMessage,
       });
@@ -217,12 +234,28 @@ export const sendRoleInvitationEmail = internalAction({
     const fromEmail = process.env.SMTP_FROM_EMAIL ?? "noreply@commit.dev";
 
     try {
-      const info = await transport.sendMail({
-        from: `"${fromName}" <${fromEmail}>`,
-        to: args.email,
-        subject: template.subject,
-        html: template.html,
-      });
+      const info = await retryAsync(
+        () =>
+          transport.sendMail({
+            from: `"${fromName}" <${fromEmail}>`,
+            to: args.email,
+            subject: template.subject,
+            html: template.html,
+          }),
+        {
+          retries: 2,
+          shouldRetry: isTransientSmtpError,
+          onRetry: (error, attempt, delayMs) => {
+            console.warn("[emailActions] Retrying role invitation email", {
+              invitationId: args.invitationId,
+              to: args.email,
+              attempt,
+              delayMs,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          },
+        },
+      );
 
       console.info("[emailActions] Role invitation email sent:", {
         invitationId: args.invitationId,
@@ -234,7 +267,7 @@ export const sendRoleInvitationEmail = internalAction({
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown email error";
-      console.error("[emailActions] Role invitation email failed:", {
+      console.error("[emailActions] Role invitation email failed after retries:", {
         invitationId: args.invitationId,
         to: args.email,
         error: errorMessage,
