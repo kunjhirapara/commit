@@ -1,17 +1,5 @@
-/**
- * POST /api/execute
- *
- * Runs user-submitted code inside an ephemeral Docker container on the server.
- * The request body is validated before spawning a container.
- *
- * Body schema:
- *   { language: "javascript" | "python" | "java", code: string }
- *
- * Response schema:
- *   { stdout, stderr, exitCode, timedOut, executionMs }
- */
-
 import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
 import { runCodeInDocker } from "@/lib/docker-runner";
 
@@ -23,8 +11,47 @@ const bodySchema = z.object({
     .max(50_000, "Code exceeds the 50 KB limit."),
 });
 
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_RUNS = 30;
+const runHistory = new Map<string, number[]>();
+
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const recent = (runHistory.get(userId) ?? []).filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS,
+  );
+  if (recent.length >= RATE_LIMIT_MAX_RUNS) {
+    runHistory.set(userId, recent);
+    return true;
+  }
+  recent.push(now);
+  runHistory.set(userId, recent);
+  return false;
+}
+
+const MAX_CONCURRENT_RUNS = 4;
+let inFlight = 0;
+
 export async function POST(req: NextRequest) {
-  // --- Parse & validate body ---
+  const { userId } = await auth();
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  if (isRateLimited(userId)) {
+    return NextResponse.json(
+      { error: "Too many runs. Please wait a moment." },
+      { status: 429 },
+    );
+  }
+
+  if (inFlight >= MAX_CONCURRENT_RUNS) {
+    return NextResponse.json(
+      { error: "Code runner is busy. Try again shortly." },
+      { status: 503 },
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -36,24 +63,22 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json(
       { error: parsed.error.issues[0]?.message ?? "Invalid request." },
-      { status: 422 }
+      { status: 422 },
     );
   }
 
   const { language, code } = parsed.data;
 
-  // --- Execute inside Docker ---
+  inFlight++;
   try {
     const result = await runCodeInDocker(language, code);
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Execution failed.";
-    const code = (err as NodeJS.ErrnoException)?.code;
-    // ENOENT = docker CLI missing in container. EACCES = no perms on /var/run/docker.sock.
-    // Either is an infra failure the operator needs to see — not a code error.
+    const errCode = (err as NodeJS.ErrnoException)?.code;
     const isInfraFailure =
-      code === "ENOENT" ||
-      code === "EACCES" ||
+      errCode === "ENOENT" ||
+      errCode === "EACCES" ||
       /docker(.*)not found|Cannot connect to the Docker daemon|permission denied/i.test(
         message,
       );
@@ -71,5 +96,7 @@ export async function POST(req: NextRequest) {
       },
       { status: isInfraFailure ? 503 : 200 },
     );
+  } finally {
+    inFlight--;
   }
 }
