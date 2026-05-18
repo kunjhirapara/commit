@@ -57,6 +57,13 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Backup worker tooling lives in /app/backup-worker so it can use the full
+# dependency tree (convex CLI, node-cron) without overwriting the minimal
+# node_modules that Next.js standalone ships at /app/node_modules.
+COPY --from=deps    --chown=nextjs:nodejs /app/node_modules /app/backup-worker/node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/scripts      /app/backup-worker/scripts
+COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/backup-worker/package.json
+
 USER nextjs
 EXPOSE 3000
 

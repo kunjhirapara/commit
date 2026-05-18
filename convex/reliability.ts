@@ -512,6 +512,27 @@ export const recordBackupSnapshot = mutation({
   },
 });
 
+export const recordAutomaticBackupResult = internalMutation({
+  args: {
+    status: v.union(v.literal("available"), v.literal("failed")),
+    summary: v.string(),
+    scope: v.string(),
+    storageLocation: v.optional(v.string()),
+    notes: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("backupSnapshots", {
+      kind: "automatic",
+      status: args.status,
+      summary: args.summary,
+      scope: args.scope,
+      storageLocation: args.storageLocation,
+      notes: args.notes,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 export const markBackupRestored = mutation({
   args: {
     snapshotId: v.id("backupSnapshots"),
