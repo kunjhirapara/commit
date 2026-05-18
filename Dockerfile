@@ -64,6 +64,11 @@ COPY --from=deps    --chown=nextjs:nodejs /app/node_modules /app/backup-worker/n
 COPY --from=builder --chown=nextjs:nodejs /app/scripts      /app/backup-worker/scripts
 COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/backup-worker/package.json
 
+# Pre-create the backup mount point owned by nextjs so that when Docker
+# initializes a fresh named volume at this path, it inherits 1001:1001
+# ownership instead of root:root (which would EACCES the non-root worker).
+RUN mkdir -p /data/backups && chown -R nextjs:nodejs /data
+
 USER nextjs
 EXPOSE 3000
 
