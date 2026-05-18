@@ -74,6 +74,9 @@ services:
       BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-0}
 
     volumes:
-      # Persist exports on the host so they survive image redeploys.
-      - ./backups:/data/backups
+      # Named volume so backups survive stack recreation and image redeploys.
+      # Inspect host path with: docker volume inspect commit_backup-data
+      - backup-data:/data/backups
 
+volumes:
+  backup-data:
