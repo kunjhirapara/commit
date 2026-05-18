@@ -49,3 +49,31 @@ services:
       retries: 3
       start_period: 60s
 
+  backup:
+    image: ghcr.io/kunjhirapara/commit:${IMAGE_TAG:-latest}
+    container_name: commit-backup
+    restart: unless-stopped
+    working_dir: /app/backup-worker
+    command: ["node", "--experimental-strip-types", "scripts/backup-job.ts"]
+    environment:
+      NODE_ENV: production
+
+      # Convex CLI — needs deploy key for non-interactive `convex export`
+      CONVEX_DEPLOYMENT: ${CONVEX_DEPLOYMENT}
+      CONVEX_DEPLOY_KEY: ${CONVEX_DEPLOY_KEY}
+
+      # Snapshot reporting back into the app's reliability dashboard
+      NEXT_PUBLIC_CONVEX_SITE_URL: ${NEXT_PUBLIC_CONVEX_SITE_URL}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+
+      # Schedule / retention (override via Portainer env if needed)
+      BACKUP_DIR: /data/backups
+      BACKUP_CRON: ${BACKUP_CRON:-0 0 * * *}
+      BACKUP_TZ: ${BACKUP_TZ:-UTC}
+      BACKUP_RETENTION: ${BACKUP_RETENTION:-14}
+      BACKUP_RUN_ON_START: ${BACKUP_RUN_ON_START:-0}
+
+    volumes:
+      # Persist exports on the host so they survive image redeploys.
+      - ./backups:/data/backups
+
