@@ -463,10 +463,10 @@ function CodeEditor({ streamCallId }: CodeEditorProps) {
                       {summary && (
                         <div
                           className={cn(
-                            "flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-semibold",
+                            "flex items-center gap-2 rounded-lg border px-4 py-3 text-sm font-semibold",
                             summary.allPass
-                              ? "bg-emerald-950/60 border border-emerald-700 text-emerald-300"
-                              : "bg-red-950/50 border border-red-800 text-red-300",
+                              ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300"
+                              : "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-300",
                           )}>
                           {summary.allPass ? (
                             <CheckCircle2Icon className="h-4 w-4" />
