@@ -241,7 +241,10 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_interview_id", ["interviewId"])
-    .index("by_stream_call_id", ["streamCallId"]),
+    .index("by_stream_call_id", ["streamCallId"])
+    // Needed by the daily metrics rollup and the retention pruner, which both
+    // scan by time rather than by interview.
+    .index("by_created_at", ["createdAt"]),
 
   invitations: defineTable({
     email: v.string(),
@@ -277,7 +280,27 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_target_type", ["targetType"])
-    .index("by_actor_clerk_id", ["actorClerkId"]),
+    .index("by_actor_clerk_id", ["actorClerkId"])
+    // getRecentAuditLogs orders by creation time, and the metrics rollup reads
+    // sign-in events by day; neither had a supporting index.
+    .index("by_created_at", ["createdAt"]),
+
+  /**
+   * One row per UTC day. Pre-aggregated so the growth dashboard is a bounded
+   * read: computing these live would mean full-table scans of users, audit logs
+   * and operational events on every dashboard load.
+   */
+  dailyMetrics: defineTable({
+    /** UTC calendar day as YYYY-MM-DD. */
+    date: v.string(),
+    signups: v.number(),
+    activeUsers: v.number(),
+    meetingsStarted: v.number(),
+    codeRuns: v.number(),
+    codeRunFailures: v.number(),
+    codeRunQueueRejections: v.number(),
+    computedAt: v.number(),
+  }).index("by_date", ["date"]),
 
   notifications: defineTable({
     recipientClerkId: v.string(),
