@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -1006,9 +1006,16 @@ export const updateInterviewStatus = mutation({
   },
 });
 
-export const runLifecycleAutomation = mutation({
+/**
+ * Advances interview lifecycle state and fires reminder/feedback notifications.
+ *
+ * Internal + cron-driven (see convex/crons.ts). This used to be a public mutation
+ * called from every page load, which meant any signed-in user could scan the whole
+ * interviews table and fan out email to every participant on demand. It also meant
+ * lifecycle transitions only happened when somebody happened to open a page.
+ */
+export const runLifecycleAutomation = internalMutation({
   handler: async (ctx) => {
-    await getCurrentUserRecord(ctx);
     const interviews = await ctx.db.query("interviews").collect();
     let updatedCount = 0;
 

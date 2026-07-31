@@ -42,6 +42,21 @@ services:
       # Required: app spawns isolated Docker containers for code execution
       - /var/run/docker.sock:/var/run/docker.sock
 
+    # Host is 4 cores / 24 GB. Code-runner containers are siblings on the host
+    # daemon, not children of this container, so they are NOT covered by this
+    # limit — they get their own caps in src/lib/docker-runner.ts (0.5 CPU,
+    # 128 MB each, max 3 concurrent). Budget is roughly:
+    #   app 2.0 + runners 1.5 + backup 0.5 = 4.0 cores.
+    cpus: 2.0
+    mem_limit: 4g
+
+    # Without rotation a public launch fills the 200 GB disk with JSON logs.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
       interval: 30s
@@ -77,6 +92,16 @@ services:
       # Named volume so backups survive stack recreation and image redeploys.
       # Inspect host path with: docker volume inspect commit_backup-data
       - backup-data:/data/backups
+
+    # Idle most of the day; only needs headroom during the nightly convex export.
+    cpus: 0.5
+    mem_limit: 1g
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   backup-data:
