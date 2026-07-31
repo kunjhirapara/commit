@@ -41,7 +41,13 @@ function RoleGuard({
       ? requiredPermissions.every((permission) => hasPermission(permission))
       : requiredPermissions.some((permission) => hasPermission(permission)));
 
-  if (!role || (!passesRoleCheck && !passesPermissionCheck)) {
+  // Both checks must pass. This was an OR, and `passesPermissionCheck` defaults
+  // to true when no permissions are supplied — so on the call sites that pass
+  // only `allowedRoles`, the condition collapsed to "any user with a role", and
+  // e.g. <RoleGuard allowedRoles={["recruiter","admin"]}> rendered for a
+  // candidate. Middleware and the Convex checks were the real gates; this makes
+  // the component match what it claims to do.
+  if (!role || !passesRoleCheck || !passesPermissionCheck) {
     return (
       <ErrorState
         title={title}

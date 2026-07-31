@@ -349,7 +349,7 @@ const filterValidPermissions = (
 
 export const getRoleManagementDashboard = query({
   handler: async (ctx) => {
-    await requirePermission(ctx, "manageRoleCatalog");
+    const { user: viewer } = await requirePermission(ctx, "manageRoleCatalog");
     const [roles, users] = await Promise.all([
       ctx.db.query("roleDefinitions").order("desc").collect(),
       ctx.db.query("users").collect(),
@@ -360,10 +360,12 @@ export const getRoleManagementDashboard = query({
     return {
       permissionOptions: [...PERMISSION_VALUES],
       roles,
+      // Was spreading the raw row, so this leaked every account's email to
+      // `developer`, which holds manageRoleCatalog but is not a people-data role.
       users: users
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((user) => ({
-          ...user,
+          ...sanitizeUserForViewer(viewer, user),
           customRole: user.customRoleId
             ? (rolesById.get(String(user.customRoleId)) ?? null)
             : null,

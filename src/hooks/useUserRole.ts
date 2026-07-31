@@ -3,60 +3,17 @@ import { api } from "../../convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
 
-const BASE_PERMISSIONS = {
-  candidate: [],
-  interviewer: ["viewUsers", "viewDashboard", "viewRecordings"],
-  recruiter: [
-    "viewUsers",
-    "viewDashboard",
-    "viewRecordings",
-    "viewObservability",
-    "viewDataAccessLogs",
-    "scheduleInterviews",
-    "editInterviews",
-    "cancelInterviews",
-    "manageInvitations",
-  ],
-  developer: [
-    "viewDashboard",
-    "viewObservability",
-    "manageRoleCatalog",
-    "manageReliability",
-    "manageDeployments",
-  ],
-  admin: [
-    "viewUsers",
-    "viewDashboard",
-    "viewRecordings",
-    "viewObservability",
-    "viewDataAccessLogs",
-    "scheduleInterviews",
-    "editInterviews",
-    "cancelInterviews",
-    "manageRoles",
-    "manageRoleCatalog",
-    "manageInvitations",
+import { ROLE_PERMISSIONS, type Permission } from "../../convex/lib/permissions";
 
-    "manageReliability",
-    "manageDeployments",
-  ],
-} as const;
+/**
+ * Shared with the server rather than duplicated. The local copy this replaces had
+ * drifted — it granted `viewDataAccessLogs` and `manageDeployments`, which do not
+ * exist in the server's PERMISSION_VALUES and were silently discarded, so the UI
+ * and the real authorization disagreed.
+ */
+const BASE_PERMISSIONS = ROLE_PERMISSIONS;
 
-export type AppPermission =
-  | "viewUsers"
-  | "viewDashboard"
-  | "viewRecordings"
-  | "viewObservability"
-  | "viewDataAccessLogs"
-  | "scheduleInterviews"
-  | "editInterviews"
-  | "cancelInterviews"
-  | "manageRoles"
-  | "manageRoleCatalog"
-  | "manageInvitations"
-
-  | "manageReliability"
-  | "manageDeployments";
+export type AppPermission = Permission;
 
 export const useUserRole = () => {
   const { user } = useUser();
@@ -93,13 +50,9 @@ export const useUserRole = () => {
 
   const canEditInterviews = hasPermission("editInterviews");
   const canAccessDeveloperTools =
-    hasPermission("viewObservability") ||
-    hasPermission("manageReliability") ||
-    hasPermission("manageDeployments");
+    hasPermission("viewObservability") || hasPermission("manageReliability");
   const canViewRecordings = hasPermission("viewRecordings");
   const canManageReliability = hasPermission("manageReliability");
-  const canManageDeployments = hasPermission("manageDeployments");
-  const canViewDataAccessLogs = hasPermission("viewDataAccessLogs");
 
   return {
     role,
@@ -124,7 +77,5 @@ export const useUserRole = () => {
     canAccessDeveloperTools,
     canViewRecordings,
     canManageReliability,
-    canManageDeployments,
-    canViewDataAccessLogs,
   };
 };
