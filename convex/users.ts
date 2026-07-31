@@ -225,6 +225,20 @@ export const syncUser = mutation({
   },
 });
 
+/**
+ * Marks the first-run welcome as seen. Self-scoped: the row is resolved from the
+ * caller's identity, so there is no user id to tamper with.
+ */
+export const completeOnboarding = mutation({
+  handler: async (ctx) => {
+    const { user } = await getCurrentUserRecord(ctx);
+
+    if (user.hasCompletedOnboarding) return;
+
+    await ctx.db.patch(user._id, { hasCompletedOnboarding: true });
+  },
+});
+
 export const getCurrentUser = query({
   handler: async (ctx) => {
     try {

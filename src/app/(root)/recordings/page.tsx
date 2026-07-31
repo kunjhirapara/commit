@@ -2,6 +2,8 @@
 
 import RoleGuard from "@/components/auth/RoleGuard";
 import ErrorState from "@/components/ui/ErrorState";
+import EmptyState from "@/components/ui/EmptyState";
+import { VideoOffIcon } from "lucide-react";
 import RecordingCard, {
   RecordingCardSkeleton,
 } from "@/components/ui/RecordingCard";
@@ -150,10 +152,12 @@ function RecordingsPage() {
               ))}
             </div>
           ) : (
-            <div className="flex flex-col items-center justify-center h-[400px] gap-4">
-              <p className="text-xl font-medium text-muted-foreground">
-                No recordings available
-              </p>
+            <div className="p-6">
+              <EmptyState
+                icon={VideoOffIcon}
+                title="No recordings yet"
+                message="Recordings appear here after an interview you hosted or took part in has finished and the recording has been processed."
+              />
             </div>
           )}
         </ScrollArea>

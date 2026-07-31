@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { useMutation } from "convex/react";
@@ -34,7 +34,20 @@ const getInvitationErrorMessage = (error: unknown) => {
   return getDisplayErrorMessage(error, "Unable to accept invitation.");
 };
 
+/**
+ * useSearchParams opts the tree into client-side rendering, so it needs a Suspense
+ * boundary for the build to prerender the shell. This was previously masked by the
+ * root layout's <SignedIn> wrapper, which stopped the page rendering at all.
+ */
 export default function AcceptInvitationPage() {
+  return (
+    <Suspense fallback={null}>
+      <AcceptInvitationContent />
+    </Suspense>
+  );
+}
+
+function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, isSignedIn } = useUser();
