@@ -15,7 +15,9 @@ It offers real-time video, collaborative code execution, structured feedback sco
 - **Structured Feedback Scorecards:** Blind-grading, weighted scoring, and internal candidate packet drafting.
 - **Automated Notifications:** Email and in-app notifications with timezone-awareness and retry support.
 
-For deeper architecture details, see our explicit [Roles Documentation](docs/roles.md), [Database Schema](docs/database.md), and [Platform Architecture](docs/architecture.md).
+- **Practice Sandbox:** Any signed-in user can work through coding problems solo at `/practice`, without needing a scheduled interview.
+
+Roles and permissions are defined in one place — `convex/lib/permissions.ts` — and shared by the Convex functions and the browser. The database schema lives in `convex/schema.ts`.
 
 ---
 
@@ -101,3 +103,67 @@ npx convex deploy
 ```
 
 Use the issuer from the Clerk JWT template used for Convex, and keep the JWT template audience/application ID as `convex`. If this value points at a development Clerk instance while the deployed frontend uses production Clerk keys, Convex will reject browser tokens with `No auth provider found matching the given token`.
+
+---
+
+## 📊 Monitoring (optional)
+
+Host metrics run behind a Compose profile, so the default stack is unchanged:
+
+```bash
+# App + backup worker only (unchanged)
+docker compose up -d
+
+# Add node-exporter, cAdvisor, Prometheus and Grafana
+GRAFANA_ADMIN_PASSWORD=... docker compose --profile monitoring up -d
+```
+
+Everything binds to `127.0.0.1` — Grafana on `:3001`, Prometheus on `:9090` — so
+put Grafana behind the host nginx if you want to reach it remotely, and do not
+expose Prometheus. Prometheus retains 30 days or 10 GB, whichever comes first.
+
+**Set `GRAFANA_ADMIN_PASSWORD` before exposing Grafana.** It falls back to
+`changeme`; a plain default is used rather than a required-variable marker
+because Compose interpolates every variable regardless of the active profile, so
+a `:?` marker there would break the base stack too.
+
+cAdvisor is the one worth watching on a small box: it shows the `commit`
+container against the short-lived code-runner containers competing for the same
+cores. User inflow — signups, active users, meetings, code-run volume — lives
+in-app under **Dashboard → Developer → Growth and capacity**, rolled up daily by
+a Convex cron.
+
+### Resource budget
+
+The host is 4 cores / 24 GB. Runner containers are siblings on the host daemon,
+so they are *not* covered by the app container's limit and get their own caps in
+`src/lib/docker-runner.ts`:
+
+| Component | CPU | Memory |
+| --- | --- | --- |
+| `app` | 2.0 | 4 GB |
+| code runners (3 × 0.5) | 1.5 | 384 MB |
+| `backup` | 0.5 | 1 GB |
+| monitoring profile | ~1.1 | ~2 GB |
+
+The practical ceilings are external before they are local: Stream
+participant-minutes first, then Convex function calls and bandwidth, then Clerk
+MAU.
+
+---
+
+## ✅ Before opening public signup
+
+- [ ] Rotate `STREAM_SECRET_KEY` and `CLERK_WEBHOOK_SECRET`. An earlier version
+      of `convex/observability.ts` logged both to Convex function logs on every
+      developer-dashboard load, so treat the old values as compromised. Update
+      them in the Portainer stack env and in GitHub Actions secrets.
+- [ ] Use a **production** Clerk instance, with the domain, redirect URLs and
+      webhook endpoint pointing at the public origin, and **email verification
+      required at signup** — the code runner refuses unverified accounts.
+- [ ] Confirm `CLERK_ISSUER_URL` on the Convex deployment matches that instance.
+- [ ] Set `NEXT_PUBLIC_APP_URL` to the public origin so invitation links resolve.
+- [ ] Restore-test one backup zip from the `backup-data` volume.
+- [ ] Promote your own account to `admin` (Convex dashboard). There is no
+      bootstrap admin: signups are always `candidate`, and roles are granted only
+      by invitation or by an existing admin.
