@@ -1,6 +1,6 @@
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { WebhookEvent } from "@clerk/nextjs/server";
 import { Webhook } from "svix";
 import { createServerError, logServerError } from "./lib/errorUtils";
@@ -114,7 +114,7 @@ http.route({
         const email = email_addresses[0].email_address;
         const name = `${first_name || ""} ${last_name || ""}`.trim();
 
-        await ctx.runMutation(api.users.syncUser, {
+        await ctx.runMutation(internal.users.syncUserFromWebhook, {
           clerkId: id,
           email,
           name,

@@ -83,6 +83,7 @@ export async function runCodeInDocker(
     "--pids-limit", "64",                      // stop fork bombs
     "--security-opt", "no-new-privileges",     // no setuid escalation
     "--cap-drop", "ALL",                       // drop every Linux capability
+    "--user", "65534:65534",                   // nobody; never run user code as uid 0
     "--read-only",                             // rootfs immutable
     "--tmpfs", "/tmp:size=32m,exec,mode=1777", // only writable surface
     "-e", "HOME=/tmp",                          // avoid writes outside /tmp

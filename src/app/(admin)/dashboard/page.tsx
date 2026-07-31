@@ -22,7 +22,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { api } from "../../../../convex/_generated/api";
-import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { useUserRole } from "@/hooks/useUserRole";
 
 function DashboardOverviewSkeleton() {
@@ -141,7 +140,6 @@ function DashboardOverviewSkeleton() {
 }
 
 function DashboardOverviewPage() {
-  useLifecycleAutomation();
 
   const {
     canAccessDeveloperTools,

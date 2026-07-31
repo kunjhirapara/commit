@@ -10,7 +10,6 @@ import MeetingModal from "@/components/ui/MeetingModal";
 import MeetingCard from "@/components/ui/MeetingCard";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Button } from "@/components/ui/button";
-import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { Skeleton } from "@/components/ui/skeleton";
 import { HOME_RETRY_STORAGE_KEY } from "./error";
 
@@ -79,7 +78,6 @@ function HomeSkeleton() {
 
 export default function Home() {
   const router = useRouter();
-  useLifecycleAutomation();
 
   useEffect(() => {
     if (typeof window !== "undefined") {

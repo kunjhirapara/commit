@@ -34,7 +34,6 @@ import {
 } from "@/constants";
 import MeetingCard from "@/components/ui/MeetingCard";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
-import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { getInterviewStartTimeMs, getInterviewTimezone } from "@/lib/utils";
 
 type Interview = Doc<"interviews">;
@@ -52,7 +51,6 @@ function InterviewScheduleUI() {
     null,
   );
 
-  useLifecycleAutomation();
 
   const interviews = useQuery(api.interviews.getAllInterviews, {});
   const users = useQuery(api.users.getUsers, {});

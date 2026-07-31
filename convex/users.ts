@@ -1,16 +1,20 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 import {
   PERMISSION_VALUES,
   Permission,
   UserRole,
+  hasPermission,
   logAuditEvent,
   normalizeEmail,
-  requireAnyPermission,
   requirePermission,
   getCurrentUserRecord,
 } from "./lib/authz";
-import { createServerError, logServerError } from "./lib/errorUtils";
+import {
+  createServerError,
+  logServerError,
+  requireIdentity,
+} from "./lib/errorUtils";
 
 const INVITATION_LIST_LIMIT = 12;
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -108,82 +112,116 @@ const sanitizeUserForViewer = <
   };
 };
 
-export const syncUser = mutation({
+type SyncUserArgs = {
+  clerkId: string;
+  email: string;
+  name: string;
+  image?: string;
+};
+
+/**
+ * Shared upsert used by both the Clerk webhook (trusted, no identity) and the
+ * signed-in client hook. Callers are responsible for authorizing `args.clerkId`
+ * before calling — this helper does no auth of its own.
+ *
+ * `role` is never taken from args: a new row is always `candidate` and an existing
+ * row keeps whatever role it already has, so sync can never escalate.
+ */
+const applySyncUser = async (ctx: any, args: SyncUserArgs) => {
+  const normalizedEmail = normalizeEmail(args.email);
+
+  const existingUser = await ctx.db
+    .query("users")
+    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", args.clerkId))
+    .first();
+
+  // Enforced on both create and update. Previously update skipped this, which let a
+  // row's email be repointed at an address someone else owned — and invitations are
+  // authorized by email match, so that was an invitation-hijack path.
+  if (normalizedEmail) {
+    const emailOwner = await ctx.db
+      .query("users")
+      .withIndex("by_email", (q: any) => q.eq("email", normalizedEmail))
+      .first();
+
+    if (emailOwner && emailOwner.clerkId !== args.clerkId) {
+      throw createServerError(
+        new Error(
+          `Email ${normalizedEmail} already owned by ${emailOwner.clerkId}; ` +
+            `tried to sync ${args.clerkId}`,
+        ),
+        "An account with this email already exists. Please sign in with the provider you used the first time.",
+      );
+    }
+  }
+
+  if (normalizedEmail) {
+    await expireStalePendingInvitations(ctx, normalizedEmail);
+  }
+
+  const nextRole = existingUser?.role ?? "candidate";
+
+  if (existingUser) {
+    await ctx.db.patch(existingUser._id, {
+      ...args,
+      email: normalizedEmail,
+      role: nextRole,
+    });
+
+    return existingUser._id;
+  }
+
+  const userId = await ctx.db.insert("users", {
+    ...args,
+    email: normalizedEmail,
+    role: nextRole,
+  });
+
+  await logAuditEvent(ctx, {
+    action: "user.created",
+    actorClerkId: args.clerkId,
+    actorEmail: normalizedEmail,
+    targetType: "user",
+    targetId: userId,
+    metadata: {
+      role: nextRole,
+    },
+  });
+
+  return userId;
+};
+
+/**
+ * Webhook entry point. Internal-only: Clerk httpActions carry no user identity, so
+ * this cannot go through the authenticated mutation below.
+ */
+export const syncUserFromWebhook = internalMutation({
   args: {
     clerkId: v.string(),
     email: v.string(),
     name: v.string(),
     image: v.optional(v.string()),
   },
+  handler: async (ctx, args) => applySyncUser(ctx, args),
+});
+
+/**
+ * Client entry point, called by useSyncUser on auth state change. The Clerk id comes
+ * from the verified token, never from the argument list.
+ */
+export const syncUser = mutation({
+  args: {
+    email: v.string(),
+    name: v.string(),
+    image: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
-    const normalizedEmail = normalizeEmail(args.email);
-    const identity = await ctx.auth.getUserIdentity();
+    const identity = await requireIdentity(ctx);
 
-    if (identity && identity.subject !== args.clerkId) {
-      throw createServerError(
-        new Error(
-          `Authenticated user ${identity.subject} attempted to sync ${args.clerkId}`,
-        ),
-        "You are not allowed to sync another user.",
-      );
-    }
-
-    const existingUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", args.clerkId))
-      .first();
-
-    if (!existingUser && normalizedEmail) {
-      const emailOwner = await ctx.db
-        .query("users")
-        .withIndex("by_email", (q) => q.eq("email", normalizedEmail))
-        .first();
-
-      if (emailOwner && emailOwner.clerkId !== args.clerkId) {
-        throw createServerError(
-          new Error(
-            `Email ${normalizedEmail} already owned by ${emailOwner.clerkId}; ` +
-              `tried to create ${args.clerkId}`,
-          ),
-          "An account with this email already exists. Please sign in with the provider you used the first time.",
-        );
-      }
-    }
-
-    if (normalizedEmail) {
-      await expireStalePendingInvitations(ctx, normalizedEmail);
-    }
-
-    const nextRole = existingUser?.role ?? "candidate";
-
-    if (existingUser) {
-      await ctx.db.patch(existingUser._id, {
-        ...args,
-        email: normalizedEmail,
-        role: nextRole,
-      });
-
-      return existingUser._id;
-    }
-
-    const userId = await ctx.db.insert("users", {
+    return applySyncUser(ctx, {
       ...args,
-      email: normalizedEmail,
-      role: nextRole,
+      clerkId: identity.subject,
     });
-
-    await logAuditEvent(ctx, {
-      action: "user.created",
-      actorClerkId: args.clerkId,
-      actorEmail: normalizedEmail,
-      targetType: "user",
-      targetId: userId,
-      metadata: {
-        role: nextRole,
-      },
-    });
-
-    return userId;
   },
 });
 
@@ -267,9 +305,32 @@ const normalizeRoleSlug = (value: string) =>
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 
-const filterValidPermissions = (permissions: string[]) => {
+/**
+ * Permissions that can be used to escalate: anyone holding "manageRoles" can hand
+ * out any role, including admin. A caller may only grant a permission they hold
+ * themselves, otherwise `manageRoleCatalog` (held by `developer`) becomes an
+ * indirect route to admin — mint a custom role carrying "manageRoles", assign it.
+ */
+const ESCALATION_PERMISSIONS: Permission[] = ["manageRoles"];
+
+const filterValidPermissions = (
+  permissions: string[],
+  grantor: { role: UserRole },
+) => {
   const uniquePermissions = Array.from(new Set(permissions));
-  return uniquePermissions.filter(isValidPermission) as Permission[];
+
+  return uniquePermissions.filter((permission): permission is Permission => {
+    if (!isValidPermission(permission)) return false;
+
+    if (
+      ESCALATION_PERMISSIONS.includes(permission) &&
+      !hasPermission(grantor.role, permission)
+    ) {
+      return false;
+    }
+
+    return true;
+  });
 };
 
 export const getRoleManagementDashboard = query({
@@ -556,10 +617,9 @@ export const updateUserRole = mutation({
     ),
   },
   handler: async (ctx, args) => {
-    const { user } = await requireAnyPermission(ctx, [
-      "manageRoles",
-      "manageRoleCatalog",
-    ]);
+    // "manageRoles" only. This previously also accepted "manageRoleCatalog", which
+    // the `developer` role holds — letting any developer promote themselves to admin.
+    const { user } = await requirePermission(ctx, "manageRoles");
     const targetUser = await ctx.db.get(args.userId);
 
     if (!targetUser) {
@@ -567,6 +627,29 @@ export const updateUserRole = mutation({
         new Error(`User not found: ${args.userId}`),
         "User not found.",
       );
+    }
+
+    if (targetUser.clerkId === user.clerkId) {
+      throw createServerError(
+        new Error(`User ${user.clerkId} attempted to change their own role`),
+        "You cannot change your own role. Ask another admin to do it.",
+      );
+    }
+
+    // Refuse to remove the last admin, which would leave the deployment with no way
+    // to grant roles at all short of editing the database by hand.
+    if (targetUser.role === "admin" && args.role !== "admin") {
+      const admins = await ctx.db
+        .query("users")
+        .filter((q) => q.eq(q.field("role"), "admin"))
+        .collect();
+
+      if (admins.length <= 1) {
+        throw createServerError(
+          new Error("Attempted to demote the last remaining admin"),
+          "This is the only admin account. Promote another admin first.",
+        );
+      }
     }
 
     await ctx.db.patch(args.userId, {
@@ -664,7 +747,7 @@ export const createRoleDefinition = mutation({
       );
     }
 
-    const permissions = filterValidPermissions(args.permissions);
+    const permissions = filterValidPermissions(args.permissions, user);
     const now = Date.now();
 
     const roleId = await ctx.db.insert("roleDefinitions", {
@@ -712,7 +795,7 @@ export const updateRoleDefinition = mutation({
       );
     }
 
-    const permissions = filterValidPermissions(args.permissions);
+    const permissions = filterValidPermissions(args.permissions, user);
 
     await ctx.db.patch(args.roleId, {
       name: args.name.trim(),

@@ -59,7 +59,6 @@ export function useSyncUser() {
     async (
       clerkId: string,
       payload: {
-        clerkId: string;
         email: string;
         name: string;
         image?: string;
@@ -139,8 +138,9 @@ export function useSyncUser() {
       syncedForClerkIdRef.current = null;
     }
 
+    // clerkId is intentionally not sent: the mutation derives it from the verified
+    // Convex identity so a client cannot sync a row it does not own.
     void runSync(user.id, {
-      clerkId: user.id,
       email: user.primaryEmailAddress?.emailAddress ?? "",
       name: user.fullName ?? user.firstName ?? "",
       image: user.imageUrl ?? undefined,
