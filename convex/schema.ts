@@ -113,6 +113,9 @@ export default defineSchema({
     availabilitySummary: v.optional(v.string()),
     permissionTags: v.optional(v.array(v.string())),
     isActive: v.optional(v.boolean()),
+    // Optional so existing rows are treated as not-yet-onboarded rather than
+    // needing a backfill; the welcome dialog is harmless to show once.
+    hasCompletedOnboarding: v.optional(v.boolean()),
   })
     .index("by_clerk_id", ["clerkId"])
     .index("by_email", ["email"]),

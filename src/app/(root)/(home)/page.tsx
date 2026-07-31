@@ -11,6 +11,11 @@ import MeetingCard from "@/components/ui/MeetingCard";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import EmptyState from "@/components/ui/EmptyState";
+import LandingPage from "@/components/marketing/LandingPage";
+import OnboardingDialog from "@/components/onboarding/OnboardingDialog";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
+import { CalendarCheckIcon } from "lucide-react";
 import { HOME_RETRY_STORAGE_KEY } from "./error";
 
 function HomeSkeleton() {
@@ -76,7 +81,28 @@ function HomeSkeleton() {
   );
 }
 
+/**
+ * `/` serves double duty: the public landing page for signed-out visitors and the
+ * app home for signed-in users. Keeping both on one route avoids moving the app
+ * home to a new path, which Clerk redirects and every "back home" link point at.
+ *
+ * AppHome's hooks only mount inside <SignedIn>, so signed-out visitors never fire
+ * a Convex query.
+ */
 export default function Home() {
+  return (
+    <>
+      <SignedOut>
+        <LandingPage />
+      </SignedOut>
+      <SignedIn>
+        <AppHome />
+      </SignedIn>
+    </>
+  );
+}
+
+function AppHome() {
   const router = useRouter();
 
   useEffect(() => {
@@ -127,12 +153,15 @@ export default function Home() {
           <div>
             <h1 className="text-4xl font-bold text-primary">Welcome back!</h1>
             <p className="text-muted-foreground mt-2">
-              "Access your upcoming interviews and preparations"
+              Access your upcoming interviews and preparations
             </p>
           </div>
-          <Button variant="outline" onClick={() => router.push("/calendar")}>
-            View Calendar
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => router.push("/calendar")}>
+              View Calendar
+            </Button>
+            <Button onClick={() => router.push("/practice")}>Practice</Button>
+          </div>
         </div>
       )}
       {showOperatorActions ? (
@@ -209,9 +238,13 @@ export default function Home() {
                 ))}
               </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                You have no scheduled interviews at the moment
-              </div>
+              <EmptyState
+                icon={CalendarCheckIcon}
+                title="No interviews scheduled yet"
+                message="Interviews are set up by an interviewer and will show up here once one is booked with you. In the meantime you can work through practice problems on your own."
+                actionLabel="Open the practice sandbox"
+                actionHref="/practice"
+              />
             )}
           </div>
         </>
@@ -219,6 +252,8 @@ export default function Home() {
       <div className="mt-8">
         <NotificationsPanel />
       </div>
+
+      <OnboardingDialog />
     </div>
   );
 }

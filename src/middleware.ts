@@ -2,14 +2,22 @@ import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../convex/_generated/api";
-import { findRouteRule, type AppRole } from "@/lib/routeAccess";
+import { findRouteRule, isPublicRoute, type AppRole } from "@/lib/routeAccess";
 
 const CORRELATION_HEADER = "x-correlation-id";
 const CORRELATION_COOKIE = "commit-correlation-id";
 const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
 
 export default clerkMiddleware(async (auth, req) => {
-  const rule = findRouteRule(req.nextUrl.pathname);
+  const { pathname } = req.nextUrl;
+  const rule = findRouteRule(pathname);
+
+  // Auth is enforced here rather than by a <SignedIn> wrapper in the root layout,
+  // so that public routes (landing page, legal pages) can actually render for
+  // signed-out visitors instead of bouncing straight to Clerk.
+  if (!rule && !isPublicRoute(pathname)) {
+    await auth.protect();
+  }
 
   if (rule) {
     const homeUrl = new URL("/", req.url);
