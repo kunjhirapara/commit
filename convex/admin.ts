@@ -157,17 +157,34 @@ export const getAdminDashboard = query({
       ),
     };
 
+    // Only admins and recruiters get contact details. An interviewer or developer
+    // holds "viewDashboard" but has no business reading every candidate's email.
+    const canViewContactDetails =
+      user.role === "admin" || user.role === "recruiter";
+
+    // Admins and recruiters keep the full roster — the team page uses it as a
+    // candidate picker. Everyone else is scoped to candidates they actually
+    // interview, so an interviewer can no longer enumerate the whole user base
+    // and a developer (who can access no interviews) sees none.
+    const visibleCandidateIds = new Set(
+      scopedInterviews.map((interview) => interview.candidateId),
+    );
+
     const candidates = users
-      .filter((user) => user.role === "candidate")
+      .filter(
+        (user) =>
+          user.role === "candidate" &&
+          (canViewContactDetails || visibleCandidateIds.has(user.clerkId)),
+      )
       .map((candidate) => {
-        const candidateInterviews = interviews
+        const candidateInterviews = scopedInterviews
           .filter((interview) => interview.candidateId === candidate.clerkId)
           .sort((a, b) => b.startTime - a.startTime);
 
         return {
           clerkId: candidate.clerkId,
           name: candidate.name,
-          email: candidate.email,
+          email: canViewContactDetails ? candidate.email : "",
           image: candidate.image,
           rounds: candidateInterviews.map((interview) => ({
             id: interview._id,
@@ -187,7 +204,7 @@ export const getAdminDashboard = query({
       .map((user) => ({
         clerkId: user.clerkId,
         name: user.name,
-        email: user.email,
+        email: canViewContactDetails ? user.email : "",
         role: user.role,
         skills: user.skills ?? [],
         availabilitySummary: user.availabilitySummary ?? "Availability not set",
@@ -359,19 +376,45 @@ export const getCandidateHistory = query({
     candidateId: v.string(),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "viewDashboard");
-    const interviews = await ctx.db
+    const { user } = await requirePermission(ctx, "viewDashboard");
+
+    const allCandidateInterviews = await ctx.db
       .query("interviews")
       .withIndex("by_candidate_id", (q) => q.eq("candidateId", args.candidateId))
       .collect();
+
+    // candidateId is a caller-supplied string with no relationship to the viewer,
+    // so scope to the interviews this viewer can actually access. Without this,
+    // any interviewer or developer could pull a full dossier — private notes
+    // included — for any candidate whose clerkId they had.
+    const interviews = allCandidateInterviews.filter((interview) =>
+      canAccessInterview(user, interview),
+    );
+
+    if (interviews.length === 0) return [];
+
+    const interviewIds = new Set(interviews.map((interview) => String(interview._id)));
     const feedback = await ctx.db.query("feedback").collect();
+    const visibleFeedback = feedback.filter((entry) =>
+      interviewIds.has(String(entry.interviewId)),
+    );
+
+    // Private notes are the author's alone; admins and recruiters see everything.
+    const canReadPrivateNotes =
+      user.role === "admin" || user.role === "recruiter";
 
     return interviews
       .sort((a, b) => b.startTime - a.startTime)
       .map((interview) => ({
         ...interview,
         normalizedStatus: normalizeInterviewStatus(interview.status),
-        feedback: feedback.filter((entry) => String(entry.interviewId) === String(interview._id)),
+        feedback: visibleFeedback
+          .filter((entry) => String(entry.interviewId) === String(interview._id))
+          .map((entry) =>
+            canReadPrivateNotes || entry.interviewerId === user.clerkId
+              ? entry
+              : { ...entry, privateNotes: undefined },
+          ),
       }));
   },
 });

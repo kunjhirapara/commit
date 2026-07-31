@@ -568,7 +568,9 @@ export const getJobByStatus = query({
     status: jobStatusValidator,
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "viewDashboard");
+    // Job rows carry payloads (interview ids) and error text. "viewDashboard"
+    // includes interviewers; this is an operations concern.
+    await requirePermission(ctx, "manageReliability");
     return await ctx.db
       .query("backgroundJobs")
       .withIndex("by_status_run_at", (q) => q.eq("status", args.status))

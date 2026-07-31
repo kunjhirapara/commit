@@ -11,8 +11,11 @@ export const getCalendarEventsForUser = query({
     const { user } = await getCurrentUserRecord(ctx);
     const targetClerkId = args.userClerkId || user.clerkId;
 
+    // "viewUsers" includes interviewers, which would let any interviewer read any
+    // other user's private calendar. Reading someone else's calendar is a
+    // scheduling-staff action.
     if (targetClerkId !== user.clerkId) {
-      await requirePermission(ctx, "viewUsers");
+      await requirePermission(ctx, "scheduleInterviews");
     }
 
     return await ctx.db
@@ -33,8 +36,11 @@ export const createCalendarEvent = mutation({
   handler: async (ctx, args) => {
     const { user } = await getCurrentUserRecord(ctx);
 
+    // Writing into someone else's calendar was gated on "viewUsers", which
+    // interviewers hold — so any interviewer could plant events in any user's
+    // calendar. Restricted to scheduling staff.
     if (args.userClerkId !== user.clerkId) {
-      await requirePermission(ctx, "viewUsers");
+      await requirePermission(ctx, "scheduleInterviews");
     }
 
     const title = args.title.trim();

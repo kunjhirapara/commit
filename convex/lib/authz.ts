@@ -1,41 +1,23 @@
 import { createServerError, requireIdentity } from "./errorUtils";
+import {
+  PERMISSION_VALUES,
+  PRIVILEGED_INVITATION_ROLES,
+  ROLE_PERMISSIONS,
+  USER_ROLES,
+  type Permission,
+  type PrivilegedInvitationRole,
+  type UserRole,
+} from "./permissions";
 
-export const USER_ROLES = [
-  "candidate",
-  "interviewer",
-  "recruiter",
-  "developer",
-  "admin",
-] as const;
-
-export const PRIVILEGED_INVITATION_ROLES = [
-  "interviewer",
-  "recruiter",
-  "developer",
-  "admin",
-] as const;
-
-export type UserRole = (typeof USER_ROLES)[number];
-export type PrivilegedInvitationRole =
-  (typeof PRIVILEGED_INVITATION_ROLES)[number];
-
-export const PERMISSION_VALUES = [
-  "viewUsers",
-  "viewDashboard",
-  "viewRecordings",
-  "viewObservability",
-
-  "scheduleInterviews",
-  "editInterviews",
-  "cancelInterviews",
-  "manageRoles",
-  "manageRoleCatalog",
-  "manageInvitations",
-
-  "manageReliability",
-] as const;
-
-export type Permission = (typeof PERMISSION_VALUES)[number];
+// Re-exported so existing imports from "./lib/authz" keep working; the table
+// itself now lives in ./permissions so the client can share it.
+export {
+  PERMISSION_VALUES,
+  PRIVILEGED_INVITATION_ROLES,
+  ROLE_PERMISSIONS,
+  USER_ROLES,
+};
+export type { Permission, PrivilegedInvitationRole, UserRole };
 
 type UserRecord = {
   _id: string;
@@ -52,42 +34,7 @@ type InterviewRecord = {
   status?: string;
 };
 
-const PERMISSIONS: Record<UserRole, Permission[]> = {
-  candidate: [],
-  interviewer: ["viewUsers", "viewDashboard", "viewRecordings"],
-  recruiter: [
-    "viewUsers",
-    "viewDashboard",
-    "viewRecordings",
-    "viewObservability",
-
-    "scheduleInterviews",
-    "editInterviews",
-    "cancelInterviews",
-    "manageInvitations",
-  ],
-  developer: [
-    "viewDashboard",
-    "viewObservability",
-    "manageRoleCatalog",
-    "manageReliability",
-  ],
-  admin: [
-    "viewUsers",
-    "viewDashboard",
-    "viewRecordings",
-    "viewObservability",
-
-    "scheduleInterviews",
-    "editInterviews",
-    "cancelInterviews",
-
-    "manageRoles",
-    "manageRoleCatalog",
-    "manageInvitations",
-    "manageReliability",
-  ],
-};
+const PERMISSIONS = ROLE_PERMISSIONS;
 
 export const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
