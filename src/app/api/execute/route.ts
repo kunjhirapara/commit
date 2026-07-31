@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, currentUser } from "@clerk/nextjs/server";
+import { fetchMutation } from "convex/nextjs";
 import { z } from "zod";
+import { api } from "@/../convex/_generated/api";
 import { runCodeInDocker } from "@/lib/docker-runner";
+import { getValidatedServerEnv } from "@/lib/env";
 import { consumeRateLimit, getRateLimitHeaders } from "@/lib/rateLimit";
 import {
   RunQueueRejection,
@@ -32,8 +35,38 @@ const BURST_WINDOW_MS = 60_000;
 const DAILY_LIMIT = 200;
 const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Records one operational event per run so the daily rollup can count execution
+ * volume, failure rate and shed load. Best-effort: a telemetry outage must never
+ * turn a successful run into an error for the user.
+ */
+async function recordRunEvent(
+  token: string | null,
+  status: "succeeded" | "failed" | "rejected",
+  metadata: Record<string, unknown>,
+) {
+  try {
+    const env = getValidatedServerEnv();
+
+    await fetchMutation(
+      api.observability.ingestTelemetry,
+      {
+        source: "server",
+        scope: "code.run",
+        level: status === "succeeded" ? "info" : "warn",
+        message: `Code run ${status}`,
+        status,
+        metadata: JSON.stringify(metadata),
+      },
+      { token: token ?? undefined, url: env.NEXT_PUBLIC_CONVEX_URL },
+    );
+  } catch (error) {
+    console.error("[/api/execute] telemetry failed:", error);
+  }
+}
+
 export async function POST(req: NextRequest) {
-  const { userId } = await auth();
+  const { userId, getToken } = await auth();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
@@ -94,11 +127,19 @@ export async function POST(req: NextRequest) {
 
   const { language, code } = parsed.data;
 
+  const convexToken = await getToken({ template: "convex" });
+
   let release: (() => void) | undefined;
   try {
     release = await acquireRunSlot();
   } catch (err) {
     if (err instanceof RunQueueRejection) {
+      await recordRunEvent(convexToken, "rejected", {
+        language,
+        reason: err.reason,
+        ...getRunQueueStats(),
+      });
+
       return NextResponse.json(
         { error: err.message, queueRejection: err.reason },
         { status: 503, headers: { "Retry-After": "10" } },
@@ -118,6 +159,20 @@ export async function POST(req: NextRequest) {
         `active=${stats.active} queued=${stats.queued}`,
     );
 
+    // A non-zero exit is usually the user's code failing its tests, which is a
+    // normal outcome — only timeouts count against the runner's health.
+    await recordRunEvent(
+      convexToken,
+      result.timedOut ? "failed" : "succeeded",
+      {
+        language,
+        exitCode: result.exitCode,
+        executionMs: result.executionMs,
+        timedOut: result.timedOut,
+        ...stats,
+      },
+    );
+
     return NextResponse.json(result, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Execution failed.";
@@ -129,6 +184,12 @@ export async function POST(req: NextRequest) {
         message,
       );
     console.error("[/api/execute] Unexpected error:", message);
+    await recordRunEvent(convexToken, "failed", {
+      language,
+      infraError: isInfraFailure,
+      message,
+    });
+
     return NextResponse.json(
       {
         stdout: "",

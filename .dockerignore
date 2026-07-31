@@ -9,3 +9,7 @@ npm-debug.log*
 .dockerignore
 Dockerfile
 docker-compose.yml
+# Prometheus/Grafana config is mounted from the host, never baked into the image.
+monitoring
+# Report PDFs; large and irrelevant to the build.
+reference

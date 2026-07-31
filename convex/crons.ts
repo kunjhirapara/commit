@@ -16,4 +16,25 @@ crons.interval(
   internal.interviews.runLifecycleAutomation,
 );
 
+/**
+ * Aggregate the previous UTC day. Runs shortly after midnight UTC so the day is
+ * closed; re-running is safe because the rollup replaces the row for a date.
+ */
+crons.cron(
+  "roll up daily metrics",
+  "10 0 * * *",
+  internal.metrics.rollUpDailyMetrics,
+  {},
+);
+
+/**
+ * Age out the append-only tables. Hourly rather than daily so a backlog drains
+ * over time instead of needing one oversized batch.
+ */
+crons.interval(
+  "prune expired records",
+  { hours: 1 },
+  internal.metrics.pruneExpiredRecords,
+);
+
 export default crons;
