@@ -42,7 +42,35 @@ jobs:
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
             DOCKER_GID=${{ vars.DOCKER_GID || '999' }}
 
-      # Trigger Portainer stack redeploy via webhook
-      # Enable this once you have a Portainer webhook URL
-      # - name: Redeploy on Portainer
-      #   run: curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"
+      # Tells Portainer to pull the image just pushed and recreate the stack.
+      # Until now this was commented out, so every merge built an image that then
+      # sat in GHCR waiting for someone to press redeploy by hand.
+      #
+      # Inert until PORTAINER_WEBHOOK_URL is set: the step is skipped rather than
+      # failing, so a fork or a repo without the secret still gets a green build.
+      # Create the webhook in Portainer under Stacks → commit → Webhooks, then
+      # add the URL as a repository secret.
+      - name: Redeploy on Portainer
+        # Passed as env rather than interpolated into the run block: the webhook
+        # URL carries its own auth token, and `${{ }}` inside a shell command can
+        # end up in logs via `set -x` or an error trace.
+        env:
+          PORTAINER_WEBHOOK_URL: ${{ secrets.PORTAINER_WEBHOOK_URL }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${PORTAINER_WEBHOOK_URL:-}" ]; then
+            echo "::notice::PORTAINER_WEBHOOK_URL is not set, so the VM was not redeployed."
+            echo "::notice::The image is in GHCR — pull it in Portainer, or add the secret to automate this."
+            exit 0
+          fi
+
+          # --fail-with-body so an HTTP error fails the deploy rather than
+          # passing silently, which is how a stale VM goes unnoticed for weeks.
+          status=$(curl --silent --show-error --fail-with-body \
+            --retry 3 --retry-delay 5 --retry-all-errors \
+            --max-time 120 \
+            --output /dev/stderr --write-out '%{http_code}' \
+            -X POST "$PORTAINER_WEBHOOK_URL")
+
+          echo "Portainer webhook accepted the redeploy (HTTP $status)."

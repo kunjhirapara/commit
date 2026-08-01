@@ -103,6 +103,44 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # ── Image cleanup ───────────────────────────────────────────────────────────
+  # Every redeploy pulls a new ghcr.io/kunjhirapara/commit:latest. The image it
+  # replaces keeps its layers on disk but loses its only local tag, so it becomes
+  # dangling and is never reclaimed. Left alone, redeploys slowly fill the 200 GB
+  # disk with superseded app images.
+  #
+  # Prunes DANGLING images only. Deliberately not `prune -a`, which removes any
+  # image without a *running* container — that would delete node:20-alpine,
+  # python:3.12-alpine and eclipse-temurin:21-alpine between code runs, forcing a
+  # fresh pull on every execution and making the runner far slower.
+  #
+  # This mounts the Docker socket, which is root-equivalent on the host. The app
+  # container already mounts it for the code runner, so this adds no new class of
+  # access — but if you would rather not have a second container holding it, drop
+  # this service and put `0 4 * * * docker image prune -f` in the host crontab
+  # instead. Same effect.
+  image-gc:
+    image: docker:27-cli
+    container_name: commit-image-gc
+    restart: unless-stopped
+    command: >
+      sh -c 'while true; do
+        docker image prune -f || true;
+        sleep "${IMAGE_GC_INTERVAL_SECONDS:-86400}";
+      done'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    # Sleeps almost all the time; the prune itself is I/O, not CPU.
+    cpus: 0.25
+    mem_limit: 128m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ── Host metrics ────────────────────────────────────────────────────────────
   # Answers "what can this box actually take?" — the in-app dashboard covers user
   # inflow, these cover CPU, memory, disk and per-container load. All bound to
