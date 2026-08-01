@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+/* Plus Jakarta Sans is loaded by next/font/google in src/app/layout.tsx, not by
+   an @import here. An @import of a Google Fonts URL blocks text rendering on
+   every page behind three serial third-party round trips. */
 @import "tailwindcss";
 @plugin 'tailwindcss-animate';
 
@@ -34,8 +36,15 @@
   --color-ring: hsl(var(--ring));
 
   --font-sans:
-    "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
+    var(--font-jakarta-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Was never defined, so every `font-mono` in the app — the wordmark, the
+     language chips, the runner output — fell back to the OS monospace while
+     GeistMonoVF.woff downloaded unused. */
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -154,7 +163,9 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Plus Jakarta Sans", sans-serif;
+    /* Hard-coding the family name here meant the loaded font and the applied
+       font could drift apart — which they had. Track the token instead. */
+    font-family: var(--font-sans);
   }
 }
 
@@ -199,7 +210,7 @@
 }
 
 .meeting-stream-theme.str-video {
-  --str-video__font-family: "Plus Jakarta Sans", sans-serif;
+  --str-video__font-family: var(--font-sans);
   --str-video__border-radius-circle: 999px;
   --str-video__button-primary-base: #1f2933;
   --str-video__button-primary-hover: #111827;
