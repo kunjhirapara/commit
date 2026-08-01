@@ -28,10 +28,22 @@ export const PROCTORING_EVENT_KINDS = [
   // Tier B
   "window.geometry",
   "page.reload",
-  "input.idle",
-  "clock.skew",
   "batch.throttled",
 ] as const;
+
+/*
+ * Two kinds were designed and then deliberately not built.
+ *
+ * `input.idle` — silence while the call is live. Dropped because thinking looks
+ * exactly like idling. A candidate staring at a hard problem would accrue the
+ * same signal as one who walked away, and a measure that penalises deliberation
+ * in a technical interview is worse than no measure.
+ *
+ * `clock.skew` — kept as a field on every event and as a session maximum rather
+ * than as its own event. Skew is a property of the reporting channel, not a
+ * moment in the interview, and emitting one event per batch would have buried
+ * the timeline in duplicates of the same fact.
+ */
 
 export type ProctoringEventKind = (typeof PROCTORING_EVENT_KINDS)[number];
 
