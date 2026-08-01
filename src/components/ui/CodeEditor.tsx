@@ -77,11 +77,25 @@ function ValueBox({
   );
 }
 
+export type EditorSignal = {
+  kind: "editor.paste" | "editor.bulkInsert";
+  chars: number;
+};
+
 interface CodeEditorProps {
   streamCallId?: string;
+  /**
+   * Reports editing activity that a caller may care about — currently large
+   * single insertions, used by interview integrity monitoring.
+   *
+   * The editor deliberately knows nothing about proctoring: it says what
+   * happened and the caller decides what it means. That keeps the practice
+   * sandbox, which passes no callback, entirely unmonitored.
+   */
+  onEditorSignal?: (signal: EditorSignal) => void;
 }
 
-function CodeEditor({ streamCallId }: CodeEditorProps) {
+function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
   const [selectedQuestion, setSelectedQuestion] = useState(CODING_QUESTIONS[0]);
   const [language, setLanguage] = useState<"javascript" | "python" | "java">(
@@ -119,6 +133,41 @@ function CodeEditor({ streamCallId }: CodeEditorProps) {
   const editorTheme = resolvedTheme === "light" ? "vs" : "vs-dark";
 
   /* ── handlers ─────────────────────────────────────── */
+
+  /**
+   * Reports large single insertions.
+   *
+   * Monaco's model-change hook is used rather than a DOM `paste` listener
+   * because it is the harder signal to evade: suppressing the paste event still
+   * leaves the change arriving through the model. Programmatic edits — switching
+   * question or language rewrites the whole buffer — are filtered out via
+   * `isFlush`, which Monaco sets for `setValue`, so only user-driven insertions
+   * are reported.
+   */
+  const handleEditorMount: NonNullable<
+    React.ComponentProps<typeof Editor>["onMount"]
+  > = (editor) => {
+    if (!onEditorSignal) return;
+
+    editor.onDidPaste((event: { range: unknown }) => {
+      const model = editor.getModel();
+      if (!model) return;
+      const pasted = model.getValueInRange(event.range as never) ?? "";
+      onEditorSignal({ kind: "editor.paste", chars: pasted.length });
+    });
+
+    editor.onDidChangeModelContent((event: any) => {
+      if (event.isFlush) return;
+      const largest = (event.changes ?? []).reduce(
+        (max: number, change: { text?: string }) =>
+          Math.max(max, change.text?.length ?? 0),
+        0,
+      );
+      if (largest > 0) {
+        onEditorSignal({ kind: "editor.bulkInsert", chars: largest });
+      }
+    });
+  };
 
   const handleQuestionChange = (questionId: string) => {
     const q = CODING_QUESTIONS.find((q) => q.id === questionId)!;
@@ -345,6 +394,7 @@ function CodeEditor({ streamCallId }: CodeEditorProps) {
                   theme={editorTheme}
                   value={code}
                   onChange={(v) => setCode(v || "")}
+                  onMount={handleEditorMount}
                   options={{
                     minimap: { enabled: false },
                     fontSize: 18,

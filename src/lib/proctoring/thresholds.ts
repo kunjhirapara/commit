@@ -1,0 +1,77 @@
+/**
+ * Every tunable for interview integrity monitoring, in one place.
+ *
+ * Kept together deliberately: the UI renders the severity rule next to the band
+ * it produced, so an interviewer can disagree with the rule rather than with an
+ * unexplained number. That only works if there is exactly one definition of the
+ * rule to render.
+ *
+ * These values are a forgiving starting point, not a calibrated model. They
+ * should be revisited once there is real data behind them.
+ */
+export const PROCTORING_THRESHOLDS = {
+  /**
+   * Absences shorter than this are dropped. Clicking a notification, a transient
+   * OS dialog, or a window manager repaint all produce sub-second blur/focus
+   * pairs, and recording them would bury the real signal.
+   */
+  MIN_ABSENCE_MS: 1_000,
+
+  /**
+   * A single editor change larger than this is treated as a bulk insert.
+   *
+   * This is the sharpest signal available for a coding interview, because it
+   * catches pasted code even when the DOM paste event is suppressed — the change
+   * still arrives through the model. 120 characters is a few lines: comfortably
+   * above autocomplete and snippet expansion, comfortably below a solution.
+   */
+  BULK_INSERT_CHARS: 120,
+
+  /** How often buffered events are sent. One mutation carries a whole batch. */
+  FLUSH_INTERVAL_MS: 15_000,
+
+  /** Buffer size that forces an early flush, so memory cannot grow unbounded. */
+  MAX_BUFFER_EVENTS: 50,
+
+  /** Heartbeat cadence while the call is connected. */
+  HEARTBEAT_MS: 30_000,
+
+  /**
+   * Silence longer than this, while the call is still connected, is recorded as
+   * a monitor gap. Generous enough to survive a slow network or a backgrounded
+   * tab throttling timers, tight enough that disabling the monitor shows up.
+   */
+  HEARTBEAT_GRACE_MS: 90_000,
+
+  severity: {
+    /** At or above this much total unfocused time, the session is no longer clear. */
+    minorUnfocusedMs: 30_000,
+    /** Above this, notable. */
+    notableUnfocusedMs: 120_000,
+    /** Above this many characters in one insert, minor. */
+    minorInsertChars: 120,
+    /** Above this many characters in one insert, notable. */
+    notableInsertChars: 400,
+    /** Client/server clock disagreement above this is notable. */
+    notableClockSkewMs: 30_000,
+  },
+} as const;
+
+/**
+ * The rule, in the words the UI shows. Written out rather than generated from
+ * the numbers so it reads like a sentence a person wrote.
+ */
+export const SEVERITY_RULE_TEXT =
+  "Clear: under 30s away and no bulk paste. " +
+  "Minor: up to 2 minutes away, or one paste of 121–400 characters. " +
+  "Notable: more than either, or the monitor stopped reporting, or the clock was off, " +
+  "or a second display appeared mid-interview.";
+
+/**
+ * Shown alongside every report. The feature is worth nothing if it is read as
+ * proof, and a determined candidate with a phone produces a spotless record.
+ */
+export const PROCTORING_CAVEAT =
+  "These are signals, not proof. They are reported by the candidate's browser, " +
+  "so they can be incomplete, and someone using a second device would leave no " +
+  "trace here at all. Read them as context for a conversation, not a verdict.";
