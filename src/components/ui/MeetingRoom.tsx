@@ -54,6 +54,7 @@ import { Button } from "./button";
 import ErrorState from "./ErrorState";
 import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
+import { useProctoring } from "@/hooks/useProctoring";
 import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useCallEndHandler } from "@/hooks/useCallEndHandler";
@@ -164,6 +165,25 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
         isRecruiter ||
         interview.interviewerIds.includes(currentUser.clerkId) ||
         interview.interviewerIds.includes(localParticipant?.userId ?? "")));
+  /**
+   * Integrity monitoring runs for the candidate and nobody else.
+   *
+   * Interviewers switch away constantly — notes, the scorecard, the CV — so
+   * recording them would bury the signal in noise and amount to surveilling
+   * staff. The comparison is made here, once, and the hook is inert otherwise.
+   */
+  const isCandidate =
+    !isUserLoading &&
+    !!interview &&
+    !!currentUser &&
+    interview.candidateId === currentUser.clerkId;
+
+  const { reportEditorSignal } = useProctoring({
+    interviewId: interview?._id,
+    streamCallId: interview?.streamCallId,
+    enabled: isCandidate,
+  });
+
   const canSendAudio = useHasPermissions(OwnCapability.SEND_AUDIO);
   const canSendVideo = useHasPermissions(OwnCapability.SEND_VIDEO);
   const canCreateReaction = useHasPermissions(OwnCapability.CREATE_REACTION);
@@ -642,7 +662,12 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
         {/* ── Code editor panel ── */}
         <ResizablePanel defaultSize={70} minSize={10}>
           <div className="h-full rounded-none border-l">
-            <CodeEditor streamCallId={interview?.streamCallId} />
+            <CodeEditor
+              streamCallId={interview?.streamCallId}
+              // Undefined for everyone but the candidate, so the editor reports
+              // nothing at all for an interviewer.
+              onEditorSignal={isCandidate ? reportEditorSignal : undefined}
+            />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

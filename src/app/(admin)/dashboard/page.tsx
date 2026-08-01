@@ -140,7 +140,6 @@ function DashboardOverviewSkeleton() {
 }
 
 function DashboardOverviewPage() {
-
   const {
     canAccessDeveloperTools,
     canManageInvitations,
@@ -178,37 +177,6 @@ function DashboardOverviewPage() {
         reliability === undefined ||
         notificationOps === undefined));
 
-  const workspaceLinks = [
-    {
-      href: "/dashboard/interviews",
-      title: "Interview operations",
-      description: "Pipeline triage, bulk actions, and manual interventions.",
-      visible:
-        role === "interviewer" || role === "recruiter" || role === "admin",
-    },
-    {
-      href: "/dashboard/team",
-      title: "Team management",
-      description:
-        "Invitations, interviewer profiles, and candidate review trails.",
-      visible: canManageInvitations || canManageRoles,
-    },
-    {
-      href: "/dashboard/developer",
-      title: "Developer console",
-      description:
-        "System health, reliability queues, and delivery operations.",
-      visible: canAccessDeveloperTools,
-    },
-
-    {
-      href: "/dashboard/roles",
-      title: "Roles studio",
-      description: "Create roles, assign permissions, and update user access.",
-      visible: canManageRoleCatalog,
-    },
-  ].filter((item) => item.visible);
-
   if (isLoading) {
     return <DashboardOverviewSkeleton />;
   }
@@ -227,10 +195,6 @@ function DashboardOverviewPage() {
           ) : null
         }
       />
-
-      <div className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
-        <NotificationsPanel />
-      </div>
 
       {operations ? (
         <section className="space-y-4">

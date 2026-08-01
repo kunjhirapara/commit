@@ -257,6 +257,76 @@ export default defineSchema({
     // scan by time rather than by interview.
     .index("by_created_at", ["createdAt"]),
 
+  /**
+   * Interview integrity signals, one row per recorded event.
+   *
+   * Deliberately not folded into `interviewSessionEvents`. That table backs
+   * `getSessionEvents`, which does `.take(50)` — proctoring is a far
+   * higher-volume stream and would swamp the existing session timeline. The two
+   * also want different retention.
+   *
+   * Append-only: there is no update or delete path for a candidate, and the
+   * server timestamps every row itself.
+   */
+  proctoringEvents: defineTable({
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    /** Always the candidate. Interviewers are not monitored. */
+    candidateClerkId: v.string(),
+    kind: v.string(),
+    tier: v.union(v.literal("a"), v.literal("b")),
+    /** Server clock, authoritative for ordering and duration. */
+    startedAt: v.number(),
+    durationMs: v.optional(v.number()),
+    /** Characters inserted, milliseconds absent — whatever the kind measures. */
+    magnitude: v.optional(v.number()),
+    /** Client's own clock, kept only so disagreement can be measured. */
+    clientReportedAt: v.optional(v.number()),
+    clockSkewMs: v.optional(v.number()),
+    metadata: v.optional(v.string()),
+  })
+    .index("by_interview", ["interviewId"])
+    .index("by_candidate", ["candidateClerkId"])
+    .index("by_created_at", ["startedAt"]),
+
+  /**
+   * Session-level facts that are not events: what was checked, not what fired.
+   *
+   * This is what lets a report distinguish "checked and clean" from "never
+   * checked" — without it, a browser that cannot detect displays looks identical
+   * to one that looked and found nothing.
+   */
+  proctoringSessions: defineTable({
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    candidateClerkId: v.string(),
+    /** Absent means the candidate never acknowledged the disclosure. */
+    disclosureAcknowledgedAt: v.optional(v.number()),
+    startedAt: v.number(),
+    lastHeartbeatAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    /** "extended" | "single" | "unsupported" — never collapse the last two. */
+    displaySupport: v.string(),
+    extendedAppearedMidSession: v.optional(v.boolean()),
+    /** False means fullscreen exits were never detectable. */
+    fullscreenUsed: v.optional(v.boolean()),
+    userAgent: v.optional(v.string()),
+    monitorGaps: v.optional(v.number()),
+    maxClockSkewMs: v.optional(v.number()),
+    /**
+     * Durable event counter, used as the rate limit.
+     *
+     * The in-memory limiter in src/lib/rateLimit.ts is per-process, and Convex
+     * functions run in isolates that do not reliably share memory, so it cannot
+     * bound anything here. A counter on the row is authoritative.
+     */
+    eventsRecorded: v.optional(v.number()),
+    /** Set once when the cap is hit, so throttling is visible rather than silent. */
+    throttledAt: v.optional(v.number()),
+  })
+    .index("by_interview", ["interviewId"])
+    .index("by_candidate", ["candidateClerkId"]),
+
   invitations: defineTable({
     email: v.string(),
     role: privilegedInvitationRole,
