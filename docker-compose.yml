@@ -64,6 +64,11 @@ services:
       retries: 3
       start_period: 60s
 
+    # Opts this container into Watchtower. Only app and backup carry it, so the
+    # pinned monitoring images are never touched.
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
   backup:
     image: ghcr.io/kunjhirapara/commit:${IMAGE_TAG:-latest}
     container_name: commit-backup
@@ -103,11 +108,60 @@ services:
         max-size: "10m"
         max-file: "3"
 
+    # Shares the app image, so it must roll forward with it.
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
+
+  # ── Automatic image rollout ─────────────────────────────────────────────────
+  # Portainer's stack webhook — the usual way to have CI trigger a redeploy — is
+  # a Business Edition feature, so this pulls instead of being pushed to.
+  # Watchtower polls GHCR and recreates a container when its image changes.
+  #
+  # Chosen over SSHing from GitHub Actions because it needs no inbound access:
+  # the VM currently exposes only HTTP, and opening SSH to GitHub's runners plus
+  # storing a private key as a repo secret is real new attack surface for a
+  # convenience. The cost is polling latency instead of an instant push.
+  #
+  # The GHCR package is public, so no registry credentials are needed. If it is
+  # ever made private, add REPO_USER and REPO_PASS (a PAT with read:packages).
+  #
+  # Scoped by label, not global: without WATCHTOWER_LABEL_ENABLE it would also
+  # manage Prometheus, Grafana, cAdvisor and node-exporter, which are pinned to
+  # exact versions on purpose.
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    container_name: commit-watchtower
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_POLL_INTERVAL: ${WATCHTOWER_POLL_INTERVAL:-300}
+      # Removes the image a container was running once it has been replaced.
+      # This is the main source of the dangling images image-gc otherwise sweeps.
+      WATCHTOWER_CLEANUP: "true"
+      # Don't take the stack down together: containers are updated one at a time.
+      WATCHTOWER_ROLLING_RESTART: "true"
+      WATCHTOWER_INCLUDE_RESTARTING: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+
+    cpus: 0.25
+    mem_limit: 256m
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
   # ── Image cleanup ───────────────────────────────────────────────────────────
-  # Every redeploy pulls a new ghcr.io/kunjhirapara/commit:latest. The image it
-  # replaces keeps its layers on disk but loses its only local tag, so it becomes
-  # dangling and is never reclaimed. Left alone, redeploys slowly fill the 200 GB
-  # disk with superseded app images.
+  # Backstop to Watchtower's own WATCHTOWER_CLEANUP, which only reclaims images
+  # for containers it updated. This catches everything else: a manual
+  # `docker compose pull`, a half-finished pull, an image left behind by a
+  # container Watchtower does not manage.
+  #
+  # Superseded app images lose their only local tag when a new :latest arrives,
+  # so they become dangling and are never reclaimed on their own. Left alone,
+  # redeploys slowly fill the 200 GB disk.
   #
   # Prunes DANGLING images only. Deliberately not `prune -a`, which removes any
   # image without a *running* container — that would delete node:20-alpine,

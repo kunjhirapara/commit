@@ -139,21 +139,39 @@ Commit handles backend infrastructure largely via **Convex Cloud**.
 For the Next.js frontend, the easiest way to deploy is the [Vercel Platform](https://vercel.com).
 If you wish to maintain the secure remote code execution feature in production, you must deploy the Next.js application to an environment that supports Docker execution (e.g., AWS ECS, Google Cloud Run, or a VPS with Docker installed), as Vercel Serverless Functions do not permit local Docker daemon access.
 
-### Automatic redeploy on the VM
+### Automatic rollout
 
-Merging to `main` builds an arm64 image and pushes it to GHCR. To have the VM
-pick it up on its own, rather than waiting for someone to press redeploy:
+Merging to `main` deploys Convex, then builds an arm64 image and pushes it to
+GHCR. The `watchtower` service on the VM polls for that image and recreates the
+`app` and `backup` containers when it changes. Nothing needs pressing.
 
-1. In Portainer, open **Stacks → commit → Webhooks** and create a stack webhook.
-2. Copy the URL and add it as a GitHub repository secret named
-   `PORTAINER_WEBHOOK_URL` (Settings → Secrets and variables → Actions).
+**Set `CONVEX_DEPLOY_KEY` as a repository secret** (Settings → Secrets and
+variables → Actions). Generate it in the Convex dashboard under
+**Settings → Deploy keys** for the production deployment. Without it the deploy
+step warns and skips, and the image still ships — which will break any screen
+calling a function production does not have yet.
 
-The deploy workflow posts to it after the image is pushed. Until the secret
-exists the step is skipped with a notice, so builds stay green without it.
+The ordering is the point. The frontend calls Convex functions by name, so an
+image that reaches users ahead of its backend fails on whatever it added, and a
+missing query is a broken dashboard rather than a graceful degradation.
+Deploying Convex first, in the same workflow, means the backend is always live
+before the image depending on it exists in the registry. If the Convex deploy
+fails, the image is never pushed.
 
-**Deploy Convex before the image reaches the VM.** The frontend calls Convex
-functions by name, so a new image against an older Convex deployment fails on
-whatever it added. `npx convex deploy` first, then let the image roll.
+Portainer's stack webhook would be the usual way to have CI push a redeploy, but
+it is a Business Edition feature. Watchtower polls instead, which also avoids
+opening SSH to GitHub's runners — the VM exposes only HTTP today, and a stored
+private key plus an inbound port is real attack surface for a convenience. The
+trade is polling latency; set `WATCHTOWER_POLL_INTERVAL` (seconds, default 300).
+
+Watchtower is scoped by label and only manages containers carrying
+`com.centurylinklabs.watchtower.enable=true`, which is just `app` and `backup`.
+Prometheus, Grafana, cAdvisor and node-exporter stay pinned to their exact
+versions.
+
+The GHCR package is public, so no registry credentials are needed. If you make
+it private, add `REPO_USER` and `REPO_PASS` (a PAT with `read:packages`) to the
+watchtower service.
 
 ### Reclaiming disk after redeploys
 
@@ -161,7 +179,11 @@ Each redeploy pulls a new `:latest`. The image it replaces keeps its layers but
 loses its only local tag, so it becomes dangling and is never reclaimed — across
 enough deploys that fills the disk.
 
-The `image-gc` service in `docker-compose.yml` prunes dangling images daily.
+Watchtower reclaims the image it replaces (`WATCHTOWER_CLEANUP`), which covers
+the common case. The `image-gc` service is the backstop for everything else — a
+manual `docker compose pull`, a half-finished pull, an image left by a container
+Watchtower does not manage — and prunes dangling images daily.
+
 It prunes **dangling only**, never `-a`: `docker image prune -a` removes any
 image without a *running* container, which would delete `node:20-alpine`,
 `python:3.12-alpine` and `eclipse-temurin:21-alpine` between code runs and force
