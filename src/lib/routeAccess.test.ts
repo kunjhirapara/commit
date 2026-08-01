@@ -51,4 +51,23 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/dashboard"), false);
     assert.equal(isPublicRoute("/practice"), false);
   });
+
+  it("exposes the generated metadata routes", () => {
+    // The middleware matcher skips static assets by extension and lists neither
+    // .txt nor .xml, and /opengraph-image has no extension at all, so all three
+    // reach auth.protect() and 307'd to /signin until they were listed here.
+    assert.equal(isPublicRoute("/robots.txt"), true);
+    assert.equal(isPublicRoute("/sitemap.xml"), true);
+    assert.equal(isPublicRoute("/opengraph-image"), true);
+  });
+
+  it("anchors the metadata patterns rather than matching prefixes", () => {
+    // Unanchored patterns would hand a signed-out visitor anything living under
+    // these names.
+    assert.equal(isPublicRoute("/robots.txt/secret"), false);
+    assert.equal(isPublicRoute("/sitemap.xml/secret"), false);
+    assert.equal(isPublicRoute("/opengraph-image/secret"), false);
+    assert.equal(isPublicRoute("/sitemap"), false);
+    assert.equal(isPublicRoute("/dashboard/robots.txt"), false);
+  });
 });
