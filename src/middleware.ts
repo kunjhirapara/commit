@@ -27,7 +27,22 @@ export default clerkMiddleware(async (auth, req) => {
   // so that public routes (landing page, legal pages) can actually render for
   // signed-out visitors instead of bouncing straight to Clerk.
   if (!isPublicRoute(pathname)) {
-    await auth.protect();
+    // `unauthenticatedUrl` is required, not cosmetic. With no sign-in URL
+    // configured, auth.protect() answers a signed-out request with a 404 rather
+    // than a redirect — deliberate on Clerk's part, so protected paths do not
+    // leak their existence, but wrong here: /dashboard is linked from the navbar
+    // and a visitor whose session expired got "not found" instead of a login
+    // prompt. The previous middleware redirected these to "/" itself, so this
+    // restores that behaviour rather than adding new.
+    const signInUrl = new URL("/signin", req.url);
+    signInUrl.searchParams.set("redirect_url", req.url);
+
+    await auth.protect({
+      unauthenticatedUrl: signInUrl.toString(),
+      // A signed-in user who fails an authorization check still 404s rather than
+      // looping back to sign-in, which would be an infinite bounce.
+      unauthorizedUrl: new URL("/", req.url).toString(),
+    });
   }
 
   const correlationId =
