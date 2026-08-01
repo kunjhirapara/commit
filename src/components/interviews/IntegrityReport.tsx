@@ -92,6 +92,10 @@ function IntegrityReport({ interviewId }: { interviewId: string }) {
 
   const summary = report.summary as ProctoringSummary;
   const severity = resolveSeverity(summary);
+  // Tier B counts live alongside the summary rather than inside it, so they
+  // cannot accidentally be fed into severity banding.
+  const offPrimaryHints = report.summary.offPrimaryHints ?? 0;
+  const reloads = report.summary.reloads ?? 0;
 
   return (
     <div className="space-y-4 rounded-2xl border border-border/70 bg-card/80 p-4">
@@ -152,6 +156,22 @@ function IntegrityReport({ interviewId }: { interviewId: string }) {
         <Measure
           label="Fullscreen"
           value={summary.fullscreenUsed ? "In use" : "Not in use"}
+        />
+        {/* Only meaningful where isExtended was unavailable — elsewhere the
+            real answer is already shown above and this would double-count. */}
+        {summary.displaySupport === "unsupported" ? (
+          <Measure
+            label="Window off primary screen"
+            value={
+              offPrimaryHints > 0
+                ? `Seen ${offPrimaryHints}×`
+                : "Not seen"
+            }
+          />
+        ) : null}
+        <Measure
+          label="Page reloads"
+          value={reloads > 0 ? String(reloads) : "none"}
         />
       </div>
 
