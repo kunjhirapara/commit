@@ -42,6 +42,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const DASHBOARD_WINDOW_DAYS = 30;
 const DASHBOARD_WINDOW_MS = DASHBOARD_WINDOW_DAYS * DAY_MS;
 
+/** Rows the workspace table renders at most, unchanged from the fat query. */
+const PIPELINE_LIMIT = 100;
+
 const FUNNEL_STAGES = [
   "scheduled",
   "live",
@@ -186,6 +189,141 @@ export const getOperationsAnalytics = query({
         count: countByStatus(status),
       })),
     };
+  },
+});
+
+/** Roles that can be assigned as an interviewer on a round. */
+const STAFF_ROLES = ["interviewer", "recruiter", "admin"] as const;
+
+/**
+ * Staff directory for interviewer pickers.
+ *
+ * Three indexed reads via by_role rather than collecting the whole users table
+ * and filtering. Bounded by headcount, which does not grow with public signup —
+ * unlike the candidate list, which does.
+ */
+export const getInterviewerRoster = query({
+  handler: async (ctx) => {
+    const { user } = await requirePermission(ctx, "viewDashboard");
+
+    // Contact details stay with the roles that need them. An interviewer or
+    // developer holds viewDashboard but has no business reading everyone's email.
+    const canViewContactDetails =
+      user.role === "admin" || user.role === "recruiter";
+
+    const byRole = await Promise.all(
+      STAFF_ROLES.map((role) =>
+        ctx.db
+          .query("users")
+          .withIndex("by_role", (q: any) => q.eq("role", role))
+          .collect(),
+      ),
+    );
+
+    return byRole.flat().map((staff: any) => ({
+      clerkId: staff.clerkId,
+      name: staff.name,
+      email: canViewContactDetails ? staff.email : "",
+      role: staff.role,
+      skills: staff.skills ?? [],
+      availabilitySummary: staff.availabilitySummary ?? "Availability not set",
+      permissionTags: staff.permissionTags ?? [],
+      isActive: staff.isActive ?? true,
+    }));
+  },
+});
+
+/**
+ * The interview workspace table.
+ *
+ * Separate from the analytics query so that typing in the search box re-runs
+ * only this, instead of recomputing the metric cards and the roster as the fat
+ * query did on every keystroke.
+ *
+ * Resolves only the users these rows actually reference, rather than loading the
+ * whole users table to build a lookup map.
+ */
+export const getInterviewPipeline = query({
+  args: {
+    search: v.optional(v.string()),
+    interviewerId: v.optional(v.string()),
+    candidateId: v.optional(v.string()),
+    stage: v.optional(v.string()),
+    role: v.optional(v.string()),
+    startDate: v.optional(v.number()),
+    endDate: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { user } = await requirePermission(ctx, "viewDashboard");
+    const scopedInterviews = await loadScopedWindowInterviews(ctx, user);
+
+    // matchesFilters needs names, so resolve the users referenced by the
+    // windowed set before filtering. Bounded by the window, not the table.
+    const referencedClerkIds = new Set<string>();
+    for (const interview of scopedInterviews) {
+      referencedClerkIds.add(interview.candidateId);
+      for (const id of interview.interviewerIds) referencedClerkIds.add(id);
+    }
+
+    const referencedUsers = await Promise.all(
+      Array.from(referencedClerkIds).map((clerkId) =>
+        ctx.db
+          .query("users")
+          .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", clerkId))
+          .first(),
+      ),
+    );
+
+    const usersByClerkId = new Map(
+      referencedUsers
+        .filter(Boolean)
+        .map((referenced: any) => [referenced.clerkId, referenced]),
+    );
+
+    const feedbackByInterviewId = new Map<string, any[]>();
+
+    const matching = scopedInterviews
+      .filter((interview: any) => matchesFilters(interview, args, usersByClerkId))
+      .sort((a: any, b: any) => b.startTime - a.startTime)
+      .slice(0, PIPELINE_LIMIT);
+
+    // Feedback only for the rows actually returned, not the whole table.
+    await Promise.all(
+      matching.map(async (interview: any) => {
+        const entries = await ctx.db
+          .query("feedback")
+          .withIndex("by_interview_id", (q: any) =>
+            q.eq("interviewId", interview._id),
+          )
+          .collect();
+        feedbackByInterviewId.set(String(interview._id), entries);
+      }),
+    );
+
+    return matching.map((interview: any) => {
+      const candidate = usersByClerkId.get(interview.candidateId);
+      const interviewFeedback =
+        feedbackByInterviewId.get(String(interview._id)) ?? [];
+
+      return {
+        ...interview,
+        normalizedStatus: normalizeInterviewStatus(interview.status),
+        candidateName: candidate?.name ?? "Unknown Candidate",
+        interviewerNames: interview.interviewerIds
+          .map((id: string) => usersByClerkId.get(id)?.name ?? "Unknown")
+          .join(", "),
+        feedbackCompletion:
+          interview.interviewerIds.length === 0
+            ? 0
+            : Math.round(
+                (interviewFeedback.filter(
+                  (entry: any) => entry.state === "submitted",
+                ).length /
+                  interview.interviewerIds.length) *
+                  100,
+              ),
+      };
+    });
   },
 });
 

@@ -118,7 +118,11 @@ export default defineSchema({
     hasCompletedOnboarding: v.optional(v.boolean()),
   })
     .index("by_clerk_id", ["clerkId"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    // Dashboards need "every interviewer" and "every candidate". Without this
+    // they collected the whole table and filtered in JS, which is fine at ten
+    // users and not fine once public signup fills the table with candidates.
+    .index("by_role", ["role"]),
 
   roleDefinitions: defineTable({
     name: v.string(),
