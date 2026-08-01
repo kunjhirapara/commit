@@ -216,12 +216,30 @@ export const syncUser = mutation({
     email: v.string(),
     name: v.string(),
     image: v.optional(v.string()),
+    /**
+     * Accepted and discarded — a rollout compatibility shim, not an input.
+     *
+     * Convex arg validators are strict, and the image currently running on the
+     * VM still calls this with a `clerkId`. Without this field, deploying these
+     * functions would reject every sync from the live frontend, and because
+     * useUserRole waits on sync before it will query anything, the whole
+     * signed-in UI would sit blank until the new image was pulled. Declaring it
+     * optional decouples the Convex deploy from the image rollout.
+     *
+     * The value is never read: the trusted id comes from the verified token
+     * below, so a client still cannot sync a row it does not own.
+     *
+     * Safe to delete once the new image is live everywhere.
+     */
+    clerkId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const identity = await requireIdentity(ctx);
 
     return applySyncUser(ctx, {
-      ...args,
+      email: args.email,
+      name: args.name,
+      image: args.image,
       clerkId: identity.subject,
     });
   },
