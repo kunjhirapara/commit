@@ -4,18 +4,17 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { UserSyncStatusProvider } from "@/components/providers/UserSyncStatusProvider";
 import { getValidatedClientEnv } from "@/lib/env";
-import { clerkAppearance } from "@/lib/clerkAppearance";
 
 const clientEnv = getValidatedClientEnv();
 const convex = new ConvexReactClient(clientEnv.NEXT_PUBLIC_CONVEX_URL);
 
 function ConvexClerkProvider({ children }: { children: React.ReactNode }) {
   return (
-    // `appearance` is set here rather than per-surface so the sign-in page, the
-    // navbar modals and UserButton share one definition. See lib/clerkAppearance
-    // for why it uses Tailwind classes instead of colour variables.
+    // No `appearance` here on purpose. It needs the resolved theme, and this
+    // provider sits above ThemeProvider, so `useTheme()` is unavailable at this
+    // point in the tree. Each Clerk surface applies it instead via
+    // useClerkAppearance, which runs where the theme is known.
     <ClerkProvider
-      appearance={clerkAppearance}
       signInUrl="/signin"
       signUpUrl="/signup"
       publishableKey={clientEnv.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
