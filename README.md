@@ -139,6 +139,40 @@ Commit handles backend infrastructure largely via **Convex Cloud**.
 For the Next.js frontend, the easiest way to deploy is the [Vercel Platform](https://vercel.com).
 If you wish to maintain the secure remote code execution feature in production, you must deploy the Next.js application to an environment that supports Docker execution (e.g., AWS ECS, Google Cloud Run, or a VPS with Docker installed), as Vercel Serverless Functions do not permit local Docker daemon access.
 
+### Automatic redeploy on the VM
+
+Merging to `main` builds an arm64 image and pushes it to GHCR. To have the VM
+pick it up on its own, rather than waiting for someone to press redeploy:
+
+1. In Portainer, open **Stacks → commit → Webhooks** and create a stack webhook.
+2. Copy the URL and add it as a GitHub repository secret named
+   `PORTAINER_WEBHOOK_URL` (Settings → Secrets and variables → Actions).
+
+The deploy workflow posts to it after the image is pushed. Until the secret
+exists the step is skipped with a notice, so builds stay green without it.
+
+**Deploy Convex before the image reaches the VM.** The frontend calls Convex
+functions by name, so a new image against an older Convex deployment fails on
+whatever it added. `npx convex deploy` first, then let the image roll.
+
+### Reclaiming disk after redeploys
+
+Each redeploy pulls a new `:latest`. The image it replaces keeps its layers but
+loses its only local tag, so it becomes dangling and is never reclaimed — across
+enough deploys that fills the disk.
+
+The `image-gc` service in `docker-compose.yml` prunes dangling images daily.
+It prunes **dangling only**, never `-a`: `docker image prune -a` removes any
+image without a *running* container, which would delete `node:20-alpine`,
+`python:3.12-alpine` and `eclipse-temurin:21-alpine` between code runs and force
+a re-pull on every execution.
+
+It mounts the Docker socket, which is root-equivalent on the host. The app
+container already mounts it for the code runner, so this adds no new class of
+access — but if you would rather not have a second container holding it, delete
+the service and add `0 4 * * * docker image prune -f` to the host crontab
+instead. Set `IMAGE_GC_INTERVAL_SECONDS` to change the cadence.
+
 ### Clerk + Convex Auth
 
 Convex validates Clerk JWTs against the issuer configured in `convex/auth.config.ts`. Set this on the Convex deployment itself, not only in `.env.local` or your Docker/Portainer environment:
