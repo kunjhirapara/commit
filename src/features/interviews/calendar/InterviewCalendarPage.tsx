@@ -451,14 +451,16 @@ function InterviewCalendarPage() {
             <Button
               variant="outline"
               size="icon"
+              aria-label={`Previous month, ${format(subMonths(visibleMonth, 1), "MMMM yyyy")}`}
               onClick={() => setVisibleMonth((month) => subMonths(month, 1))}>
-              <ChevronLeftIcon className="h-4 w-4" />
+              <ChevronLeftIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
             <Button
               variant="outline"
               size="icon"
+              aria-label={`Next month, ${format(addMonths(visibleMonth, 1), "MMMM yyyy")}`}
               onClick={() => setVisibleMonth((month) => addMonths(month, 1))}>
-              <ChevronRightIcon className="h-4 w-4" />
+              <ChevronRightIcon className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
         </div>

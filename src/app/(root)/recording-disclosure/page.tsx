@@ -1,3 +1,10 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Recording Disclosure",
+  description: "How interview recordings are captured, disclosed and retained.",
+};
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const DISCLOSURES = [
