@@ -110,6 +110,11 @@ export const rollUpDailyMetrics = internalMutation({
       (event) => event.status === "rejected",
     ).length;
 
+    // Counted once a day here rather than on every developer-dashboard load.
+    // This is an internal cron, so a full scan is affordable where it was not in
+    // a user-facing query.
+    const totalUsers = (await ctx.db.query("users").collect()).length;
+
     const row = {
       date,
       signups: newUsers.length,
@@ -118,6 +123,7 @@ export const rollUpDailyMetrics = internalMutation({
       codeRuns,
       codeRunFailures,
       codeRunQueueRejections,
+      totalUsers,
       computedAt: Date.now(),
     };
 
@@ -240,7 +246,14 @@ export const getGrowthDashboard = query({
       )
       .collect();
 
-    const totalUsers = (await ctx.db.query("users").collect()).length;
+    // Read from the most recent rollup, plus today's signups, instead of the
+    // full table scan this used to do — directly contradicting the docstring
+    // above about being bounded by the window.
+    const latestWithTotal = [...history]
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .find((row) => typeof row.totalUsers === "number");
+    const totalUsers =
+      (latestWithTotal?.totalUsers ?? 0) + todaysSignups.length;
 
     const sumOverDays = (
       days: number,

@@ -327,161 +327,72 @@ export const getInterviewPipeline = query({
   },
 });
 
-export const getAdminDashboard = query({
-  args: {
-    search: v.optional(v.string()),
-    interviewerId: v.optional(v.string()),
-    candidateId: v.optional(v.string()),
-    stage: v.optional(v.string()),
-    role: v.optional(v.string()),
-    startDate: v.optional(v.number()),
-    endDate: v.optional(v.number()),
-  },
+/** Candidates returned when the picker is idle, and the cap on search results. */
+const CANDIDATE_LIMIT = 50;
+
+/**
+ * Candidates for the team page picker.
+ *
+ * This is the read that public signup breaks: candidates are the bulk of the
+ * users table, and the fat query returned every one of them — each with a
+ * `rounds` array built from the full interview list that the UI never rendered,
+ * since it loads the selected candidate's history through getCandidateHistory.
+ *
+ * Idle, it returns candidates seen in the dashboard window. Searching goes
+ * through the users search index. Either way the result is bounded.
+ */
+export const getCandidateDirectory = query({
+  args: { search: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    // requirePermission already resolves the caller's record and returns it.
-    // This used to call getCurrentUserRecord straight afterwards, reading the
-    // same row a second time on every dashboard load.
     const { user } = await requirePermission(ctx, "viewDashboard");
-    const interviews = await ctx.db.query("interviews").collect();
-    const users = await ctx.db.query("users").collect();
-    const feedback = await ctx.db.query("feedback").collect();
-    const usersByClerkId = new Map(users.map((user) => [user.clerkId, user]));
 
-    // Grouped once instead of re-filtering the whole feedback array inside the
-    // per-interview map below, which was O(interviews x feedback).
-    const feedbackByInterviewId = new Map<string, typeof feedback>();
-    for (const entry of feedback) {
-      const key = String(entry.interviewId);
-      const bucket = feedbackByInterviewId.get(key);
-      if (bucket) bucket.push(entry);
-      else feedbackByInterviewId.set(key, [entry]);
-    }
-    const scopedInterviews =
-      user.role === "admin" || user.role === "recruiter"
-        ? interviews
-        : interviews.filter((interview) => canAccessInterview(user, interview));
-
-    const pipeline = scopedInterviews
-      .filter((interview) => matchesFilters(interview, args, usersByClerkId))
-      .sort((a, b) => b.startTime - a.startTime)
-      .slice(0, 100)
-      .map((interview) => {
-        const candidate = usersByClerkId.get(interview.candidateId);
-        const interviewers = interview.interviewerIds.map((id: string) => usersByClerkId.get(id));
-        const interviewFeedback =
-          feedbackByInterviewId.get(String(interview._id)) ?? [];
-
-        return {
-          ...interview,
-          normalizedStatus: normalizeInterviewStatus(interview.status),
-          candidateName: candidate?.name ?? "Unknown Candidate",
-          interviewerNames: interviewers.map((user: any) => user?.name ?? "Unknown").join(", "),
-          feedbackCompletion:
-            interview.interviewerIds.length === 0
-              ? 0
-              : Math.round((interviewFeedback.filter((entry) => entry.state === "submitted").length /
-                  interview.interviewerIds.length) *
-                  100),
-        };
-      });
-
-    // Same reason as feedbackByInterviewId: feedbackPending below ran a
-    // scopedInterviews.some(...) for every draft entry.
-    const scopedInterviewIds = new Set(
-      scopedInterviews.map((interview) => String(interview._id)),
-    );
-
-    const analytics = {
-      throughput: scopedInterviews.filter((item) => normalizeInterviewStatus(item.status) === "completed").length,
-      cancellations: scopedInterviews.filter((item) => normalizeInterviewStatus(item.status) === "cancelled").length,
-      noShows: scopedInterviews.filter((item) => normalizeInterviewStatus(item.status) === "no_show").length,
-      feedbackPending: feedback.filter(
-        (entry) =>
-          entry.state === "draft" &&
-          scopedInterviewIds.has(String(entry.interviewId)),
-      ).length,
-      timeToHireDays:
-        scopedInterviews.length === 0
-          ? 0
-          : Math.round(
-              scopedInterviews.reduce((sum, interview) => {
-                const createdAt = interview._creationTime ?? interview.startTime;
-                return sum + Math.max(0, interview.startTime - createdAt);
-              }, 0) /
-                scopedInterviews.length /
-                (24 * 60 * 60 * 1000),
-            ),
-      funnel: ["scheduled", "live", "completed", "passed", "rejected", "cancelled", "no_show"].map(
-        (status) => ({
-          status,
-          count: scopedInterviews.filter(
-            (item) => normalizeInterviewStatus(item.status) === status,
-          ).length,
-        }),
-      ),
-    };
-
-    // Only admins and recruiters get contact details. An interviewer or developer
-    // holds "viewDashboard" but has no business reading every candidate's email.
     const canViewContactDetails =
       user.role === "admin" || user.role === "recruiter";
-
-    // Admins and recruiters keep the full roster — the team page uses it as a
-    // candidate picker. Everyone else is scoped to candidates they actually
-    // interview, so an interviewer can no longer enumerate the whole user base
-    // and a developer (who can access no interviews) sees none.
-    const visibleCandidateIds = new Set(
-      scopedInterviews.map((interview) => interview.candidateId),
+    const scopedInterviews = await loadScopedWindowInterviews(ctx, user);
+    const visibleCandidateIds = new Set<string>(
+      scopedInterviews.map((interview: any) => interview.candidateId),
     );
 
-    const candidates = users
-      .filter(
-        (user) =>
-          user.role === "candidate" &&
-          (canViewContactDetails || visibleCandidateIds.has(user.clerkId)),
-      )
-      .map((candidate) => {
-        const candidateInterviews = scopedInterviews
-          .filter((interview) => interview.candidateId === candidate.clerkId)
-          .sort((a, b) => b.startTime - a.startTime);
+    const search = args.search?.trim();
+    let candidates: any[];
 
-        return {
-          clerkId: candidate.clerkId,
-          name: candidate.name,
-          email: canViewContactDetails ? candidate.email : "",
-          image: candidate.image,
-          rounds: candidateInterviews.map((interview) => ({
-            id: interview._id,
-            title: interview.title,
-            templateLabel: interview.templateLabel,
-            status: normalizeInterviewStatus(interview.status),
-            startTime: interview.startTime,
-          })),
-        };
-      });
+    if (search) {
+      const matches = await ctx.db
+        .query("users")
+        .withSearchIndex("search_by_name", (q: any) =>
+          q.search("name", search).eq("role", "candidate"),
+        )
+        .take(CANDIDATE_LIMIT);
 
-    const interviewerRoster = users
-      .filter(
-        (user) =>
-          user.role === "interviewer" || user.role === "recruiter" || user.role === "admin",
-      )
-      .map((user) => ({
-        clerkId: user.clerkId,
-        name: user.name,
-        email: canViewContactDetails ? user.email : "",
-        role: user.role,
-        skills: user.skills ?? [],
-        availabilitySummary: user.availabilitySummary ?? "Availability not set",
-        permissionTags: user.permissionTags ?? [],
-        isActive: user.isActive ?? true,
-      }));
+      // Admins and recruiters may search the whole candidate base — the picker
+      // has to reach someone with no recent rounds. Everyone else stays scoped
+      // to candidates they actually interview, so an interviewer cannot use the
+      // search box to enumerate the user base.
+      candidates = canViewContactDetails
+        ? matches
+        : matches.filter((match: any) => visibleCandidateIds.has(match.clerkId));
+    } else {
+      const recent = await Promise.all(
+        Array.from(visibleCandidateIds)
+          .slice(0, CANDIDATE_LIMIT)
+          .map((clerkId) =>
+            ctx.db
+              .query("users")
+              .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", clerkId))
+              .first(),
+          ),
+      );
+      candidates = recent.filter(Boolean);
+    }
 
-    return {
-      pipeline,
-      analytics,
-      candidates,
-      interviewerRoster,
-    };
+    return candidates
+      .map((candidate: any) => ({
+        clerkId: candidate.clerkId,
+        name: candidate.name,
+        email: canViewContactDetails ? candidate.email : "",
+        image: candidate.image,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   },
 });
 
@@ -657,11 +568,19 @@ export const getCandidateHistory = query({
 
     if (interviews.length === 0) return [];
 
-    const interviewIds = new Set(interviews.map((interview) => String(interview._id)));
-    const feedback = await ctx.db.query("feedback").collect();
-    const visibleFeedback = feedback.filter((entry) =>
-      interviewIds.has(String(entry.interviewId)),
+    // Feedback for this candidate's accessible interviews only. This read the
+    // entire feedback table and then discarded all but a handful of rows.
+    const feedbackPerInterview = await Promise.all(
+      interviews.map((interview) =>
+        ctx.db
+          .query("feedback")
+          .withIndex("by_interview_id", (q) =>
+            q.eq("interviewId", interview._id),
+          )
+          .collect(),
+      ),
     );
+    const visibleFeedback = feedbackPerInterview.flat();
 
     // Private notes are the author's alone; admins and recruiters see everything.
     const canReadPrivateNotes =

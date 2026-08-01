@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { useMutation, useQuery } from "convex/react";
 import RoleGuard from "@/components/auth/RoleGuard";
@@ -79,7 +79,14 @@ function TeamWorkspacePage() {
   const [availabilityDraft, setAvailabilityDraft] = useState("");
   const [permissionDraft, setPermissionDraft] = useState("");
 
-  const adminDashboard = useQuery(api.admin.getAdminDashboard, {});
+  // Was one getAdminDashboard call that also pulled every interview and all
+  // feedback just to render a roster and a name picker.
+  const [candidateSearch, setCandidateSearch] = useState("");
+  const deferredCandidateSearch = useDeferredValue(candidateSearch);
+  const candidateOptionsRaw = useQuery(api.admin.getCandidateDirectory, {
+    search: deferredCandidateSearch || undefined,
+  });
+  const interviewerRoster = useQuery(api.admin.getInterviewerRoster, {});
   const candidateHistory = useQuery(
     api.admin.getCandidateHistory,
     selectedCandidateId ? { candidateId: selectedCandidateId } : "skip",
@@ -88,23 +95,23 @@ function TeamWorkspacePage() {
 
 
   useEffect(() => {
-    if (!selectedInterviewerId || !adminDashboard?.interviewerRoster) return;
-    const interviewer = adminDashboard.interviewerRoster.find(
+    if (!selectedInterviewerId || !interviewerRoster) return;
+    const interviewer = interviewerRoster.find(
       (item) => item.clerkId === selectedInterviewerId,
     );
     if (!interviewer) return;
     setSkillDraft(interviewer.skills.join(", "));
     setAvailabilityDraft(interviewer.availabilitySummary);
     setPermissionDraft(interviewer.permissionTags.join(", "));
-  }, [adminDashboard?.interviewerRoster, selectedInterviewerId]);
+  }, [interviewerRoster, selectedInterviewerId]);
 
   const candidateOptions = useMemo(
-    () => adminDashboard?.candidates ?? [],
-    [adminDashboard?.candidates],
+    () => candidateOptionsRaw ?? [],
+    [candidateOptionsRaw],
   );
   const interviewerOptions = useMemo(
-    () => adminDashboard?.interviewerRoster ?? [],
-    [adminDashboard?.interviewerRoster],
+    () => interviewerRoster ?? [],
+    [interviewerRoster],
   );
 
 
@@ -147,7 +154,7 @@ function TeamWorkspacePage() {
         <AccessManagementPanel />
       </section>
 
-      {!adminDashboard ? (
+      {!candidateOptionsRaw || !interviewerRoster ? (
         <TeamWorkspaceSkeleton />
       ) : (
         <section className="grid gap-4 xl:grid-cols-[1.2fr_1fr]">
@@ -159,7 +166,19 @@ function TeamWorkspacePage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {candidateOptions.length > 0 && (
+            {/*
+              The picker used to be a bare Select listing every candidate in the
+              database. It now shows candidates with recent rounds by default and
+              searches by name for anyone else, which is both a bounded query and
+              a usable control once there are more than a screenful.
+            */}
+            <Input
+              value={candidateSearch}
+              onChange={(event) => setCandidateSearch(event.target.value)}
+              placeholder="Search candidates by name"
+              aria-label="Search candidates by name"
+            />
+            {candidateOptions.length > 0 ? (
               <Select value={selectedCandidateId} onValueChange={setSelectedCandidateId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose a candidate" />
@@ -172,6 +191,12 @@ function TeamWorkspacePage() {
                   ))}
                 </SelectContent>
               </Select>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {candidateSearch
+                  ? "No candidates match that name."
+                  : "No candidates with rounds in the last 30 days. Search by name to find someone else."}
+              </p>
             )}
             <div className="grid gap-3 max-h-[600px] overflow-y-auto pr-2">
               {(candidateHistory ?? []).map((round) => (
