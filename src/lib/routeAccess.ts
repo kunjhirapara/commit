@@ -55,9 +55,11 @@ export const getRequiredRolesForPath = (
  */
 export const PUBLIC_ROUTES: RegExp[] = [
   /^\/$/,
+  // The two auth pages. `/sign-in` and `/sign-up` used to be listed here as
+  // well, but no such routes ever existed, so anything sent to them 404'd —
+  // declarations for pages that were never built.
   /^\/signin(\/|$)/,
-  /^\/sign-in(\/|$)/,
-  /^\/sign-up(\/|$)/,
+  /^\/signup(\/|$)/,
   /^\/terms(\/|$)/,
   /^\/privacy(\/|$)/,
   /^\/recording-disclosure(\/|$)/,
