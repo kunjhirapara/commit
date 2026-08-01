@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { SignIn, SignedIn } from "@clerk/nextjs";
 import AuthPageShell from "@/components/auth/AuthPageShell";
 import RedirectAwayFromAuth from "@/components/auth/RedirectAwayFromAuth";
+import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 import { Skeleton } from "@/components/ui/skeleton";
 
 /**
@@ -31,9 +32,11 @@ const useRedirectTarget = () => {
 
 function SignInContent() {
   const redirectTarget = useRedirectTarget();
+  const appearance = useClerkAppearance();
 
   return (
     <SignIn
+      appearance={appearance}
       // Hash routing keeps this working on a normal route; the alternative is a
       // catch-all segment existing purely to satisfy Clerk's path routing.
       routing="hash"
@@ -46,9 +49,7 @@ function SignInContent() {
 
 export default function SignInPage() {
   return (
-    <AuthPageShell
-      title="Sign in"
-      subtitle="Continue to your interviews, practice sandbox and calendar.">
+    <AuthPageShell>
       {/* Already signed in: send them on rather than showing a login form. */}
       <SignedIn>
         <RedirectAwayFromAuth />
@@ -60,7 +61,7 @@ export default function SignInPage() {
         failure has already happened once in this codebase, on
         /accept-invitation — see the note there.
       */}
-      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
+      <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-xl" />}>
         <SignInContent />
       </Suspense>
     </AuthPageShell>

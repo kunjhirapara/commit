@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
@@ -29,6 +30,7 @@ const APP_LINKS = [
 ];
 
 function Navbar() {
+  const clerkAppearance = useClerkAppearance();
   const [isScrolled, setIsScrolled] = useState(false);
   const pathname = usePathname();
 
@@ -111,7 +113,7 @@ function Navbar() {
                       ? "scale-95 transition-transform"
                       : "scale-100 transition-transform"
                   }>
-                  <UserButton />
+                  <UserButton appearance={clerkAppearance} />
                 </div>
               </div>
             </div>
@@ -120,12 +122,15 @@ function Navbar() {
           <SignedOut>
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <ModeToggle />
-              <SignInButton mode="modal">
+              {/* The modal is a Clerk surface too, so it needs the same
+                  appearance as the sign-in page — otherwise it renders Clerk's
+                  default light styling over a dark app. */}
+              <SignInButton mode="modal" appearance={clerkAppearance}>
                 <Button variant="ghost" size="sm">
                   Sign in
                 </Button>
               </SignInButton>
-              <SignUpButton mode="modal">
+              <SignUpButton mode="modal" appearance={clerkAppearance}>
                 <Button size="sm">Get started</Button>
               </SignUpButton>
             </div>

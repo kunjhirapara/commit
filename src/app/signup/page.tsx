@@ -4,7 +4,21 @@ import { Suspense } from "react";
 import { SignUp, SignedIn } from "@clerk/nextjs";
 import AuthPageShell from "@/components/auth/AuthPageShell";
 import RedirectAwayFromAuth from "@/components/auth/RedirectAwayFromAuth";
+import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 import { Skeleton } from "@/components/ui/skeleton";
+
+function SignUpContent() {
+  const appearance = useClerkAppearance();
+
+  return (
+    <SignUp
+      appearance={appearance}
+      routing="hash"
+      signInUrl="/signin"
+      fallbackRedirectUrl="/"
+    />
+  );
+}
 
 /**
  * Mirror of /signin.
@@ -17,15 +31,13 @@ import { Skeleton } from "@/components/ui/skeleton";
  */
 export default function SignUpPage() {
   return (
-    <AuthPageShell
-      title="Create an account"
-      subtitle="You start as a candidate, with the practice sandbox available straight away.">
+    <AuthPageShell>
       <SignedIn>
         <RedirectAwayFromAuth />
       </SignedIn>
 
-      <Suspense fallback={<Skeleton className="h-64 w-full rounded-xl" />}>
-        <SignUp routing="hash" signInUrl="/signin" fallbackRedirectUrl="/" />
+      <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-xl" />}>
+        <SignUpContent />
       </Suspense>
     </AuthPageShell>
   );

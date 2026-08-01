@@ -1,81 +1,78 @@
 import type { Appearance } from "@clerk/types";
 
 /**
- * How Clerk's own UI is styled to match the app.
+ * Clerk's own UI, themed to match the app.
  *
- * Applied once on `<ClerkProvider>`, so it covers every Clerk surface together:
- * the sign-in and sign-up pages, the navbar's sign-in and sign-up modals, and
- * `UserButton`. Before this, all of them rendered Clerk's default light styling,
- * which against the app's dark theme read as broken rather than merely
- * unstyled.
+ * Two lessons are baked into the shape of this file.
  *
- * Deliberately `elements` with Tailwind classes rather than `variables` with
- * colour values. Two reasons:
+ * **Let Clerk own its card.** The first attempt wrapped `<SignIn />` in an app
+ * card with its own heading, which produced a card inside a card and two
+ * headings saying the same thing — "Sign in" above "Sign in to Commit". Clerk's
+ * own chrome is well made; the job here is to recolour it, not to rebuild it.
  *
- * - Clerk derives hover, focus and alpha shades from a colour it is given, and
- *   it cannot compute those from a `hsl(var(--primary))` reference — the
- *   variables route yields correct base colours and broken intermediate states.
- * - Tailwind classes resolve against the same custom properties and cascade
- *   normally, so dark mode follows automatically from the `.dark` block in
- *   globals.css. That matters here because `ClerkProvider` sits *above*
- *   `ThemeProvider` in the tree, so `useTheme()` is not available at the point
- *   this object is defined; anything theme-aware in React would have required
- *   restructuring the providers.
+ * **Use `variables`, not `elements` with Tailwind classes.** Clerk's internal
+ * styles are more specific than a single Tailwind utility, so class overrides
+ * silently lost — the primary button stayed Clerk's default near-black rather
+ * than the brand orange. `variables` feed Clerk's own token system, so it
+ * derives its hover, focus and disabled shades correctly from them.
+ *
+ * Colours are concrete rather than `hsl(var(--primary))` for the same reason:
+ * Clerk computes derived shades from the value it is given and cannot do that
+ * arithmetic on a CSS variable reference. They mirror globals.css by hand, so a
+ * palette change there needs echoing here — the trade for Clerk deriving a
+ * correct hover state.
  */
-export const clerkAppearance: Appearance = {
-  layout: {
-    // The app already states its terms elsewhere; Clerk's own footer branding
-    // adds a second, conflicting voice on the page.
-    logoPlacement: "none",
-    socialButtonsVariant: "blockButton",
-  },
-  elements: {
-    // The page supplies its own card, so Clerk's would nest one inside another.
-    rootBox: "w-full",
-    cardBox: "w-full shadow-none border-none",
-    card: "w-full bg-transparent shadow-none border-none p-0",
 
-    header: "text-left",
-    headerTitle: "text-xl font-semibold tracking-tight text-foreground",
-    headerSubtitle: "text-sm text-muted-foreground",
+/** Orange-500, matching `--primary` in globals.css. */
+const BRAND = "#f97316";
 
-    socialButtonsBlockButton:
-      "border border-border bg-background text-foreground hover:bg-muted transition-colors",
-    socialButtonsBlockButtonText: "text-sm font-medium text-foreground",
+const LIGHT = {
+  colorBackground: "#ffffff",
+  colorText: "#0f172a",
+  colorTextSecondary: "#64748b",
+  colorInputBackground: "#ffffff",
+  colorInputText: "#0f172a",
+  colorNeutral: "#0f172a",
+};
 
-    dividerLine: "bg-border",
-    dividerText: "text-xs text-muted-foreground",
+const DARK = {
+  // Matches the lifted `--card` in dark mode, so Clerk's card reads as elevated
+  // against the page rather than floating as a white slab.
+  colorBackground: "#141417",
+  colorText: "#fafafa",
+  colorTextSecondary: "#a1a1aa",
+  colorInputBackground: "#1c1c20",
+  colorInputText: "#fafafa",
+  colorNeutral: "#fafafa",
+};
 
-    formFieldLabel: "text-sm font-medium text-foreground",
-    formFieldInput:
-      "border border-input bg-background text-foreground placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0",
-    formFieldInputShowPasswordButton:
-      "text-muted-foreground hover:text-foreground",
+export const buildClerkAppearance = (isDark: boolean): Appearance => {
+  const palette = isDark ? DARK : LIGHT;
 
-    formButtonPrimary:
-      "bg-primary text-primary-foreground hover:opacity-90 transition-opacity normal-case text-sm font-medium shadow-none",
-
-    footer: "bg-transparent",
-    footerActionText: "text-sm text-muted-foreground",
-    footerActionLink:
-      "text-sm font-medium text-primary underline-offset-4 hover:underline",
-
-    identityPreviewText: "text-foreground",
-    identityPreviewEditButton: "text-primary",
-
-    formResendCodeLink: "text-primary",
-    otpCodeFieldInput: "border border-input bg-background text-foreground",
-
-    // UserButton, which appears on every signed-in page.
-    userButtonPopoverCard:
-      "bg-popover text-popover-foreground border border-border shadow-lg",
-    userButtonPopoverActionButton:
-      "text-foreground hover:bg-muted transition-colors",
-    userButtonPopoverActionButtonText: "text-sm text-foreground",
-    userButtonPopoverFooter: "hidden",
-
-    // The modal opened by SignInButton / SignUpButton in the navbar.
-    modalBackdrop: "bg-black/50 backdrop-blur-sm",
-    modalContent: "bg-card text-card-foreground rounded-2xl border border-border",
-  },
+  return {
+    layout: {
+      // The page already shows the wordmark directly above; Clerk repeating it
+      // was part of what made the screen feel like it said everything twice.
+      logoPlacement: "none",
+      socialButtonsVariant: "blockButton",
+      shimmer: false,
+    },
+    variables: {
+      colorPrimary: BRAND,
+      colorDanger: "#e11d48",
+      colorSuccess: "#059669",
+      borderRadius: "0.75rem",
+      fontFamily: "var(--font-jakarta-sans), ui-sans-serif, system-ui, sans-serif",
+      ...palette,
+    },
+    elements: {
+      // Clerk's card sits inside the page's own centred column, so it should not
+      // add a second drop shadow on top of the one the page already provides.
+      cardBox: "shadow-none",
+      card: "shadow-none",
+      // Clerk's free tier requires its attribution, so the footer stays. Only
+      // the extra padding around it is trimmed.
+      footer: "bg-transparent",
+    },
+  };
 };
