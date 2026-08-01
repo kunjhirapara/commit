@@ -150,10 +150,13 @@ function DashboardOverviewPage() {
     role,
   } = useUserRole();
 
+  // Was getAdminDashboard, which also returned the pipeline, every candidate and
+  // the interviewer roster — so this screen read the whole users and feedback
+  // tables to render five numbers.
   const operations =
     useQuery(
-      api.admin.getAdminDashboard,
-      role === "developer" ? "skip" : { stage: "scheduled" },
+      api.admin.getOperationsAnalytics,
+      role === "developer" ? "skip" : {},
     ) ?? null;
   const monitoring = useQuery(
     api.observability.getMonitoringDashboard,
@@ -232,47 +235,47 @@ function DashboardOverviewPage() {
       {operations ? (
         <section className="space-y-4">
           <SectionIntro
-            title="Hiring snapshot"
+            title={`Hiring snapshot — last ${operations.windowDays} days`}
             description="Keep the top recruiting metrics on the overview, then dive into the interview workspace for the full pipeline."
           />
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             <MetricCard
               label="Throughput"
-              value={operations.analytics.throughput}
-              hint="Completed interview flow"
+              value={operations.throughput}
+              hint={`Completed in the last ${operations.windowDays} days`}
               accentClassName="text-emerald-600 dark:text-emerald-400"
             />
             <MetricCard
               label="Time to hire"
-              value={`${operations.analytics.timeToHireDays}d`}
+              value={`${operations.timeToHireDays}d`}
               hint="Avg from creation to interview"
             />
             <MetricCard
               label="Cancellations"
-              value={operations.analytics.cancellations}
-              hint="Cancelled rounds"
+              value={operations.cancellations}
+              hint={`Cancelled in the last ${operations.windowDays} days`}
               accentClassName={
-                operations.analytics.cancellations > 0
+                operations.cancellations > 0
                   ? "text-amber-600 dark:text-amber-400"
                   : undefined
               }
             />
             <MetricCard
               label="No shows"
-              value={operations.analytics.noShows}
-              hint="Missed interview count"
+              value={operations.noShows}
+              hint={`Missed in the last ${operations.windowDays} days`}
               accentClassName={
-                operations.analytics.noShows > 0
+                operations.noShows > 0
                   ? "text-rose-500 dark:text-rose-400"
                   : undefined
               }
             />
             <MetricCard
               label="Feedback pending"
-              value={operations.analytics.feedbackPending}
+              value={operations.feedbackPending}
               hint="Draft scorecards still open"
               accentClassName={
-                operations.analytics.feedbackPending > 0
+                operations.feedbackPending > 0
                   ? "text-amber-600 dark:text-amber-400"
                   : undefined
               }

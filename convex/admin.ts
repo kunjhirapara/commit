@@ -29,6 +29,57 @@ const normalizeInterviewStatus = (status: string) => {
   return status;
 };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How far back the dashboard looks.
+ *
+ * Matches GROWTH_WINDOW_DAYS in convex/metrics.ts so the codebase has one
+ * convention for "recent". This is what bounds these queries: cost becomes
+ * proportional to recent activity rather than to total history, which matters
+ * now that public signup makes `users` and `interviews` grow without limit.
+ */
+const DASHBOARD_WINDOW_DAYS = 30;
+const DASHBOARD_WINDOW_MS = DASHBOARD_WINDOW_DAYS * DAY_MS;
+
+const FUNNEL_STAGES = [
+  "scheduled",
+  "live",
+  "completed",
+  "passed",
+  "rejected",
+  "cancelled",
+  "no_show",
+] as const;
+
+/**
+ * Interviews starting inside the dashboard window, scoped to what the caller may
+ * see.
+ *
+ * The scoping is why these figures cannot come from a precomputed daily rollup:
+ * admin and recruiter see every interview, an interviewer sees only rounds they
+ * are on, and a developer holds `viewDashboard` but passes `canAccessInterview`
+ * for nothing. A global rollup would report the whole platform's numbers to an
+ * interviewer and leak aggregate volume to a developer.
+ */
+const loadScopedWindowInterviews = async (
+  ctx: any,
+  user: { clerkId: string; role: string },
+) => {
+  const windowStart = Date.now() - DASHBOARD_WINDOW_MS;
+
+  const interviews = await ctx.db
+    .query("interviews")
+    .withIndex("by_startTime", (q: any) => q.gte("startTime", windowStart))
+    .collect();
+
+  if (user.role === "admin" || user.role === "recruiter") return interviews;
+
+  return interviews.filter((interview: any) =>
+    canAccessInterview(user as any, interview),
+  );
+};
+
 const toSearchableString = (value?: string | null) => (value ?? "").toLowerCase();
 
 const matchesFilters = (
@@ -76,6 +127,67 @@ const matchesFilters = (
 
   return true;
 };
+
+/**
+ * The five metric cards on /dashboard.
+ *
+ * Split out of getAdminDashboard, which returned four unrelated slices and made
+ * every caller pay for all of them — this screen was reading the entire users
+ * and feedback tables to show five numbers.
+ *
+ * Figures cover the last DASHBOARD_WINDOW_DAYS days rather than all time. The
+ * UI labels the window; changing what a number means without saying so would be
+ * worse than the scan this replaces.
+ */
+export const getOperationsAnalytics = query({
+  handler: async (ctx) => {
+    const { user } = await requirePermission(ctx, "viewDashboard");
+    const scopedInterviews = await loadScopedWindowInterviews(ctx, user);
+
+    // Feedback for the windowed interviews only, via by_interview_id. The old
+    // query read the whole feedback table to count drafts.
+    const feedbackPerInterview = await Promise.all(
+      scopedInterviews.map((interview: any) =>
+        ctx.db
+          .query("feedback")
+          .withIndex("by_interview_id", (q: any) =>
+            q.eq("interviewId", interview._id),
+          )
+          .collect(),
+      ),
+    );
+    const feedback = feedbackPerInterview.flat();
+
+    const countByStatus = (status: string) =>
+      scopedInterviews.filter(
+        (item: any) => normalizeInterviewStatus(item.status) === status,
+      ).length;
+
+    return {
+      windowDays: DASHBOARD_WINDOW_DAYS,
+      throughput: countByStatus("completed"),
+      cancellations: countByStatus("cancelled"),
+      noShows: countByStatus("no_show"),
+      feedbackPending: feedback.filter((entry) => entry.state === "draft")
+        .length,
+      timeToHireDays:
+        scopedInterviews.length === 0
+          ? 0
+          : Math.round(
+              scopedInterviews.reduce((sum: number, interview: any) => {
+                const createdAt = interview._creationTime ?? interview.startTime;
+                return sum + Math.max(0, interview.startTime - createdAt);
+              }, 0) /
+                scopedInterviews.length /
+                DAY_MS,
+            ),
+      funnel: FUNNEL_STAGES.map((status) => ({
+        status,
+        count: countByStatus(status),
+      })),
+    };
+  },
+});
 
 export const getAdminDashboard = query({
   args: {
