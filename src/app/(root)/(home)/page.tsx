@@ -6,7 +6,7 @@ import { useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { api } from "@/../convex/_generated/api";
 import { useRouter } from "next/navigation";
-import MeetingModal from "@/components/ui/MeetingModal";
+import dynamic from "next/dynamic";
 import MeetingCard from "@/components/ui/MeetingCard";
 import NotificationsPanel from "@/components/ui/NotificationsPanel";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,17 @@ import OnboardingDialog from "@/components/onboarding/OnboardingDialog";
 import { SignedIn, SignedOut } from "@clerk/nextjs";
 import { CalendarCheckIcon } from "lucide-react";
 import { HOME_RETRY_STORAGE_KEY } from "./error";
+
+/**
+ * Loaded on demand. MeetingModal reaches useMeetingActions, which imports
+ * useStreamVideoClient — so importing it statically pulled the whole Stream SDK
+ * and its stylesheet into the bundle for "/", the one route signed-out visitors
+ * land on. The modal only renders after a quick action is clicked, so there is
+ * nothing to gain from having it up front.
+ */
+const MeetingModal = dynamic(() => import("@/components/ui/MeetingModal"), {
+  ssr: false,
+});
 
 function HomeSkeleton() {
   return (
