@@ -33,6 +33,16 @@ export const findRouteRule = (pathname: string): RouteRule | undefined =>
   PROTECTED_ROUTES.find((rule) => rule.pattern.test(pathname));
 
 /**
+ * The roles a path requires, or undefined when it has no rule.
+ *
+ * RoleGuard reads this instead of each page repeating its own role list, which
+ * is what let the middleware copy drift from the page copy.
+ */
+export const getRequiredRolesForPath = (
+  pathname: string,
+): AppRole[] | undefined => findRouteRule(pathname)?.allowedRoles;
+
+/**
  * Routes a signed-out visitor may load.
  *
  * Everything not listed here requires authentication, enforced in middleware via
