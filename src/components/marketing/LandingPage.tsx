@@ -75,7 +75,7 @@ export default function LandingPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
       {/* Hero */}
-      <section className="flex flex-col items-center gap-6 py-20 text-center sm:py-28">
+      <section className="flex flex-col items-center gap-6 pb-20 pt-10 text-center">
         <span className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-muted/40 px-4 py-1.5 text-xs font-medium text-muted-foreground">
           <span className="relative flex size-2">
             <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary/60" />

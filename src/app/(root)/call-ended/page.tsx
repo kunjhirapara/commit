@@ -1,3 +1,10 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "Call Ended",
+  description: "This interview call has ended.",
+};
+
 import Link from "next/link";
 import ErrorState from "@/components/ui/ErrorState";
 

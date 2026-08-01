@@ -1,4 +1,6 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+/* Plus Jakarta Sans is loaded by next/font/google in src/app/layout.tsx, not by
+   an @import here. An @import of a Google Fonts URL blocks text rendering on
+   every page behind three serial third-party round trips. */
 @import "tailwindcss";
 @plugin 'tailwindcss-animate';
 
@@ -34,8 +36,15 @@
   --color-ring: hsl(var(--ring));
 
   --font-sans:
-    "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif,
+    var(--font-jakarta-sans), ui-sans-serif, system-ui, sans-serif,
     "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* Was never defined, so every `font-mono` in the app — the wordmark, the
+     language chips, the runner output — fell back to the OS monospace while
+     GeistMonoVF.woff downloaded unused. */
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Consolas,
+    monospace;
 
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 2px);
@@ -154,7 +163,9 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Plus Jakarta Sans", sans-serif;
+    /* Hard-coding the family name here meant the loaded font and the applied
+       font could drift apart — which they had. Track the token instead. */
+    font-family: var(--font-sans);
   }
 }
 
@@ -199,7 +210,7 @@
 }
 
 .meeting-stream-theme.str-video {
-  --str-video__font-family: "Plus Jakarta Sans", sans-serif;
+  --str-video__font-family: var(--font-sans);
   --str-video__border-radius-circle: 999px;
   --str-video__button-primary-base: #1f2933;
   --str-video__button-primary-hover: #111827;
@@ -328,4 +339,71 @@
   .str-video__participant-view
   .str-video__participant-details__connection-quality {
   background-color: #111827 !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Accessibility: motion
+ *
+ * The app used ~30 animations (animate-in, animate-out, animate-spin,
+ * animate-pulse, dialog and dropdown transitions) with no reduced-motion
+ * handling at all. WCAG 2.3.3, and for people with vestibular disorders this is
+ * the difference between usable and nauseating.
+ *
+ * Animation is neutralised rather than removed: spinners keep a slow rotation
+ * so "still working" is still legible, and everything else snaps to its final
+ * state instead of easing there.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* Loading indicators still need to read as "in progress", so keep them
+     turning — just slowly enough not to be a motion trigger. */
+  .animate-spin {
+    animation-duration: 1.5s !important;
+    animation-iteration-count: infinite !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Touch targets
+ *
+ * The button scale is desk-first: default is h-8 (32px), sm is h-7 (28px) and
+ * icon is 32px square — all well under the 44px minimum for touch. Rather than
+ * grow every control everywhere, which would change the whole visual rhythm,
+ * only coarse pointers get the larger hit area. Mice and trackpads see exactly
+ * what they saw before.
+ * ------------------------------------------------------------------------- */
+@media (pointer: coarse) {
+  button,
+  [role="button"],
+  a[href],
+  select,
+  summary,
+  input[type="checkbox"],
+  input[type="radio"] {
+    min-height: 44px;
+  }
+
+  /* Icon-only controls need width as well as height; text links inside a
+     paragraph must not become 44px-wide blocks, so they are excluded. */
+  button,
+  [role="button"],
+  select,
+  summary {
+    min-width: 44px;
+  }
+
+  /* Inline links in prose keep their natural box — the rule above would break
+     sentence flow. */
+  p a[href],
+  li a[href] {
+    min-height: 0;
+  }
 }
