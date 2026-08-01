@@ -26,6 +26,7 @@ import type * as metrics from "../metrics.js";
 import type * as notifications_emailActions from "../notifications/emailActions.js";
 import type * as notifications_index from "../notifications/index.js";
 import type * as observability from "../observability.js";
+import type * as proctoring from "../proctoring.js";
 import type * as reliability from "../reliability.js";
 import type * as sessionEvents from "../sessionEvents.js";
 import type * as users from "../users.js";
@@ -55,6 +56,7 @@ declare const fullApi: ApiFromModules<{
   "notifications/emailActions": typeof notifications_emailActions;
   "notifications/index": typeof notifications_index;
   observability: typeof observability;
+  proctoring: typeof proctoring;
   reliability: typeof reliability;
   sessionEvents: typeof sessionEvents;
   users: typeof users;

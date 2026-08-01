@@ -36,6 +36,7 @@ import type {
   UserEntry,
 } from "./types";
 import { buildFeedbackFormValues, calculateAverageScore } from "./utils";
+import IntegrityReport from "@/components/interviews/IntegrityReport";
 
 function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -211,6 +212,9 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr] flex-1 overflow-hidden">
             <div className="space-y-6 flex flex-col h-full overflow-y-auto pr-2 pb-4 self-start">
+              {/* Sits above the scorecards deliberately: it is context for
+                  reading them, not a conclusion of its own. */}
+              <IntegrityReport interviewId={interviewId} />
               <FeedbackEntriesPanel
                 feedbackEntries={feedbackEntries}
                 users={users}
