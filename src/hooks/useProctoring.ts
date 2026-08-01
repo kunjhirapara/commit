@@ -48,6 +48,10 @@ export const useProctoring = ({
   const idsRef = useRef({ interviewId, streamCallId });
   idsRef.current = { interviewId, streamCallId };
 
+  // Last known "window sits off the primary display" reading, so the fallback
+  // reports transitions rather than firing on every resize event.
+  const offPrimaryRef = useRef(false);
+
   const active = enabled && !!interviewId && !!streamCallId;
 
   const send = useCallback(
@@ -117,6 +121,53 @@ export const useProctoring = ({
       }).catch(() => {});
     };
 
+    /**
+     * Cross-browser fallback for the multi-display check.
+     *
+     * `screen.isExtended` is Chromium-only, so without this a Firefox or Safari
+     * candidate is simply never checked — and the design commits to those
+     * sessions getting something rather than nothing. A window positioned
+     * outside the primary display's bounds is the only permission-free hint
+     * available, and it is noisier, hence Tier B.
+     *
+     * Skipped entirely where `isExtended` works, because a real answer beats an
+     * inference and reporting both would double-count.
+     */
+    const sampleGeometry = () => {
+      const { support, offPrimary } = readDisplayState();
+      if (support !== "unsupported") return;
+      if (offPrimary === offPrimaryRef.current) return;
+
+      offPrimaryRef.current = offPrimary;
+      if (!offPrimary) return;
+
+      buffer.push({
+        kind: "window.geometry",
+        tier: "b",
+        startedAt: Date.now(),
+        metadata: { offPrimary: true },
+      });
+    };
+
+    /**
+     * A reload mid-interview is worth noting — it resets editor state and is one
+     * way to clear something you would rather not be seen. Tier B: refreshing
+     * after a network wobble is at least as common.
+     */
+    const navigation = performance.getEntriesByType(
+      "navigation",
+    )[0] as PerformanceNavigationTiming | undefined;
+    if (navigation?.type === "reload") {
+      buffer.push({
+        kind: "page.reload",
+        tier: "b",
+        startedAt: Date.now(),
+      });
+    }
+
+    sampleGeometry();
+    window.addEventListener("resize", sampleGeometry);
+
     const displayTarget = getDisplayChangeTarget();
 
     document.addEventListener("visibilitychange", onVisibility);
@@ -155,6 +206,7 @@ export const useProctoring = ({
       document.removeEventListener("fullscreenchange", onFullscreenChange);
       displayTarget?.removeEventListener?.("change", onDisplayChange);
       window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("resize", sampleGeometry);
       clearInterval(flushTimer);
       clearInterval(heartbeatTimer);
       buffer.closeOpenAbsences();

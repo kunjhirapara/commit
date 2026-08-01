@@ -373,6 +373,12 @@ export const getProctoringReport = query({
       monitorGaps: session.monitorGaps ?? 0,
       maxClockSkewMs: session.maxClockSkewMs ?? 0,
       displaySupport: session.displaySupport,
+      // Tier B, from the positional fallback used where screen.isExtended is
+      // unavailable. Reported so a browser that cannot be checked properly is
+      // not left with nothing at all, but deliberately kept out of the severity
+      // band — it is an inference from window position, not an answer.
+      offPrimaryHints: absence("window.geometry").length,
+      reloads: absence("page.reload").length,
       extendedAppearedMidSession: session.extendedAppearedMidSession ?? false,
       fullscreenUsed: session.fullscreenUsed ?? false,
     };

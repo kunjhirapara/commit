@@ -5,7 +5,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
 import { CodeIcon } from "lucide-react";
-import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import {
+  SignInButton,
+  SignUpButton,
+  SignedIn,
+  SignedOut,
+  UserButton,
+} from "@clerk/nextjs";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import DasboardBtn from "./DasboardBtn";
@@ -57,14 +63,14 @@ function Navbar() {
             href="/"
             className={`flex items-center gap-2 font-mono font-bold transition-all ${
               isScrolled
-                ? "bg-foreground text-background px-5 h-9 rounded-full text-sm mr-4 hover:opacity-80"
+                ? "bg-primary text-background px-5 h-9 rounded-full text-sm mr-4 hover:opacity-80"
                 : "text-primary text-2xl mr-6 hover:opacity-80"
             }`}>
             <CodeIcon
               className={isScrolled ? "size-4 hidden sm:block" : "size-8"}
             />
             <span className={isScrolled ? "tracking-wide" : ""}>
-              {isScrolled ? "Home" : "Commit"}
+              {isScrolled ? "Commit" : "Commit"}
             </span>
           </Link>
 
