@@ -2,14 +2,29 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
 import { CodeIcon } from "lucide-react";
-import { SignedIn, UserButton } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
+import { Button } from "./button";
+import { cn } from "@/lib/utils";
 import DasboardBtn from "./DasboardBtn";
 import NotificationBell from "./NotificationBell";
 
+/**
+ * Links every signed-in user can reach, whatever their role. Without these the
+ * navbar was logo + avatar only, so a new candidate — who has no dashboard button
+ * and no interviews — had no way to discover anything beyond the home page.
+ */
+const APP_LINKS = [
+  { href: "/practice", label: "Practice" },
+  { href: "/calendar", label: "Calendar" },
+  { href: "/settings", label: "Settings" },
+];
+
 function Navbar() {
   const [isScrolled, setIsScrolled] = useState(false);
+  const pathname = usePathname();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,7 +46,7 @@ function Navbar() {
       <nav
         className={`pointer-events-auto w-full transition-all duration-300 ${
           isScrolled
-            ? "max-w-4xl rounded-full border border-border/50 bg-background/80 shadow-lg backdrop-blur-md"
+            ? "max-w-5xl rounded-full border border-border/50 bg-background/80 shadow-lg backdrop-blur-md"
             : "border-b bg-background"
         }`}>
         <div
@@ -54,6 +69,29 @@ function Navbar() {
           </Link>
 
           <SignedIn>
+            <div className="hidden items-center gap-1 sm:flex">
+              {APP_LINKS.map((link) => {
+                const isActive =
+                  pathname === link.href ||
+                  pathname?.startsWith(`${link.href}/`);
+
+                return (
+                  <Link
+                    key={link.href}
+                    href={link.href}
+                    aria-current={isActive ? "page" : undefined}
+                    className={cn(
+                      "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-muted text-foreground"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}>
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
+
             <div className="flex items-center space-x-2 sm:space-x-4 ml-auto">
               <div className="flex items-center gap-2 border-r border-border/50 pr-4">
                 <DasboardBtn />
@@ -72,6 +110,20 @@ function Navbar() {
               </div>
             </div>
           </SignedIn>
+
+          <SignedOut>
+            <div className="ml-auto flex items-center gap-2 sm:gap-3">
+              <ModeToggle />
+              <SignInButton mode="modal">
+                <Button variant="ghost" size="sm">
+                  Sign in
+                </Button>
+              </SignInButton>
+              <SignUpButton mode="modal">
+                <Button size="sm">Get started</Button>
+              </SignUpButton>
+            </div>
+          </SignedOut>
         </div>
       </nav>
     </div>

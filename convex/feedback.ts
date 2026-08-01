@@ -309,7 +309,10 @@ export const exportHiringPacket = query({
     interviewId: v.id("interviews"),
   },
   handler: async (ctx, args) => {
-    const { interview } = await requireInterviewReviewAccess(ctx, args.interviewId);
+    const { user, interview } = await requireInterviewReviewAccess(
+      ctx,
+      args.interviewId,
+    );
     const feedbackEntries = await ctx.db
       .query("feedback")
       .withIndex("by_interview_id", (q) => q.eq("interviewId", args.interviewId))
@@ -324,10 +327,37 @@ export const exportHiringPacket = query({
       .order("desc")
       .take(50);
 
+    // This endpoint returned raw feedback and comments, which bypassed both the
+    // hideUntilSubmit masking in getInterviewFeedback and the visibility filter
+    // in comments.getComments — so a panelist could read co-panelists' private
+    // notes and unsubmitted drafts by exporting instead of viewing.
+    const isDecisionMaker =
+      user.role === "admin" || user.role === "recruiter";
+
+    const visibleFeedback = feedbackEntries
+      .filter(
+        (entry) =>
+          isDecisionMaker ||
+          entry.interviewerId === user.clerkId ||
+          entry.state === "submitted",
+      )
+      .map((entry) =>
+        isDecisionMaker || entry.interviewerId === user.clerkId
+          ? entry
+          : { ...entry, privateNotes: undefined },
+      );
+
+    const visibleComments = comments.filter(
+      (comment) =>
+        isDecisionMaker ||
+        comment.visibility !== "private" ||
+        comment.interviewerId === user.clerkId,
+    );
+
     return {
       interview,
-      feedback: feedbackEntries,
-      notes: comments,
+      feedback: visibleFeedback,
+      notes: visibleComments,
       sessionEvents,
       exportedAt: Date.now(),
     };

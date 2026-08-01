@@ -1,5 +1,16 @@
 "use client";
 
+// The Stream stylesheet lives here rather than in the root layout, because this
+// is the only route that renders Stream's own UI — MeetingRoom, MeetingSetup and
+// EndCallButton. /schedule and /recordings use the client but not its widgets.
+//
+// Measured caveat: this does NOT keep the 127 KB off other routes. Turbopack
+// merges CSS across a route group, so anything imported anywhere under (root)
+// lands in the same shared stylesheet, and /practice, /calendar and /dashboard
+// still receive it. Separating it properly would mean moving /meeting into its
+// own route group with its own shell. The equivalent split for the SDK's
+// JavaScript, which is the far larger cost, did work — see StreamVideoRuntime.
+import "@stream-io/video-react-sdk/dist/css/styles.css";
 import Link from "next/link";
 import ErrorState from "@/components/ui/ErrorState";
 import MeetingRoom from "@/components/ui/MeetingRoom";

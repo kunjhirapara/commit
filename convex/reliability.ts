@@ -1,7 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
-import { getCurrentUserRecord, logAuditEvent, requirePermission } from "./lib/authz";
+import { logAuditEvent, requirePermission } from "./lib/authz";
 import { createServerError } from "./lib/errorUtils";
 
 const jobKindValidator = v.union(
@@ -345,7 +345,11 @@ export const reportProviderProvisioningFailure = mutation({
     externalId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const { user } = await getCurrentUserRecord(ctx);
+    // Gated on "scheduleInterviews" (recruiter/admin) — the only flow that reports
+    // provisioning failures. Previously identity-only, so any signed-in user could
+    // write unbounded attacker-controlled rows into the reliability dashboard and
+    // enqueue a background job with each call.
+    const { user } = await requirePermission(ctx, "scheduleInterviews");
     const now = Date.now();
 
     const operationId = await ctx.db.insert("recoveryOperations", {
@@ -564,7 +568,9 @@ export const getJobByStatus = query({
     status: jobStatusValidator,
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "viewDashboard");
+    // Job rows carry payloads (interview ids) and error text. "viewDashboard"
+    // includes interviewers; this is an operations concern.
+    await requirePermission(ctx, "manageReliability");
     return await ctx.db
       .query("backgroundJobs")
       .withIndex("by_status_run_at", (q) => q.eq("status", args.status))

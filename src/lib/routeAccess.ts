@@ -31,3 +31,41 @@ export const PROTECTED_ROUTES: RouteRule[] = [
 
 export const findRouteRule = (pathname: string): RouteRule | undefined =>
   PROTECTED_ROUTES.find((rule) => rule.pattern.test(pathname));
+
+/**
+ * The roles a path requires, or undefined when it has no rule.
+ *
+ * RoleGuard reads this instead of each page repeating its own role list, which
+ * is what let the middleware copy drift from the page copy.
+ */
+export const getRequiredRolesForPath = (
+  pathname: string,
+): AppRole[] | undefined => findRouteRule(pathname)?.allowedRoles;
+
+/**
+ * Routes a signed-out visitor may load.
+ *
+ * Everything not listed here requires authentication, enforced in middleware via
+ * `auth.protect()`. Previously the whole app was gated by a `<SignedIn>` wrapper in
+ * the root layout, which meant even the legal pages were invisible to the public and
+ * there was nowhere to put a landing page.
+ *
+ * `/` is public because it serves the marketing page when signed out and the app
+ * home when signed in.
+ */
+export const PUBLIC_ROUTES: RegExp[] = [
+  /^\/$/,
+  /^\/signin(\/|$)/,
+  /^\/sign-in(\/|$)/,
+  /^\/sign-up(\/|$)/,
+  /^\/terms(\/|$)/,
+  /^\/privacy(\/|$)/,
+  /^\/recording-disclosure(\/|$)/,
+  // Health is polled by the container healthcheck, which carries no session.
+  /^\/api\/health(\/|$)/,
+  // Clerk posts here with a webhook signature, not a user session.
+  /^\/api\/webhooks(\/|$)/,
+];
+
+export const isPublicRoute = (pathname: string): boolean =>
+  PUBLIC_ROUTES.some((pattern) => pattern.test(pathname));

@@ -496,7 +496,9 @@ export const getMyNotificationPreferences = query({
 
 export const getLegacyNotificationBackfillStatus = query({
   handler: async (ctx) => {
-    await requirePermission(ctx, "viewDashboard");
+    // Reads every notification in the deployment, so it is an operations query
+    // rather than something every interviewer should be able to run.
+    await requirePermission(ctx, "manageReliability");
     const notifications = await ctx.db.query("notifications").collect();
     const missing = notifications.filter(
       (notification) => !notification.category || !notification.channel,

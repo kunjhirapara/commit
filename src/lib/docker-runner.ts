@@ -26,18 +26,38 @@ const CONTAINER_LIMITS = {
   network: "none",
 };
 
-/** Maps Monaco language IDs to Docker images + the shell command to compile/run. */
-const LANGUAGE_CONFIG: Record<string, { image: string; runCmd: string }> = {
+/**
+ * Maps Monaco language IDs to Docker images + the shell command to compile/run.
+ *
+ * Images are pinned by digest, not tag: a tag is mutable, so `node:20-alpine`
+ * can be repointed upstream and silently change the runtime that executes
+ * untrusted user code. These are multi-arch manifest-list digests, so the same
+ * reference resolves correctly on both the arm64 host and amd64 dev machines.
+ *
+ * Pinning trades automatic base-image patches for reproducibility, so refresh
+ * them deliberately — see `npm run runner:digests`, which prints the current
+ * digest for each tag below.
+ */
+const LANGUAGE_CONFIG: Record<
+  string,
+  { image: string; tag: string; runCmd: string }
+> = {
   javascript: {
-    image: "node:20-alpine",
+    tag: "node:20-alpine",
+    image:
+      "node@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293",
     runCmd: "cat > /tmp/solution.js && node /tmp/solution.js",
   },
   python: {
-    image: "python:3.12-alpine",
+    tag: "python:3.12-alpine",
+    image:
+      "python@sha256:6d43704baacd1bfbe7c295d7f13079d5d8104ed33568873133f8fc69980419df",
     runCmd: "cat > /tmp/solution.py && python3 /tmp/solution.py",
   },
   java: {
-    image: "eclipse-temurin:21-alpine",
+    tag: "eclipse-temurin:21-alpine",
+    image:
+      "eclipse-temurin@sha256:1ff763083f2993d57d0bf374ab10bb3e2cb873af6c13a04458ebbd3e0337dc76",
     runCmd:
       "cat > /tmp/Solution.java && cd /tmp && javac Solution.java && java Solution",
   },
@@ -83,6 +103,7 @@ export async function runCodeInDocker(
     "--pids-limit", "64",                      // stop fork bombs
     "--security-opt", "no-new-privileges",     // no setuid escalation
     "--cap-drop", "ALL",                       // drop every Linux capability
+    "--user", "65534:65534",                   // nobody; never run user code as uid 0
     "--read-only",                             // rootfs immutable
     "--tmpfs", "/tmp:size=32m,exec,mode=1777", // only writable surface
     "-e", "HOME=/tmp",                          // avoid writes outside /tmp

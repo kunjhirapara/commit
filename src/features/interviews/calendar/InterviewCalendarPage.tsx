@@ -20,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import EmptyState from "@/components/ui/EmptyState";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { Textarea } from "@/components/ui/textarea";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -425,6 +426,16 @@ function InterviewCalendarPage() {
           <p className="mt-2 text-2xl font-semibold">{monthLabel}</p>
         </div>
       </div>
+
+      {!isLoadingInterviews && !isLoadingCustomEvents && totalEvents === 0 ? (
+        <EmptyState
+          icon={CalendarDaysIcon}
+          title="Nothing on your calendar yet"
+          message="Interviews appear here once someone schedules one with you — you cannot book your own. In the meantime you can work through problems solo in the practice sandbox, or click any day below to add a personal event."
+          actionLabel="Open practice sandbox"
+          actionHref="/practice"
+        />
+      ) : null}
 
       <div className="overflow-hidden rounded-lg border bg-card">
         <div className="flex flex-col gap-4 border-b p-4 sm:flex-row sm:items-center sm:justify-between">

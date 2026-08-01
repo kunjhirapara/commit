@@ -1,38 +1,33 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { ConvexHttpClient } from "convex/browser";
-import { api } from "../convex/_generated/api";
-import { findRouteRule, type AppRole } from "@/lib/routeAccess";
+import { isPublicRoute } from "@/lib/routeAccess";
 
 const CORRELATION_HEADER = "x-correlation-id";
 const CORRELATION_COOKIE = "commit-correlation-id";
-const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
 
 export default clerkMiddleware(async (auth, req) => {
-  const rule = findRouteRule(req.nextUrl.pathname);
+  const { pathname } = req.nextUrl;
 
-  if (rule) {
-    const homeUrl = new URL("/", req.url);
-    const { userId, getToken } = await auth();
-
-    if (!userId) return NextResponse.redirect(homeUrl);
-
-    let role: AppRole | undefined;
-    try {
-      const token = await getToken({ template: "convex" });
-      if (!token || !CONVEX_URL) return NextResponse.redirect(homeUrl);
-
-      const convex = new ConvexHttpClient(CONVEX_URL);
-      convex.setAuth(token);
-      const user = await convex.query(api.users.getCurrentUser);
-      role = user?.role as AppRole | undefined;
-    } catch {
-      return NextResponse.redirect(homeUrl);
-    }
-
-    if (!role || !rule.allowedRoles.includes(role)) {
-      return NextResponse.redirect(homeUrl);
-    }
+  // Authentication only. Role gating lives in RoleGuard, driven by the same
+  // PROTECTED_ROUTES table (see src/lib/routeAccess.ts).
+  //
+  // This used to mint a Clerk JWT and then query Convex through a freshly
+  // constructed ConvexHttpClient — two serial network round-trips, on a new TLS
+  // connection, before any protected page could begin rendering, and repeated on
+  // every client-side navigation because the RSC payload request matches this
+  // middleware too. The client then resolved the same role a second time via
+  // useUserRole.
+  //
+  // Authorization is unaffected: every Convex function re-checks with
+  // requirePermission, which was always the real gate. What changes is that a
+  // disallowed role is now bounced client-side, so the shell flashes briefly
+  // where there used to be a clean server redirect.
+  //
+  // Auth is enforced here rather than by a <SignedIn> wrapper in the root layout,
+  // so that public routes (landing page, legal pages) can actually render for
+  // signed-out visitors instead of bouncing straight to Clerk.
+  if (!isPublicRoute(pathname)) {
+    await auth.protect();
   }
 
   const correlationId =

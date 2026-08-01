@@ -1,6 +1,8 @@
 import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requirePermission } from "./lib/authz";
+import { requireIdentity } from "./lib/errorUtils";
+import { getOwnerEmails, isOwnerConfigured } from "./lib/owner";
 
 const telemetryLevelValidator = v.union(
   v.literal("info"),
@@ -70,11 +72,13 @@ export const ingestTelemetry = mutation({
     metadata: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
+    // Requires auth: this table is otherwise an unauthenticated write endpoint on a
+    // public Convex URL, i.e. a free way for anyone to burn the deployment's quota.
+    const identity = await requireIdentity(ctx);
 
     await ctx.db.insert("operationalEvents", {
       ...args,
-      userId: identity?.subject,
+      userId: identity.subject,
       createdAt: Date.now(),
     });
   },
@@ -101,14 +105,8 @@ export const captureHealthSnapshot = mutation({
     await requirePermission(ctx, "viewObservability");
 
     const now = Date.now();
-    console.log(
-      "Environment variable values:",
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
-      process.env.NEXT_PUBLIC_CONVEX_URL,
-      process.env.NEXT_PUBLIC_STREAM_API_KEY,
-      process.env.STREAM_SECRET_KEY,
-      process.env.CLERK_WEBHOOK_SECRET,
-    );
+    // Never log env var values here: this mutation is invoked on every developer
+    // dashboard mount, and Convex retains function logs. Only presence is checked.
     const envChecks = [
       {
         provider: "clerk",
@@ -145,6 +143,15 @@ export const captureHealthSnapshot = mutation({
         message: process.env.CLERK_WEBHOOK_SECRET
           ? "Webhook secret configured."
           : "Webhook secret missing. Clerk sync will fail.",
+      },
+      {
+        provider: "ownership",
+        // Only the count, never the addresses — these land in a table that any
+        // viewObservability holder can read.
+        status: isOwnerConfigured() ? "healthy" : "degraded",
+        message: isOwnerConfigured()
+          ? `Deployment owner configured (${getOwnerEmails().length}).`
+          : "OWNER_EMAILS not set. Any admin can grant and revoke admin.",
       },
     ] as const;
 

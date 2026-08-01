@@ -19,6 +19,114 @@ import { api } from "../../../../../convex/_generated/api";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { toast } from "sonner";
 
+type GrowthDashboard = NonNullable<
+  ReturnType<typeof useQuery<typeof api.metrics.getGrowthDashboard>>
+>;
+
+/**
+ * Bar sparkline over the rolled-up daily history. Inline SVG rather than a chart
+ * dependency — this is one series of at most 30 points.
+ */
+function SignupSparkline({ history }: { history: GrowthDashboard["history"] }) {
+  if (history.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No history yet. The first rollup runs just after midnight UTC.
+      </p>
+    );
+  }
+
+  const peak = Math.max(...history.map((day) => day.signups), 1);
+
+  return (
+    <div className="flex h-24 items-end gap-1" role="img" aria-label="Daily signups over the last 30 days">
+      {history.map((day) => (
+        <div
+          key={day.date}
+          className="flex-1 rounded-t bg-primary/70 transition-colors hover:bg-primary"
+          style={{ height: `${Math.max((day.signups / peak) * 100, 2)}%` }}
+          title={`${day.date}: ${day.signups} signup${day.signups === 1 ? "" : "s"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Growth and capacity. The rest of this page is an incident console — this
+ * answers "how many people are showing up, and is the box keeping up?"
+ */
+function GrowthAndCapacitySection({
+  growth,
+}: {
+  growth: GrowthDashboard | undefined;
+}) {
+  if (!growth) {
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Card key={i} className="border-border/70 bg-card/80 shadow-sm">
+            <CardHeader className="pb-2">
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-8 w-16" />
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  const runFailureRate =
+    growth.codeRuns7d > 0
+      ? Math.round((growth.codeRunFailures7d / growth.codeRuns7d) * 100)
+      : 0;
+
+  return (
+    <section className="space-y-4">
+      <SectionIntro
+        title="Growth and capacity"
+        description="User inflow and code-runner load. Daily figures are rolled up just after midnight UTC; today's signups are counted live."
+      />
+
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          label="Total users"
+          value={growth.totalUsers}
+          hint={`${growth.signupsToday} today`}
+        />
+        <MetricCard
+          label="Signups (7d)"
+          value={growth.signups7d}
+          hint={`${growth.signups30d} in 30d`}
+        />
+        <MetricCard
+          label="Active users (7d)"
+          value={growth.activeUsers7d}
+          hint={`${growth.meetings7d} meetings joined`}
+        />
+        <MetricCard
+          label="Code runs (7d)"
+          value={growth.codeRuns7d}
+          hint={`${runFailureRate}% failed · ${growth.queueRejections7d} shed`}
+        />
+      </div>
+
+      <Card className="border-border/70 bg-card/80 shadow-sm">
+        <CardHeader>
+          <CardTitle>Daily signups</CardTitle>
+          <CardDescription>
+            Last {growth.history.length} day
+            {growth.history.length === 1 ? "" : "s"} of recorded history.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SignupSparkline history={growth.history} />
+        </CardContent>
+      </Card>
+    </section>
+  );
+}
+
 function DeveloperWorkspaceSkeleton() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -178,6 +286,7 @@ function DeveloperWorkspacePage() {
   const monitoring = useQuery(api.observability.getMonitoringDashboard, {});
   const reliability = useQuery(api.reliability.getReliabilityDashboard, {});
   const notificationOps = useQuery(api.notifications.index.getNotificationOperationsDashboard, {});
+  const growth = useQuery(api.metrics.getGrowthDashboard, {});
 
 
   const captureHealthSnapshot = useMutation(api.observability.captureHealthSnapshot);
@@ -229,6 +338,8 @@ function DeveloperWorkspacePage() {
         <DeveloperWorkspaceSkeleton />
       ) : (
         <>
+      <GrowthAndCapacitySection growth={growth} />
+
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Critical events" value={monitoring.totals.criticalEvents} />
         <MetricCard label="Open recoveries" value={reliability.totals.openRecoveries} />
