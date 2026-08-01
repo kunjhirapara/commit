@@ -169,7 +169,8 @@ function RecordingsPage() {
 export default function ProtectedRecordingsPage() {
   return (
     <RoleGuard
-      allowedRoles={["interviewer", "recruiter", "admin"]}
+      fromPathname="/recordings"
+      redirectTo="/"
       title="Recordings restricted"
       message="Only interview staff can access recordings.">
       <RecordingsPage />
