@@ -63,6 +63,15 @@ export const PUBLIC_ROUTES: RegExp[] = [
   /^\/terms(\/|$)/,
   /^\/privacy(\/|$)/,
   /^\/recording-disclosure(\/|$)/,
+  // Generated public metadata. These are route handlers, not files under
+  // /public, so the middleware matcher's static-asset extension list never sees
+  // them — it skips by file extension and knows nothing of .txt, .xml, or the
+  // extensionless /opengraph-image. Without these three entries all of them
+  // answered a signed-out request with 307 → /signin: Google never read the
+  // robots or sitemap, and every link unfurl got a login page instead of a card.
+  /^\/robots\.txt$/,
+  /^\/sitemap\.xml$/,
+  /^\/opengraph-image$/,
   // Health is polled by the container healthcheck, which carries no session.
   /^\/api\/health(\/|$)/,
   // Clerk posts here with a webhook signature, not a user session.

@@ -35,7 +35,17 @@ export default clerkMiddleware(async (auth, req) => {
     // prompt. The previous middleware redirected these to "/" itself, so this
     // restores that behaviour rather than adding new.
     const signInUrl = new URL("/signin", req.url);
-    signInUrl.searchParams.set("redirect_url", req.url);
+    // A relative path, not req.url. Behind the VM's nginx the Host header is not
+    // forwarded, so req.url resolves to the container's bind address and this
+    // param used to read https://0.0.0.0:3000/dashboard. The sign-in page accepts
+    // only same-origin relative paths (its open-redirect guard), so an absolute
+    // URL was silently discarded and every expired session landed on / instead of
+    // where it left off. A path needs no host at all: correct behind any proxy,
+    // and independent of NEXT_PUBLIC_APP_URL, which falls back to localhost.
+    signInUrl.searchParams.set(
+      "redirect_url",
+      `${req.nextUrl.pathname}${req.nextUrl.search}`,
+    );
 
     await auth.protect({
       unauthenticatedUrl: signInUrl.toString(),
