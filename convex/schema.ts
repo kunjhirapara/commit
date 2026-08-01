@@ -118,7 +118,18 @@ export default defineSchema({
     hasCompletedOnboarding: v.optional(v.boolean()),
   })
     .index("by_clerk_id", ["clerkId"])
-    .index("by_email", ["email"]),
+    .index("by_email", ["email"])
+    // Dashboards need "every interviewer" and "every candidate". Without this
+    // they collected the whole table and filtered in JS, which is fine at ten
+    // users and not fine once public signup fills the table with candidates.
+    .index("by_role", ["role"])
+    // The team page picked a candidate from a <Select> listing every candidate
+    // in the database. That is both an unbounded read and an unusable control
+    // once there are more than a screenful, so the picker searches instead.
+    .searchIndex("search_by_name", {
+      searchField: "name",
+      filterFields: ["role"],
+    }),
 
   roleDefinitions: defineTable({
     name: v.string(),
@@ -299,6 +310,13 @@ export default defineSchema({
     codeRuns: v.number(),
     codeRunFailures: v.number(),
     codeRunQueueRejections: v.number(),
+    /**
+     * Total accounts as of this rollup. Optional so existing rows need no
+     * backfill. Counted here, in a daily internal cron, rather than in
+     * getGrowthDashboard, which used to scan the whole users table on every
+     * developer-dashboard load.
+     */
+    totalUsers: v.optional(v.number()),
     computedAt: v.number(),
   }).index("by_date", ["date"]),
 

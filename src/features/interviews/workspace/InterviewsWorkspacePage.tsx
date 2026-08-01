@@ -167,16 +167,32 @@ function InterviewsWorkspacePage() {
   const [overrideReason, setOverrideReason] = useState("");
   const deferredSearch = useDeferredValue(search);
 
-  const adminDashboardRaw = useQuery(api.admin.getAdminDashboard, {
+  /**
+   * Three focused queries where there used to be one fat getAdminDashboard call.
+   *
+   * Only the pipeline takes the filters, so typing in the search box no longer
+   * recomputes the metric cards and the interviewer roster on every keystroke —
+   * and none of them read the whole users or feedback table any more.
+   */
+  const pipelineRaw = useQuery(api.admin.getInterviewPipeline, {
     search: deferredSearch || undefined,
     stage: stage === "all" ? undefined : stage,
-  }) as
-    | {
-        analytics: DashboardAnalytics;
-        interviewerRoster: InterviewerOption[];
-        pipeline: DashboardInterview[];
-      }
+  }) as DashboardInterview[] | undefined;
+  const analyticsRaw = useQuery(api.admin.getOperationsAnalytics, {}) as
+    | DashboardAnalytics
     | undefined;
+  const rosterRaw = useQuery(api.admin.getInterviewerRoster, {}) as
+    | InterviewerOption[]
+    | undefined;
+
+  const adminDashboardRaw =
+    pipelineRaw && analyticsRaw && rosterRaw
+      ? {
+          pipeline: pipelineRaw,
+          analytics: analyticsRaw,
+          interviewerRoster: rosterRaw,
+        }
+      : undefined;
 
   const [adminDashboard, setAdminDashboard] = useState(adminDashboardRaw);
 
@@ -184,7 +200,8 @@ function InterviewsWorkspacePage() {
     if (adminDashboardRaw) {
       setAdminDashboard(adminDashboardRaw);
     }
-  }, [adminDashboardRaw]);
+    // adminDashboardRaw is rebuilt each render, so depend on the parts.
+  }, [pipelineRaw, analyticsRaw, rosterRaw]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isFetching = adminDashboardRaw === undefined;
 
@@ -303,22 +320,27 @@ function InterviewsWorkspacePage() {
             <MetricCard
               label="Throughput"
               value={adminDashboard.analytics.throughput}
+              hint={`Last ${adminDashboard.analytics.windowDays} days`}
             />
             <MetricCard
               label="Time to hire"
               value={`${adminDashboard.analytics.timeToHireDays}d`}
+              hint={`Last ${adminDashboard.analytics.windowDays} days`}
             />
             <MetricCard
               label="Cancellations"
               value={adminDashboard.analytics.cancellations}
+              hint={`Last ${adminDashboard.analytics.windowDays} days`}
             />
             <MetricCard
               label="No shows"
               value={adminDashboard.analytics.noShows}
+              hint={`Last ${adminDashboard.analytics.windowDays} days`}
             />
             <MetricCard
               label="Feedback pending"
               value={adminDashboard.analytics.feedbackPending}
+              hint="Draft scorecards still open"
             />
           </div>
 
