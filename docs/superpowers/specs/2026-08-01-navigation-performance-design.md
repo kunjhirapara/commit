@@ -141,6 +141,49 @@ In `getAdminDashboard`:
 Because the behavioural change is a routing/authorization boundary, the
 candidate-refused case must be exercised by hand rather than assumed.
 
+## Result
+
+Implemented 2026-08-01.
+
+**Middleware.** Both round-trips are gone. `/dashboard*`, `/schedule` and
+`/recordings` no longer mint a Clerk JWT or open a Convex connection before
+rendering. Role gating moved to `RoleGuard` via a new
+`getRequiredRolesForPath`, so `PROTECTED_ROUTES` is still the only place role
+requirements are written down.
+
+A side effect worth recording: dropping `force-dynamic` moved all five dashboard
+routes from `ƒ` (server-rendered on demand) to `○` (prerendered static shells).
+
+**Loading boundaries.** Added for `(root)` and the dashboard segment — the first
+in the app.
+
+**Bundle.** Stream's *JavaScript* is now absent from `/`, `/practice`,
+`/calendar`, `/dashboard` and `/settings`, verified by scanning the assets each
+prerendered page references. Two static import chains had to be cut: the
+provider's own `StreamVideoClient` import, and `/` → `MeetingModal` →
+`useMeetingActions` → `useStreamVideoClient`.
+
+Stream's *stylesheet*, 127 KB, still reaches those routes. Turbopack merges CSS
+across a route group, so moving the import out of the root layout to the meeting
+route was a semantic fix rather than a saving. Separating it would require giving
+`/meeting` its own route group and shell; not attempted.
+
+Total bytes on disk rose from 3.7 MB to roughly 4.1 MB, because code-splitting
+duplicates rather than moves. That figure is the wrong one to optimise: what
+changed is bytes *per route*, and the SDK is no longer among them for the five
+routes above.
+
+**Convex.** `getAdminDashboard` no longer reads the caller's user row twice, and
+two O(interviews × feedback) scans became hash lookups. Output is unchanged by
+construction. The three `.collect()` calls remain — see the plan for why
+pagination would have altered the displayed figures.
+
+**Not verified.** The candidate-is-refused path on `/dashboard`,
+`/dashboard/team`, `/schedule` and `/recordings` needs a real signed-in session
+with a `candidate` account and has not been exercised. Since this work moved an
+authorization boundary from the server to the client, that check should be done
+before merging.
+
 ## Out of scope
 
 Root cause 5, the client waterfall. The middleware change already removes its

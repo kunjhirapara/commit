@@ -2,7 +2,6 @@ import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   canAccessInterview,
-  getCurrentUserRecord,
   logAuditEvent,
   requirePermission,
 } from "./lib/authz";
@@ -89,12 +88,24 @@ export const getAdminDashboard = query({
     endDate: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requirePermission(ctx, "viewDashboard");
-    const { user } = await getCurrentUserRecord(ctx);
+    // requirePermission already resolves the caller's record and returns it.
+    // This used to call getCurrentUserRecord straight afterwards, reading the
+    // same row a second time on every dashboard load.
+    const { user } = await requirePermission(ctx, "viewDashboard");
     const interviews = await ctx.db.query("interviews").collect();
     const users = await ctx.db.query("users").collect();
     const feedback = await ctx.db.query("feedback").collect();
     const usersByClerkId = new Map(users.map((user) => [user.clerkId, user]));
+
+    // Grouped once instead of re-filtering the whole feedback array inside the
+    // per-interview map below, which was O(interviews x feedback).
+    const feedbackByInterviewId = new Map<string, typeof feedback>();
+    for (const entry of feedback) {
+      const key = String(entry.interviewId);
+      const bucket = feedbackByInterviewId.get(key);
+      if (bucket) bucket.push(entry);
+      else feedbackByInterviewId.set(key, [entry]);
+    }
     const scopedInterviews =
       user.role === "admin" || user.role === "recruiter"
         ? interviews
@@ -107,9 +118,8 @@ export const getAdminDashboard = query({
       .map((interview) => {
         const candidate = usersByClerkId.get(interview.candidateId);
         const interviewers = interview.interviewerIds.map((id: string) => usersByClerkId.get(id));
-        const interviewFeedback = feedback.filter(
-          (entry) => String(entry.interviewId) === String(interview._id),
-        );
+        const interviewFeedback =
+          feedbackByInterviewId.get(String(interview._id)) ?? [];
 
         return {
           ...interview,
@@ -125,6 +135,12 @@ export const getAdminDashboard = query({
         };
       });
 
+    // Same reason as feedbackByInterviewId: feedbackPending below ran a
+    // scopedInterviews.some(...) for every draft entry.
+    const scopedInterviewIds = new Set(
+      scopedInterviews.map((interview) => String(interview._id)),
+    );
+
     const analytics = {
       throughput: scopedInterviews.filter((item) => normalizeInterviewStatus(item.status) === "completed").length,
       cancellations: scopedInterviews.filter((item) => normalizeInterviewStatus(item.status) === "cancelled").length,
@@ -132,9 +148,7 @@ export const getAdminDashboard = query({
       feedbackPending: feedback.filter(
         (entry) =>
           entry.state === "draft" &&
-          scopedInterviews.some(
-            (interview) => String(interview._id) === String(entry.interviewId),
-          ),
+          scopedInterviewIds.has(String(entry.interviewId)),
       ).length,
       timeToHireDays:
         scopedInterviews.length === 0
