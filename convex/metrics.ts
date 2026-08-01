@@ -20,6 +20,10 @@ const RETENTION_DAYS = {
   auditLogs: 180,
   backgroundJobs: 30,
   webhookEvents: 30,
+  // Integrity signals age out with the session events they sit alongside.
+  // Keeping them longer would mean a stray focus event from a year ago could
+  // still surface against a candidate.
+  proctoringEvents: 90,
 } as const;
 
 /** Rows deleted per table per run, so a single cron tick stays well inside limits. */
@@ -180,6 +184,20 @@ export const pruneExpiredRecords = internalMutation({
       RETENTION_DAYS.interviewSessionEvents,
     );
     await pruneByCreatedAt("auditLogs", RETENTION_DAYS.auditLogs);
+
+    // Separate block because proctoringEvents keys its index on `startedAt`
+    // rather than `createdAt` — the server-anchored moment the signal began,
+    // which is what the report orders by.
+    const proctoringCutoff = now - RETENTION_DAYS.proctoringEvents * DAY_MS;
+    const expiredProctoring = await ctx.db
+      .query("proctoringEvents")
+      .withIndex("by_created_at", (q) => q.lt("startedAt", proctoringCutoff))
+      .take(PRUNE_BATCH_SIZE);
+
+    for (const row of expiredProctoring) {
+      await ctx.db.delete(row._id);
+    }
+    deleted.proctoringEvents = expiredProctoring.length;
 
     // Only terminal jobs are pruned; anything still pending or retrying stays.
     const jobCutoff = now - RETENTION_DAYS.backgroundJobs * DAY_MS;

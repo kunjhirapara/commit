@@ -19,6 +19,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "../../../../../convex/_generated/api";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useUserRole } from "@/hooks/useUserRole";
+import CandidateIntegrityHistory from "@/components/interviews/CandidateIntegrityHistory";
 import { toast } from "sonner";
 
 const splitCsv = (value: string) =>
@@ -198,6 +199,13 @@ function TeamWorkspacePage() {
                   : "No candidates with rounds in the last 30 days. Search by name to find someone else."}
               </p>
             )}
+            {/* Only once a candidate is chosen — there is nothing meaningful to
+                show across all candidates, and an aggregate would invite exactly
+                the comparison this view avoids. */}
+            {selectedCandidateId ? (
+              <CandidateIntegrityHistory candidateClerkId={selectedCandidateId} />
+            ) : null}
+
             <div className="grid gap-3 max-h-[600px] overflow-y-auto pr-2">
               {(candidateHistory ?? []).map((round) => (
                 <div

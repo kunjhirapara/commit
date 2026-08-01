@@ -54,6 +54,8 @@ import { Button } from "./button";
 import ErrorState from "./ErrorState";
 import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
+import { useProctoring } from "@/hooks/useProctoring";
+import IntegrityReport from "@/components/interviews/IntegrityReport";
 import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useCallEndHandler } from "@/hooks/useCallEndHandler";
@@ -164,6 +166,25 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
         isRecruiter ||
         interview.interviewerIds.includes(currentUser.clerkId) ||
         interview.interviewerIds.includes(localParticipant?.userId ?? "")));
+  /**
+   * Integrity monitoring runs for the candidate and nobody else.
+   *
+   * Interviewers switch away constantly — notes, the scorecard, the CV — so
+   * recording them would bury the signal in noise and amount to surveilling
+   * staff. The comparison is made here, once, and the hook is inert otherwise.
+   */
+  const isCandidate =
+    !isUserLoading &&
+    !!interview &&
+    !!currentUser &&
+    interview.candidateId === currentUser.clerkId;
+
+  const { reportEditorSignal } = useProctoring({
+    interviewId: interview?._id,
+    streamCallId: interview?.streamCallId,
+    enabled: isCandidate,
+  });
+
   const canSendAudio = useHasPermissions(OwnCapability.SEND_AUDIO);
   const canSendVideo = useHasPermissions(OwnCapability.SEND_VIDEO);
   const canCreateReaction = useHasPermissions(OwnCapability.CREATE_REACTION);
@@ -641,8 +662,28 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
         {/* ── Code editor panel ── */}
         <ResizablePanel defaultSize={70} minSize={10}>
-          <div className="h-full rounded-none border-l">
-            <CodeEditor streamCallId={interview?.streamCallId} />
+          <div className="flex h-full flex-col rounded-none border-l">
+            {/* Live integrity view, host only. The candidate must never see this
+                — monitoring is silent by design, and the Convex query refuses
+                them anyway via requireInterviewReviewAccess. */}
+            {isHost && interview ? (
+              <details className="shrink-0 border-b bg-muted/20 px-4 py-2">
+                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
+                  Interview integrity
+                </summary>
+                <div className="pb-3 pt-2">
+                  <IntegrityReport interviewId={interview._id} />
+                </div>
+              </details>
+            ) : null}
+            <div className="min-h-0 flex-1">
+              <CodeEditor
+                streamCallId={interview?.streamCallId}
+                // Undefined for everyone but the candidate, so the editor
+                // reports nothing at all for an interviewer.
+                onEditorSignal={isCandidate ? reportEditorSignal : undefined}
+              />
+            </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

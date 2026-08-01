@@ -35,6 +35,9 @@ import {
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { useCallEndHandler } from "@/hooks/useCallEndHandler";
 import { cn } from "@/lib/utils";
+import { useUserRole } from "@/hooks/useUserRole";
+import { readDisplayState } from "@/lib/proctoring/displays";
+import ProctoringDisclosure from "./ProctoringDisclosure";
 
 function humanizePermission(state: string): string {
   switch (state) {
@@ -68,6 +71,16 @@ function MeetingSetup({
   const [networkLabel, setNetworkLabel] = useState("Checking network…");
   const [joinError, setJoinError] = useState<string | null>(null);
   const [isJoining, setIsJoining] = useState(false);
+  // Only the candidate sees the disclosure, because only the candidate is
+  // monitored. Showing it to an interviewer would be misleading.
+  const { user: currentUser } = useUserRole();
+  const isCandidate =
+    !!interview && !!currentUser && interview.candidateId === currentUser.clerkId;
+  const [proctoringAcknowledged, setProctoringAcknowledged] = useState(false);
+  const [wantsFullscreen, setWantsFullscreen] = useState(true);
+  const startProctoringSession = useMutation(
+    api.proctoring.startProctoringSession,
+  );
 
   const call = useCall();
   const { useCallEndedAt, useHasPermissions } = useCallStateHooks();
@@ -202,6 +215,13 @@ function MeetingSetup({
       return;
     }
 
+    // The disclosure is the lawful basis for monitoring silently, so it gates
+    // joining rather than merely being displayed.
+    if (isCandidate && !proctoringAcknowledged) {
+      toast.error("Please confirm you understand how this interview is monitored.");
+      return;
+    }
+
     setJoinError(null);
     setIsJoining(true);
 
@@ -219,6 +239,42 @@ function MeetingSetup({
           detail: "Participant joined from setup",
           metadata: JSON.stringify({ browserSupported, networkLabel }),
         });
+      }
+
+      if (interview && isCandidate) {
+        // Fullscreen has to be requested inside the click that started this, so
+        // it happens here rather than after the join resolves. A refusal is not
+        // an error — the session simply records that fullscreen was not in use,
+        // and the report says so instead of showing an unearned clean result.
+        let fullscreenUsed = false;
+        if (wantsFullscreen) {
+          try {
+            await document.documentElement.requestFullscreen();
+            fullscreenUsed = !!document.fullscreenElement;
+          } catch {
+            fullscreenUsed = false;
+          }
+        }
+
+        const { support } = readDisplayState();
+
+        // Opening the session is what makes monitoring exist for this interview.
+        // A failure here must not block the candidate from being interviewed, so
+        // it is logged and swallowed — the missing session row is itself visible
+        // on the report as "not monitored".
+        await startProctoringSession({
+          interviewId: interview._id,
+          streamCallId: interview.streamCallId,
+          displaySupport: support,
+          fullscreenUsed,
+          disclosureAcknowledged: true,
+          userAgent:
+            typeof navigator === "undefined" ? undefined : navigator.userAgent,
+        }).catch((error) =>
+          logError("MeetingSetup.startProctoringSession", error, {
+            interviewId: interview._id,
+          }),
+        );
       }
     })();
 
@@ -589,12 +645,27 @@ function MeetingSetup({
               </div>
             ) : null}
 
+            {/* Integrity monitoring notice — candidate only, since only the
+                candidate is monitored. */}
+            {isCandidate ? (
+              <ProctoringDisclosure
+                acknowledged={proctoringAcknowledged}
+                onAcknowledgedChange={setProctoringAcknowledged}
+                fullscreen={wantsFullscreen}
+                onFullscreenChange={setWantsFullscreen}
+              />
+            ) : null}
+
             {/* Join button */}
             <div className="space-y-3">
               <Button
                 className="w-full gap-2"
                 size="lg"
-                disabled={isJoining || hasBlockedPermissions}
+                disabled={
+                  isJoining ||
+                  hasBlockedPermissions ||
+                  (isCandidate && !proctoringAcknowledged)
+                }
                 onClick={handleJoin}>
                 {isJoining ? (
                   <>

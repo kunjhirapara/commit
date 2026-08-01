@@ -31,22 +31,33 @@ const nextConfig = {
       },
       {
         // Meeting routes need camera/mic/screen-share for Stream video.
+        //
+        // `window-management` is named explicitly and is load-bearing, not
+        // boilerplate. Integrity monitoring reads `screen.isExtended` to tell
+        // whether a second display is attached, and per the spec a
+        // window-management Permissions-Policy makes that property return
+        // `false` rather than throwing. Leaving it unnamed works today because
+        // the default allowlist is `self`, but a later tightening of this header
+        // would silently disable the check in the false-negative direction:
+        // every candidate would report as single-screen and nothing would
+        // indicate the signal had stopped working.
         source: "/meeting/:path*",
         headers: [
           {
             key: "Permissions-Policy",
             value:
-              "camera=(self), microphone=(self), display-capture=(self), geolocation=()",
+              "camera=(self), microphone=(self), display-capture=(self), window-management=(self), geolocation=()",
           },
         ],
       },
       {
+        // No window-management off the meeting routes: nothing else needs it.
         source: "/((?!meeting/).*)",
         headers: [
           {
             key: "Permissions-Policy",
             value:
-              "camera=(), microphone=(), display-capture=(), geolocation=()",
+              "camera=(), microphone=(), display-capture=(), window-management=(), geolocation=()",
           },
         ],
       },
