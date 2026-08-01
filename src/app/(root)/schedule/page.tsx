@@ -6,7 +6,8 @@ import InterviewScheduleUI from "./InterviewScheduleUI";
 function SchedulePage() {
   return (
     <RoleGuard
-      allowedRoles={["recruiter", "admin"]}
+      fromPathname="/schedule"
+      redirectTo="/"
       title="Scheduling restricted"
       message="Only recruiters and admins can schedule interviews.">
       <InterviewScheduleUI />

@@ -1,0 +1,33 @@
+# Scrape config for the self-hosted monitoring profile.
+#
+# 15s is frequent enough to see a burst of code-runner containers without
+# generating much data: three targets at 15s fits comfortably inside the 10 GB
+# retention cap set in docker-compose.yml.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    deployment: commit
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Host CPU, memory, disk, load.
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]
+
+  # Per-container metrics. Use this to compare the `commit` container against the
+  # short-lived code-runner containers competing with it for the same 4 cores.
+  - job_name: cadvisor
+    static_configs:
+      - targets: ["cadvisor:8080"]
+
+  # The app's own healthcheck endpoint. Not a metrics endpoint, so this only
+  # records up/down via the `up` series.
+  - job_name: commit-app
+    metrics_path: /api/health
+    static_configs:
+      - targets: ["app:3000"]

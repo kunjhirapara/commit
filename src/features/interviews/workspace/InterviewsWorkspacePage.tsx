@@ -20,7 +20,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { useLifecycleAutomation } from "@/hooks/useLifecycleAutomation";
 import { useUserRole } from "@/hooks/useUserRole";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { HiringFunnelCard } from "./HiringFunnelCard";
@@ -152,7 +151,6 @@ function WorkspaceSkeleton() {
 }
 
 function InterviewsWorkspacePage() {
-  useLifecycleAutomation();
 
   const { canEditInterviews, canScheduleInterviews, role } = useUserRole();
   const [search, setSearch] = useState("");
