@@ -5,6 +5,7 @@ import {
   Permission,
   UserRole,
   hasPermission,
+  isOwnerUser,
   logAuditEvent,
   normalizeEmail,
   requirePermission,
@@ -15,6 +16,7 @@ import {
   logServerError,
   requireIdentity,
 } from "./lib/errorUtils";
+import { isOwnerConfigured } from "./lib/owner";
 
 const INVITATION_LIST_LIMIT = 12;
 const INVITATION_EXPIRY_MS = 24 * 60 * 60 * 1000;
@@ -255,6 +257,9 @@ export const getCurrentUser = query({
       return {
         ...sanitizeUserForViewer(user, user),
         customRole,
+        // Drives UI affordances only. Every owner-gated mutation re-checks
+        // against OWNER_EMAILS server-side.
+        isOwner: isOwnerUser(user),
       };
     } catch (error) {
       logServerError("users.getCurrentUser", error);
@@ -411,10 +416,24 @@ export const inviteUser = mutation({
       );
     }
 
-    if (user.role !== "admin" && args.role !== "interviewer") {
+    if (
+      user.role !== "admin" &&
+      args.role !== "interviewer" &&
+      !isOwnerUser(user)
+    ) {
       throw createServerError(
         new Error(`Role ${user.role} cannot invite ${args.role}`),
         "Only admins can invite recruiters, developers, or admins.",
+      );
+    }
+
+    // Same rule as updateUserRole: admin membership is the owner's to hand out,
+    // otherwise an invitation is just a slower route to the same escalation.
+    // Inert until OWNER_EMAILS is set.
+    if (args.role === "admin" && isOwnerConfigured() && !isOwnerUser(user)) {
+      throw createServerError(
+        new Error(`Role ${user.role} attempted to invite an admin`),
+        "Only the deployment owner can invite an admin.",
       );
     }
 
@@ -645,10 +664,46 @@ export const updateUserRole = mutation({
       );
     }
 
-    if (targetUser.clerkId === user.clerkId) {
+    const actorIsOwner = isOwnerUser(user);
+
+    // The owner is exempt: ownership comes from OWNER_EMAILS on the deployment,
+    // so self-promotion grants nothing the environment has not already granted,
+    // and this is how a fresh owner turns their `candidate` signup into `admin`
+    // without hand-editing the database.
+    if (targetUser.clerkId === user.clerkId && !actorIsOwner) {
       throw createServerError(
         new Error(`User ${user.clerkId} attempted to change their own role`),
         "You cannot change your own role. Ask another admin to do it.",
+      );
+    }
+
+    // Nobody but the owner may touch an owner's account. Without this, admin is
+    // a flat peer group: a second admin could demote the person whose
+    // deployment this is.
+    if (isOwnerUser(targetUser) && !actorIsOwner) {
+      throw createServerError(
+        new Error(
+          `User ${user.clerkId} attempted to change the role of owner ${targetUser.clerkId}`,
+        ),
+        "This account belongs to the deployment owner and cannot be changed here.",
+      );
+    }
+
+    // Granting or revoking admin is owner-only, so admin cannot self-replicate.
+    // Admins keep full control of every non-admin role.
+    //
+    // Inert until OWNER_EMAILS is set, otherwise deploying this would leave a
+    // running deployment with nobody able to manage admins at all.
+    if (
+      isOwnerConfigured() &&
+      (args.role === "admin" || targetUser.role === "admin") &&
+      !actorIsOwner
+    ) {
+      throw createServerError(
+        new Error(
+          `Role ${user.role} attempted to change admin membership for ${targetUser.clerkId}`,
+        ),
+        "Only the deployment owner can grant or revoke the admin role.",
       );
     }
 
@@ -711,6 +766,46 @@ export const assignUserCustomRole = mutation({
       throw createServerError(
         new Error(`Custom role not found: ${args.customRoleId}`),
         "Custom role not found.",
+      );
+    }
+
+    const actorIsOwner = isOwnerUser(user);
+
+    // This mutation only needs "manageRoleCatalog", which `developer` holds, and
+    // it used to inspect neither the target nor the permissions being handed
+    // over. `filterValidPermissions` stops a developer *creating* a role that
+    // carries an escalation permission, but nothing stopped them *assigning* one
+    // an admin had already created — to themselves — and thereby gaining
+    // manageRoles. Both halves of that are closed here.
+    if (targetUser.clerkId === user.clerkId && !actorIsOwner) {
+      throw createServerError(
+        new Error(
+          `User ${user.clerkId} attempted to assign a custom role to themselves`,
+        ),
+        "You cannot assign a custom role to your own account.",
+      );
+    }
+
+    if (isOwnerUser(targetUser) && !actorIsOwner) {
+      throw createServerError(
+        new Error(
+          `User ${user.clerkId} attempted to assign a custom role to owner ${targetUser.clerkId}`,
+        ),
+        "This account belongs to the deployment owner and cannot be changed here.",
+      );
+    }
+
+    const escalationGranted = (customRole?.permissions ?? []).filter(
+      (permission: string) =>
+        ESCALATION_PERMISSIONS.includes(permission as Permission),
+    );
+
+    if (escalationGranted.length > 0 && !actorIsOwner) {
+      throw createServerError(
+        new Error(
+          `Role ${user.role} attempted to grant escalation permissions ${escalationGranted.join(", ")}`,
+        ),
+        "Only the deployment owner can assign a role that manages other roles.",
       );
     }
 

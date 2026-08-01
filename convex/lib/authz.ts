@@ -1,4 +1,5 @@
 import { createServerError, requireIdentity } from "./errorUtils";
+import { isOwnerEmail } from "./owner";
 import {
   PERMISSION_VALUES,
   PRIVILEGED_INVITATION_ROLES,
@@ -90,6 +91,32 @@ export const getCurrentUserRecord = async (ctx: any) => {
 export const hasPermission = (role: UserRole, permission: Permission) =>
   PERMISSIONS[role].includes(permission);
 
+/**
+ * Ownership is decided by OWNER_EMAILS on the Convex deployment, never by a
+ * column an admin can patch. See ./owner.ts for why this is not a sixth role.
+ */
+export const isOwnerUser = (user: Pick<UserRecord, "email">) =>
+  isOwnerEmail(user.email);
+
+/**
+ * The owner implicitly holds every permission. This is what makes the variable
+ * a working bootstrap: set OWNER_EMAILS, sign in, and the deployment is yours
+ * without hand-editing the database, even though signup still lands on
+ * `candidate` like everyone else.
+ */
+export const requireOwner = async (ctx: any) => {
+  const { identity, user } = await getCurrentUserRecord(ctx);
+
+  if (!isOwnerUser(user)) {
+    throw createServerError(
+      new Error(`User ${user.clerkId} is not an owner of this deployment`),
+      "Only the deployment owner can do this.",
+    );
+  }
+
+  return { identity, user };
+};
+
 const hasCustomPermission = async (
   ctx: any,
   user: { customRoleId?: string },
@@ -107,6 +134,7 @@ export const requirePermission = async (ctx: any, permission: Permission) => {
   const { identity, user } = await getCurrentUserRecord(ctx);
 
   const allowed =
+    isOwnerUser(user) ||
     hasPermission(user.role, permission) ||
     (await hasCustomPermission(ctx, user, permission));
 
@@ -125,6 +153,8 @@ export const requireAnyPermission = async (
   permissions: Permission[],
 ) => {
   const { identity, user } = await getCurrentUserRecord(ctx);
+
+  if (isOwnerUser(user)) return { identity, user };
 
   for (const permission of permissions) {
     if (
