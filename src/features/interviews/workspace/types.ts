@@ -29,6 +29,8 @@ export type DashboardInterview = {
 };
 
 export type DashboardAnalytics = {
+  /** Days the figures cover. Surfaced so the UI can say so rather than implying all-time. */
+  windowDays: number;
   throughput: number;
   timeToHireDays: number;
   cancellations: number;
