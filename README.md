@@ -72,6 +72,18 @@ docker pull eclipse-temurin:21-alpine
 
 _Note: Ensure the Docker daemon is running in the background before you attempt to run any code on the platform._
 
+The runner does not use these tags directly — `src/lib/docker-runner.ts` pins each
+image by multi-arch digest, so a mutable upstream tag cannot silently change the
+runtime that executes untrusted user code. The trade-off is that base-image
+patches no longer arrive on their own, so refresh the digests periodically:
+
+```bash
+npm run runner:digests   # prints the current digest for each tag above
+```
+
+It queries the registry directly, so it needs network access but not a running
+Docker daemon.
+
 ### 4. Install Dependencies & Run
 
 ```bash
