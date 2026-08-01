@@ -2,6 +2,7 @@ import { useUser } from "@clerk/nextjs";
 import { api } from "../../convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
 import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
+import { isRoleStateLoading } from "@/lib/auth/roleLoading";
 
 import {
   PERMISSION_VALUES,
@@ -20,7 +21,10 @@ const BASE_PERMISSIONS = ROLE_PERMISSIONS;
 export type AppPermission = Permission;
 
 export const useUserRole = () => {
-  const { user } = useUser();
+  // `isLoaded` matters as much as `user`: Clerk reports `user: undefined` both
+  // when nobody is signed in and while it is still initialising, and treating
+  // those the same is what made every refresh look like a denial.
+  const { user, isLoaded: isClerkLoaded } = useUser();
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
   const { status: syncStatus, clerkId: syncedClerkId } = useUserSyncStatus();
   const isSyncedCurrentUser =
@@ -42,11 +46,14 @@ export const useUserRole = () => {
    * affordances the server would reject anyway — never treat it as the gate.
    */
   const isOwner = userData?.isOwner === true;
-  const isLoading =
-    !!user &&
-    (isConvexAuthLoading ||
-      shouldWaitForSync ||
-      (canQueryCurrentUser && userData === undefined));
+  const isLoading = isRoleStateLoading({
+    isClerkLoaded,
+    hasUser: !!user,
+    isConvexAuthLoading,
+    isWaitingForSync: shouldWaitForSync,
+    isQueryingCurrentUser: canQueryCurrentUser,
+    hasUserData: userData !== undefined,
+  });
   const permissions = new Set<AppPermission>([
     ...((role ? BASE_PERMISSIONS[role] : []) as AppPermission[]),
     ...((customRole?.permissions ?? []) as AppPermission[]),
