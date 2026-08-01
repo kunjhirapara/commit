@@ -2,6 +2,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requirePermission } from "./lib/authz";
 import { requireIdentity } from "./lib/errorUtils";
+import { getOwnerEmails, isOwnerConfigured } from "./lib/owner";
 
 const telemetryLevelValidator = v.union(
   v.literal("info"),
@@ -142,6 +143,15 @@ export const captureHealthSnapshot = mutation({
         message: process.env.CLERK_WEBHOOK_SECRET
           ? "Webhook secret configured."
           : "Webhook secret missing. Clerk sync will fail.",
+      },
+      {
+        provider: "ownership",
+        // Only the count, never the addresses — these land in a table that any
+        // viewObservability holder can read.
+        status: isOwnerConfigured() ? "healthy" : "degraded",
+        message: isOwnerConfigured()
+          ? `Deployment owner configured (${getOwnerEmails().length}).`
+          : "OWNER_EMAILS not set. Any admin can grant and revoke admin.",
       },
     ] as const;
 

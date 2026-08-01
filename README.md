@@ -19,6 +19,40 @@ It offers real-time video, collaborative code execution, structured feedback sco
 
 Roles and permissions are defined in one place — `convex/lib/permissions.ts` — and shared by the Convex functions and the browser. The database schema lives in `convex/schema.ts`.
 
+### Deployment owner
+
+`admin` is a peer group, not a hierarchy: any admin can grant admin to anyone
+and demote any other admin. That is fine among people you trust and wrong for
+anything only the operator should control, so a small number of actions are
+reserved for the **owner**.
+
+The owner is whoever signs in with an address listed in `OWNER_EMAILS` **on the
+Convex deployment**. It is deliberately not a sixth role: a role lives in a
+`users` row that admins can already reach, whereas an environment variable can
+be read by the app but never written by it, so changing who owns the deployment
+requires the Convex dashboard or CLI.
+
+```bash
+npx convex env set OWNER_EMAILS you@example.com
+# or several
+npx convex env set OWNER_EMAILS "you@example.com, cofounder@example.com"
+```
+
+Owner-only, once set:
+
+- Granting or revoking the `admin` role, and inviting an admin.
+- Changing an owner's own role or custom role — no admin can demote you.
+- Assigning a custom role that carries `manageRoles`.
+
+The owner also implicitly holds every permission, which is what makes this the
+bootstrap path: set the variable, sign in, and promote yourself to `admin` from
+the UI. There is no need to hand-edit the database.
+
+Until `OWNER_EMAILS` is set, the admin-membership rules stay inert and behave
+exactly as before, so deploying this cannot lock a running instance out. The
+developer dashboard's health checks report `ownership` as degraded while it is
+unset.
+
 ---
 
 ## 🛠️ Local Development Setup
@@ -176,6 +210,7 @@ MAU.
 - [ ] Confirm `CLERK_ISSUER_URL` on the Convex deployment matches that instance.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to the public origin so invitation links resolve.
 - [ ] Restore-test one backup zip from the `backup-data` volume.
-- [ ] Promote your own account to `admin` (Convex dashboard). There is no
-      bootstrap admin: signups are always `candidate`, and roles are granted only
-      by invitation or by an existing admin.
+- [ ] Set `OWNER_EMAILS` on the Convex deployment to your own address, then sign
+      in and promote yourself to `admin` from the UI. Until this is set, any
+      admin can grant and revoke admin — including demoting you. See
+      **Deployment owner** above.
