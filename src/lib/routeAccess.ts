@@ -72,6 +72,13 @@ export const PUBLIC_ROUTES: RegExp[] = [
   /^\/robots\.txt$/,
   /^\/sitemap\.xml$/,
   /^\/opengraph-image$/,
+  // Same trap as /opengraph-image: Next serves the icon conventions at
+  // extensionless paths, so the matcher cannot skip them and a signed-out
+  // visitor would get a redirect where a favicon should be.
+  // /manifest.webmanifest and /favicon.ico do not need listing — the matcher's
+  // extension list already covers `webmanifest` and `ico`.
+  /^\/icon$/,
+  /^\/apple-icon$/,
   // Health is polled by the container healthcheck, which carries no session.
   /^\/api\/health(\/|$)/,
   // Clerk posts here with a webhook signature, not a user session.

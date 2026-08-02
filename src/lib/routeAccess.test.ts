@@ -61,6 +61,13 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/opengraph-image"), true);
   });
 
+  it("exposes the generated icon routes", () => {
+    // Next serves the icon file conventions at extensionless paths, so the
+    // matcher's extension list cannot skip them either.
+    assert.equal(isPublicRoute("/icon"), true);
+    assert.equal(isPublicRoute("/apple-icon"), true);
+  });
+
   it("anchors the metadata patterns rather than matching prefixes", () => {
     // Unanchored patterns would hand a signed-out visitor anything living under
     // these names.
@@ -69,5 +76,7 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/opengraph-image/secret"), false);
     assert.equal(isPublicRoute("/sitemap"), false);
     assert.equal(isPublicRoute("/dashboard/robots.txt"), false);
+    assert.equal(isPublicRoute("/icon/secret"), false);
+    assert.equal(isPublicRoute("/apple-icon/secret"), false);
   });
 });
