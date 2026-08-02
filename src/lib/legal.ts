@@ -17,6 +17,23 @@
 export const OPERATOR_NAME = "Kunj Hirapara";
 
 /**
+ * The host these documents describe, and the domain the contact address is on.
+ *
+ * One constant because the domain is moving to kunjhirapara.com, and a legal
+ * page that names the wrong host is worse than one that names none. Everything
+ * domain-shaped in the published documents derives from here, so the move is a
+ * single edit rather than a search for stragglers.
+ *
+ * Deliberately not read from NEXT_PUBLIC_APP_URL: that falls back to
+ * http://localhost:3000 when unset, and "this policy covers localhost:3000" is
+ * not a failure mode a privacy policy should have.
+ */
+const DOMAIN_ROOT = "kunjdeveloper.me";
+
+/** The host these documents describe. */
+export const SITE_DOMAIN = `commit.${DOMAIN_ROOT}`;
+
+/**
  * The published contact for privacy requests, grievances and legal notice.
  *
  * ACTION REQUIRED BEFORE THIS SHIPS: this address must exist and be monitored.
@@ -28,7 +45,7 @@ export const OPERATOR_NAME = "Kunj Hirapara";
  * should be something that can be rotated without changing the person's own
  * email address everywhere else.
  */
-export const CONTACT_EMAIL = "privacy@kunjdeveloper.me";
+export const CONTACT_EMAIL = `privacy@${DOMAIN_ROOT}`;
 
 /** Bumped whenever the substance of a published document changes. */
 export const LEGAL_VERSION = "2026-08-02";
