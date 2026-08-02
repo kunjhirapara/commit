@@ -143,7 +143,11 @@ export const DATA_CATEGORIES: DataCategory[] = [
     category: "Interview integrity monitoring",
     detail:
       "For candidates only: how long the interview window lost focus, how much text was pasted at once, whether more than one display was in use, and the difference between your device clock and the server's.",
-    retention: "Stored with the interview record.",
+    // 90 days, because that is what the pre-join notice promises the candidate
+    // and what RETENTION_DAYS.proctoringEvents in convex/metrics.ts actually
+    // enforces. This line previously read "stored with the interview record",
+    // which agreed with neither.
+    retention: "Deleted 90 days after the interview.",
   },
   {
     category: "Operational records",
