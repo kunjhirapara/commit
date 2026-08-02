@@ -7,6 +7,7 @@ import {
   LEGAL_VERSION,
   MINIMUM_AGE,
   OPERATOR_NAME,
+  SITE_DOMAIN,
   SUB_PROCESSORS,
 } from "@/lib/legal";
 
@@ -45,7 +46,7 @@ export default function PrivacyPage() {
             .
           </p>
           <p>
-            This policy covers <span className="font-mono">commit.kunjdeveloper.me</span>{" "}
+            This policy covers <span className="font-mono">{SITE_DOMAIN}</span>{" "}
             and nothing else.
           </p>
         </CardContent>
