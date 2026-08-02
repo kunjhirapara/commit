@@ -133,11 +133,37 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     useParticipants,
     useLocalParticipant,
     useHasPermissions,
+    useIsCallRecordingInProgress,
   } = useCallStateHooks();
 
   const callingState = useCallCallingState();
   const endedAt = useCallEndedAt();
   const canJoinEndedCall = useHasPermissions(OwnCapability.JOIN_ENDED_CALL);
+  /**
+   * Stream decides these, not the app's role table.
+   *
+   * `isHost` below is an app-level idea — admin, recruiter, or listed
+   * interviewer. muteAllUsers() and blockUser() are authorised by the call role
+   * Stream assigned when the participant joined, which is a different thing
+   * entirely. Because the calls were created without members, only the person
+   * who created the call got Stream's `host` role — and recruiters schedule
+   * interviews that interviewers conduct. So the interviewer was shown host
+   * controls that Stream then refused, which is why they appeared to do nothing.
+   *
+   * Offering a control that cannot work is worse than not offering it, so the
+   * menu is gated on the capability that actually governs the request.
+   */
+  const canMuteUsers = useHasPermissions(OwnCapability.MUTE_USERS);
+  const canBlockUsers = useHasPermissions(OwnCapability.BLOCK_USERS);
+  /**
+   * Recording was entirely silent before this.
+   *
+   * The host could start it from RecordCallButton at any moment and nothing in
+   * the interface changed — this app draws its own call UI, so whatever Stream's
+   * default components would have shown never appeared. A candidate had no way
+   * to know, having just been told the app does not capture their camera.
+   */
+  const isRecording = useIsCallRecordingInProgress();
   const { hasCallEnded, isRedirecting } = useCallEndHandler();
   const statsReport = useCallStatsReport();
   const participants = useParticipants();
@@ -151,6 +177,7 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
   const previousParticipantIdsRef = useRef<string[]>([]);
   const previousCallingStateRef = useRef<CallingState | null>(null);
+  const previousRecordingRef = useRef<boolean | null>(null);
 
   const scheduledEndTime = interview ? getInterviewEndTimeMs(interview) : null;
   const isPastScheduledEnd =
@@ -270,6 +297,33 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
       }),
     );
   }, [callingState, interview, logSessionEvent]);
+
+  /* ── log recording start and stop ── */
+  useEffect(() => {
+    if (!interview) return;
+    // The first observed value is the state on join, not a transition, so it is
+    // recorded as the baseline rather than logged as somebody pressing record.
+    if (previousRecordingRef.current === null) {
+      previousRecordingRef.current = isRecording;
+      return;
+    }
+    if (previousRecordingRef.current === isRecording) return;
+    previousRecordingRef.current = isRecording;
+
+    void logSessionEvent({
+      interviewId: interview._id,
+      streamCallId: interview.streamCallId,
+      type: isRecording ? "recording.started" : "recording.stopped",
+      detail: isRecording
+        ? "Call recording started"
+        : "Call recording stopped",
+    }).catch((e) =>
+      logError("MeetingRoom.recordingStateEvent", e, {
+        interviewId: interview._id,
+        isRecording,
+      }),
+    );
+  }, [interview, isRecording, logSessionEvent]);
 
   /* ── log participant join/leave ── */
   useEffect(() => {
@@ -401,7 +455,26 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
   /* ── render ── */
   return (
-    <div className="flex h-[calc(100vh-4rem-1px)] flex-col overflow-hidden bg-background lg:flex-row">
+    // `relative` so the recording banner below anchors to the meeting area
+    // rather than to whatever positioned ancestor happens to be above it.
+    <div className="relative flex h-[calc(100vh-4rem-1px)] flex-col overflow-hidden bg-background lg:flex-row">
+      {/*
+        Deliberately a banner rather than a badge in the control bar. Everyone in
+        the call sees it, it does not depend on noticing a small icon, and
+        role="status" announces it to a screen reader when recording starts.
+      */}
+      {isRecording && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute inset-x-0 top-0 z-50 flex items-center justify-center gap-2 bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-lg">
+          <span
+            aria-hidden="true"
+            className="size-2.5 animate-pulse rounded-full bg-white"
+          />
+          This call is being recorded
+        </div>
+      )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1">
         {/* ── Video panel ── */}
         <ResizablePanel defaultSize={25} minSize={10} className="relative">
@@ -582,8 +655,10 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                 {/* Recording — Stream SDK button, host only */}
                 {isHost && <RecordCallButton />}
 
-                {/* Host controls — only visible to interviewers, recruiters, and admins */}
-                {isHost && (
+                {/* Host controls. Requires both the app-level role and the
+                    Stream capability that authorises the request — the role
+                    alone rendered a menu whose every action Stream rejected. */}
+                {isHost && (canMuteUsers || canBlockUsers) && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -609,19 +684,22 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
 
-                      <DropdownMenuItem
-                        onClick={handleMuteAll}
-                        disabled={!!hostActionLoading}
-                        className="flex cursor-pointer items-center gap-2">
-                        <MicOffIcon
-                          className="size-4 text-muted-foreground"
-                          aria-hidden="true"
-                        />
-                        Mute all participants
-                      </DropdownMenuItem>
+                      {canMuteUsers && (
+                        <DropdownMenuItem
+                          onClick={handleMuteAll}
+                          disabled={!!hostActionLoading}
+                          className="flex cursor-pointer items-center gap-2">
+                          <MicOffIcon
+                            className="size-4 text-muted-foreground"
+                            aria-hidden="true"
+                          />
+                          Mute all participants
+                        </DropdownMenuItem>
+                      )}
 
-                      {participants.filter((p) => !p.isLocalParticipant)
-                        .length > 0 && (
+                      {canBlockUsers &&
+                        participants.filter((p) => !p.isLocalParticipant)
+                          .length > 0 && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuLabel className="text-xs text-muted-foreground">

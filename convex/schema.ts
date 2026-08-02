@@ -325,7 +325,13 @@ export default defineSchema({
     throttledAt: v.optional(v.number()),
   })
     .index("by_interview", ["interviewId"])
-    .index("by_candidate", ["candidateClerkId"]),
+    .index("by_candidate", ["candidateClerkId"])
+    // Added so pruneExpiredRecords can age these out by time rather than
+    // scanning. Without it the session row outlived by 90 days the events it
+    // describes and then stayed indefinitely — the signals were deleted on
+    // schedule while a per-candidate record of user agent, clock skew and
+    // display support remained.
+    .index("by_started_at", ["startedAt"]),
 
   invitations: defineTable({
     email: v.string(),

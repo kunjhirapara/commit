@@ -1,30 +1,12 @@
 import { v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import { requirePermission } from "./lib/authz";
+import { RETENTION_DAYS } from "./lib/retention";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Days of history the growth dashboard returns. */
 const GROWTH_WINDOW_DAYS = 30;
-
-/**
- * Retention windows for the append-only tables.
- *
- * None of these had any pruning, so every one grew without bound. On a public
- * deployment that is the fastest route into Convex's storage and bandwidth
- * limits, and it also slows the dashboards that scan them.
- */
-const RETENTION_DAYS = {
-  operationalEvents: 90,
-  interviewSessionEvents: 90,
-  auditLogs: 180,
-  backgroundJobs: 30,
-  webhookEvents: 30,
-  // Integrity signals age out with the session events they sit alongside.
-  // Keeping them longer would mean a stray focus event from a year ago could
-  // still surface against a candidate.
-  proctoringEvents: 90,
-} as const;
 
 /** Rows deleted per table per run, so a single cron tick stays well inside limits. */
 const PRUNE_BATCH_SIZE = 500;
@@ -198,6 +180,18 @@ export const pruneExpiredRecords = internalMutation({
       await ctx.db.delete(row._id);
     }
     deleted.proctoringEvents = expiredProctoring.length;
+
+    // Same window as the events, keyed on the same server-anchored field.
+    const sessionCutoff = now - RETENTION_DAYS.proctoringSessions * DAY_MS;
+    const expiredSessions = await ctx.db
+      .query("proctoringSessions")
+      .withIndex("by_started_at", (q) => q.lt("startedAt", sessionCutoff))
+      .take(PRUNE_BATCH_SIZE);
+
+    for (const row of expiredSessions) {
+      await ctx.db.delete(row._id);
+    }
+    deleted.proctoringSessions = expiredSessions.length;
 
     // Only terminal jobs are pruned; anything still pending or retrying stays.
     const jobCutoff = now - RETENTION_DAYS.backgroundJobs * DAY_MS;
