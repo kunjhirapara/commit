@@ -21,6 +21,7 @@ import type * as lib_emailTemplates from "../lib/emailTemplates.js";
 import type * as lib_errorUtils from "../lib/errorUtils.js";
 import type * as lib_owner from "../lib/owner.js";
 import type * as lib_permissions from "../lib/permissions.js";
+import type * as lib_retention from "../lib/retention.js";
 import type * as lib_retry from "../lib/retry.js";
 import type * as metrics from "../metrics.js";
 import type * as notifications_emailActions from "../notifications/emailActions.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   "lib/errorUtils": typeof lib_errorUtils;
   "lib/owner": typeof lib_owner;
   "lib/permissions": typeof lib_permissions;
+  "lib/retention": typeof lib_retention;
   "lib/retry": typeof lib_retry;
   metrics: typeof metrics;
   "notifications/emailActions": typeof notifications_emailActions;

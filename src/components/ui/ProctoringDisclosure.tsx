@@ -44,9 +44,15 @@ function ProctoringDisclosure({
             into the editor, and whether a second display is connected.
           </p>
           <p className="text-sm text-muted-foreground">
-            We do <strong>not</strong> analyse your camera or microphone, capture
-            your screen, record what you type, or look at anything outside this
-            tab.
+            Integrity monitoring does <strong>not</strong> analyse your camera or
+            microphone, capture your screen, record what you type, or look at
+            anything outside this tab.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Separately, your interviewer may <strong>record the call</strong>,
+            including your camera and microphone. If they start recording you
+            will see a red &ldquo;Recording&rdquo; indicator for as long as it
+            runs. Recordings are available to the hiring team.
           </p>
           <p className="text-sm text-muted-foreground">
             Your interviewer and the hiring team can see this record. It is kept
@@ -79,7 +85,8 @@ function ProctoringDisclosure({
           className="mt-0.5 size-4 cursor-pointer rounded border-border accent-primary"
         />
         <span>
-          I understand this interview is monitored as described above.
+          I understand this interview is monitored, and may be recorded, as
+          described above.
         </span>
       </label>
     </div>
