@@ -40,8 +40,20 @@ export const isIntegrityMode = (value: unknown): value is IntegrityMode =>
 export const resolveIntegrityMode = (value: unknown): IntegrityMode =>
   isIntegrityMode(value) ? value : DEFAULT_INTEGRITY_MODE;
 
-/** Whether anything at all is recorded. `off` writes no session row and no events. */
-export const isMonitored = (mode: IntegrityMode): boolean => mode !== "off";
+/** A mode that records something, and therefore has a disclosure to show. */
+export type MonitoredIntegrityMode = Exclude<IntegrityMode, "off">;
+
+/**
+ * Whether anything at all is recorded. `off` writes no session row and no events.
+ *
+ * A type predicate rather than a plain boolean so that narrowing survives the
+ * check: anything keyed only by the monitored modes — the disclosure copy, most
+ * obviously — can then be indexed safely after calling this, instead of needing
+ * a cast that would silently accept `off` if a mode were ever added.
+ */
+export const isMonitored = (
+  mode: IntegrityMode,
+): mode is MonitoredIntegrityMode => mode !== "off";
 
 /**
  * Whether rules are enforced against the candidate rather than merely recorded.

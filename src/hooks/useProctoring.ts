@@ -219,7 +219,10 @@ export const useProctoring = ({
    * proctoring — it reports what happened and the caller decides what it means.
    */
   const reportEditorSignal = useCallback(
-    (signal: { kind: "editor.paste" | "editor.bulkInsert"; chars: number }) => {
+    (signal: {
+      kind: "editor.paste" | "editor.bulkInsert" | "paste.blocked";
+      chars: number;
+    }) => {
       if (!active) return;
       if (
         signal.kind === "editor.bulkInsert" &&
@@ -237,5 +240,27 @@ export const useProctoring = ({
     [active, buffer],
   );
 
-  return { reportEditorSignal };
+  /**
+   * Opens and closes the interval during which the interview content was hidden.
+   *
+   * Exposed as two calls rather than handing the buffer out, so the enforcement
+   * hook can decide *when* the screen is masked without also being able to write
+   * arbitrary events. The buffer's debounce and interval collapsing apply
+   * exactly as they do to a blur.
+   */
+  const beginMask = useCallback(() => {
+    if (!active) return;
+    buffer.beginAbsence("content.masked");
+  }, [active, buffer]);
+
+  const endMask = useCallback(() => {
+    if (!active) return;
+    buffer.endAbsence("content.masked");
+    // Flushed rather than left to the 15s timer: the interviewer's live panel is
+    // the point of this signal, and a masking event that lands after the
+    // candidate is back is far less useful to them.
+    buffer.flush();
+  }, [active, buffer]);
+
+  return { reportEditorSignal, beginMask, endMask };
 };

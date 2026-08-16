@@ -32,6 +32,18 @@ const formatDuration = (ms: number) => {
   return `${minutes}m ${seconds % 60}s`;
 };
 
+/**
+ * How the rules are described on the report.
+ *
+ * Not reusing `INTEGRITY_MODE_LABELS`, which is written for the person choosing
+ * a mode while scheduling. This reader is looking backwards at what happened.
+ */
+const MODE_LABEL: Record<string, string> = {
+  off: "Not monitored",
+  observe: "Observed",
+  deterrent: "Rules enforced",
+};
+
 const DISPLAY_LABEL: Record<string, string> = {
   extended: "Second display connected",
   single: "Single display",
@@ -39,6 +51,55 @@ const DISPLAY_LABEL: Record<string, string> = {
   // otherwise would present an unanswered question as a passed check.
   unsupported: "Could not be checked on this browser",
 };
+
+/**
+ * States what happened to the fullscreen rule.
+ *
+ * Presented as a fact with its reason, never as a mark against the candidate.
+ * The exemption exists so someone using a screen reader or a magnifier can sit
+ * the interview at all; a reader who treats it as evasion turns an
+ * accessibility accommodation into a penalty, which is precisely what the
+ * escape hatch was added to avoid. The wording here is doing that work.
+ */
+function FullscreenRuleNote({
+  exempted,
+  enforcementActive,
+  exemptedAt,
+  reason,
+}: {
+  exempted: boolean;
+  enforcementActive: boolean;
+  exemptedAt?: number;
+  reason?: string;
+}) {
+  if (!enforcementActive) {
+    return (
+      <p className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        This interview was set to enforce rules, but enforcement was switched off
+        at the time, so none were applied. Read this as an observed session.
+      </p>
+    );
+  }
+
+  if (!exempted) return null;
+
+  return (
+    <div className="rounded-xl border border-border/70 bg-muted/30 px-3 py-2">
+      <p className="text-xs font-medium">Fullscreen was not required</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        The candidate said fullscreen was unusable
+        {exemptedAt ? ` at ${new Date(exemptedAt).toLocaleTimeString()}` : ""}
+        {reason && reason !== "browser-refused" ? `: “${reason}”` : ""}
+        {reason === "browser-refused"
+          ? ", because their browser refused the request"
+          : ""}
+        . This is a supported option, offered for screen readers, magnifiers and
+        similar. It is shown so you know the rule stopped applying — not as
+        something to hold against them.
+      </p>
+    </div>
+  );
+}
 
 function Measure({ label, value }: { label: string; value: string }) {
   return (
@@ -104,13 +165,21 @@ function IntegrityReport({ interviewId }: { interviewId: string }) {
           <ShieldCheckIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           <h3 className="text-sm font-semibold">Interview integrity</h3>
         </div>
-        <span
-          className={cn(
-            "rounded-full border px-2.5 py-1 text-xs font-medium",
-            BAND_STYLES[severity.band],
-          )}>
-          {BAND_LABEL[severity.band]}
-        </span>
+        <div className="flex items-center gap-2">
+          {/* The mode sits next to the band deliberately. "Nothing of note"
+              under observe and under deterrent are different findings, and a
+              reader who cannot see which rules applied cannot tell them apart. */}
+          <span className="rounded-full border border-border/70 px-2.5 py-1 text-xs text-muted-foreground">
+            {MODE_LABEL[summary.integrityMode] ?? summary.integrityMode}
+          </span>
+          <span
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-xs font-medium",
+              BAND_STYLES[severity.band],
+            )}>
+            {BAND_LABEL[severity.band]}
+          </span>
+        </div>
       </div>
 
       {severity.reasons.length > 0 ? (
@@ -173,7 +242,35 @@ function IntegrityReport({ interviewId }: { interviewId: string }) {
           label="Page reloads"
           value={reloads > 0 ? String(reloads) : "none"}
         />
+        {/* Deterrent-only measures. Shown only when rules were actually in
+            force, because "0 blocked pastes" under observe would imply pasting
+            had been prevented when nothing was ever blocked. */}
+        {summary.integrityMode === "deterrent" ? (
+          <>
+            <Measure
+              label="Problem hidden"
+              value={formatDuration(summary.maskedMs)}
+            />
+            <Measure
+              label="Pastes blocked"
+              value={
+                summary.blockedPastes > 0
+                  ? String(summary.blockedPastes)
+                  : "none"
+              }
+            />
+          </>
+        ) : null}
       </div>
+
+      {summary.integrityMode === "deterrent" && report.session ? (
+        <FullscreenRuleNote
+          exempted={summary.fullscreenExempted}
+          enforcementActive={summary.enforcementActive}
+          exemptedAt={report.session.fullscreenExemptedAt}
+          reason={report.session.fullscreenExemptionReason}
+        />
+      ) : null}
 
       {/* The rule is shown so a reader can disagree with it rather than with an
           unexplained band. */}

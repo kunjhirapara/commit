@@ -22,6 +22,11 @@ const baseSummary: ProctoringSummary = {
   displaySupport: "single",
   extendedAppearedMidSession: false,
   fullscreenUsed: true,
+  integrityMode: "observe",
+  enforcementActive: false,
+  maskedMs: 0,
+  blockedPastes: 0,
+  fullscreenExempted: false,
 };
 
 const summary = (overrides: Partial<ProctoringSummary>): ProctoringSummary => ({
@@ -85,5 +90,50 @@ describe("resolveSeverity", () => {
     const result = resolveSeverity(summary({ totalUnfocusedMs: 45_000 }));
     assert.ok(result.rule.length > 0);
     assert.ok(result.reasons.length > 0);
+  });
+
+  it("bands masked time on both sides of each boundary", () => {
+    assert.equal(resolveSeverity(summary({ maskedMs: 19_999 })).band, "clear");
+    assert.equal(resolveSeverity(summary({ maskedMs: 20_000 })).band, "minor");
+    assert.equal(resolveSeverity(summary({ maskedMs: 90_000 })).band, "minor");
+    assert.equal(resolveSeverity(summary({ maskedMs: 90_001 })).band, "notable");
+  });
+
+  it("keeps a fullscreen exemption out of the band entirely", () => {
+    // The escape hatch exists so a screen reader or magnifier user can sit the
+    // interview. If taking it moved the band, the accommodation would have been
+    // converted into a penalty — the exact failure it was added to prevent.
+    const exempted = resolveSeverity(summary({ fullscreenExempted: true }));
+    assert.equal(exempted.band, "clear");
+    assert.ok(
+      exempted.reasons.some((reason) => reason.includes("fullscreen was unusable")),
+      "the exemption must still be reported, just not counted against them",
+    );
+  });
+
+  it("reports blocked pastes without banding them", () => {
+    // The resulting code is already measured by the insert thresholds; banding
+    // the blocked attempt as well would punish one act twice.
+    const blocked = resolveSeverity(summary({ blockedPastes: 3 }));
+    assert.equal(blocked.band, "clear");
+    assert.ok(blocked.reasons.some((reason) => reason.includes("3 pastes")));
+  });
+
+  it("says so when deterrent was scheduled but enforcement was disabled", () => {
+    // Otherwise this reads as though fullscreen had been required all along and
+    // simply never left.
+    const inactive = resolveSeverity(
+      summary({ integrityMode: "deterrent", enforcementActive: false }),
+    );
+    assert.ok(
+      inactive.reasons.some((reason) => reason.includes("enforcement was disabled")),
+    );
+
+    const active = resolveSeverity(
+      summary({ integrityMode: "deterrent", enforcementActive: true }),
+    );
+    assert.ok(
+      !active.reasons.some((reason) => reason.includes("enforcement was disabled")),
+    );
   });
 });
