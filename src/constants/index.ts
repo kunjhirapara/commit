@@ -12,6 +12,20 @@ export const INTERVIEW_CATEGORY = [
   { id: "no_show", title: "No Show", variant: "destructive" },
 ] as const;
 
+/**
+ * `defaultIntegrityMode` is what the scheduling form pre-selects, not a rule —
+ * whoever schedules can change it per interview.
+ *
+ * Every template defaults to `observe`, which is exactly what these interviews
+ * do today, so introducing modes changes nothing until someone chooses
+ * otherwise. `off` is a real and useful choice for a round with nothing to
+ * solve — it stops noise diluting the signal in the rounds that matter — but it
+ * is a decision to take, not one to inherit: quietly monitoring less than
+ * yesterday is not a default anyone asked for.
+ *
+ * Nothing defaults to `deterrent` either. Enforcing rules against a candidate
+ * should be deliberate, never something a template did on your behalf.
+ */
 export const INTERVIEW_TEMPLATES = [
   {
     id: "screening",
@@ -20,6 +34,7 @@ export const INTERVIEW_TEMPLATES = [
     description: "Introductory screening focused on experience and fit.",
     instructions:
       "Please join 5 minutes early, test your microphone and camera, and be ready to discuss your recent experience.",
+    defaultIntegrityMode: "observe",
   },
   {
     id: "technical",
@@ -28,6 +43,7 @@ export const INTERVIEW_TEMPLATES = [
     description: "Hands-on coding and technical discussion round.",
     instructions:
       "Bring a stable internet connection, use a laptop or desktop browser, and have your coding environment ready.",
+    defaultIntegrityMode: "observe",
   },
   {
     id: "panel",
@@ -36,6 +52,7 @@ export const INTERVIEW_TEMPLATES = [
     description: "Collaborative panel round with multiple interviewers.",
     instructions:
       "You will meet several team members. Keep your camera on when possible and leave time for Q&A at the end.",
+    defaultIntegrityMode: "observe",
   },
   {
     id: "final",
@@ -44,6 +61,7 @@ export const INTERVIEW_TEMPLATES = [
     description: "Final decision-making round with hiring stakeholders.",
     instructions:
       "Please review the role summary beforehand and prepare questions about team expectations and next steps.",
+    defaultIntegrityMode: "observe",
   },
 ] as const;
 

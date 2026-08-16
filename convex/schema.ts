@@ -166,6 +166,16 @@ export default defineSchema({
     rescheduleReason: v.optional(v.string()),
     reminderSentAt: v.optional(v.number()),
     feedbackReminderSentAt: v.optional(v.number()),
+    /**
+     * How this interview is monitored: "off" | "observe" | "deterrent".
+     *
+     * Absent means `observe`, so interviews scheduled before integrity modes
+     * existed keep the silent monitoring they already have and nothing needs
+     * migrating. Resolved through `resolveIntegrityMode` in
+     * convex/lib/integrityModes.ts rather than read raw, so an unrecognised
+     * value degrades to the default instead of breaking a join.
+     */
+    integrityMode: v.optional(v.string()),
     recordingDisclosure: v.optional(v.string()),
     recordingRetentionDays: v.optional(v.number()),
     notesRetentionDays: v.optional(v.number()),
@@ -300,6 +310,40 @@ export default defineSchema({
     interviewId: v.id("interviews"),
     streamCallId: v.string(),
     candidateClerkId: v.string(),
+    /**
+     * The mode that was in force for this session, copied from the interview
+     * when the session opened.
+     *
+     * Without it a clean report from `observe` is indistinguishable from a clean
+     * report from `deterrent`, and those mean entirely different things — one
+     * says nothing was seen, the other says nothing was seen while rules were
+     * being enforced. Every report header states this.
+     */
+    integrityMode: v.optional(v.string()),
+    /**
+     * Whether the browser was actually enforcing, as reported by the client.
+     *
+     * The mode above says what was scheduled; this says whether the enforcement
+     * kill switch was on when the candidate joined. Without it, a `deterrent`
+     * session run while enforcement was disabled would read as though fullscreen
+     * had been required and simply never left.
+     *
+     * Client-reported, and safe to be: claiming `false` gains a candidate
+     * nothing, because it disables no server-side recording and makes the report
+     * read "rules were not enforced" — which invites scrutiny rather than
+     * deflecting it.
+     */
+    enforcementActive: v.optional(v.boolean()),
+    /**
+     * Total time the problem and editor were hidden because the candidate left
+     * fullscreen. Duration is the measure, not the number of exits: "hidden for
+     * four minutes" is something an interviewer can weigh, "left fullscreen
+     * three times" is not.
+     */
+    maskedMs: v.optional(v.number()),
+    /** Set when the candidate declared fullscreen unusable. Never hidden from the report. */
+    fullscreenExemptedAt: v.optional(v.number()),
+    fullscreenExemptionReason: v.optional(v.string()),
     /** Absent means the candidate never acknowledged the disclosure. */
     disclosureAcknowledgedAt: v.optional(v.number()),
     startedAt: v.number(),
