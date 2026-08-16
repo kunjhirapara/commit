@@ -54,6 +54,18 @@ export const PROCTORING_THRESHOLDS = {
     notableInsertChars: 400,
     /** Client/server clock disagreement above this is notable. */
     notableClockSkewMs: 30_000,
+    /**
+     * Time with the problem and editor hidden before the session stops being
+     * clear, and the point beyond which it is notable.
+     *
+     * Deliberately more forgiving than the unfocused thresholds. Masking is a
+     * consequence of a rule this application imposed, and a candidate whose
+     * window manager dropped them out of fullscreen once should not be marked
+     * for it. Sustained masking is different: the problem was on screen and then
+     * it was not, for minutes, while they were meant to be solving it.
+     */
+    minorMaskedMs: 20_000,
+    notableMaskedMs: 90_000,
   },
 } as const;
 
@@ -62,9 +74,9 @@ export const PROCTORING_THRESHOLDS = {
  * the numbers so it reads like a sentence a person wrote.
  */
 export const SEVERITY_RULE_TEXT =
-  "Clear: under 30s away and no bulk paste. " +
-  "Minor: up to 2 minutes away, or one paste of 121–400 characters. " +
-  "Notable: more than either, or the monitor stopped reporting, or the clock was off, " +
+  "Clear: under 30s away, no bulk paste, and under 20s with the problem hidden. " +
+  "Minor: up to 2 minutes away, or one paste of 121–400 characters, or up to 90s hidden. " +
+  "Notable: more than any of those, or the monitor stopped reporting, or the clock was off, " +
   "or a second display appeared mid-interview.";
 
 /**

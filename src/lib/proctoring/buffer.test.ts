@@ -125,3 +125,48 @@ describe("ProctoringBuffer flushing", () => {
     assert.ok(flushed.length >= 1, "a full buffer must not grow without bound");
   });
 });
+
+describe("ProctoringBuffer masking intervals", () => {
+  it("collapses a mask/unmask pair into one event with a duration", () => {
+    // Masking reuses the absence machinery precisely so it inherits this. What
+    // an interviewer needs is how long the problem was hidden, not how many
+    // times the candidate bounced out of fullscreen.
+    const { clock, buffer } = makeBuffer();
+
+    buffer.beginAbsence("content.masked");
+    clock.advance(12_000);
+    buffer.endAbsence("content.masked");
+
+    const events = buffer.drain();
+    assert.equal(events.length, 1);
+    assert.equal(events[0].kind, "content.masked");
+    assert.equal(events[0].durationMs, 12_000);
+  });
+
+  it("drops a mask shorter than the debounce", () => {
+    // Alt-tabbing through the window, or a window manager repaint, can drop and
+    // restore fullscreen within a few hundred milliseconds. Recording those
+    // would bury the real signal in noise.
+    const { clock, buffer } = makeBuffer();
+
+    buffer.beginAbsence("content.masked");
+    clock.advance(400);
+    buffer.endAbsence("content.masked");
+
+    assert.equal(buffer.drain().length, 0);
+  });
+
+  it("closes an open mask when the page goes away", () => {
+    // A candidate who closes the tab while masked must not have that time
+    // silently vanish from the record.
+    const { clock, buffer } = makeBuffer();
+
+    buffer.beginAbsence("content.masked");
+    clock.advance(30_000);
+
+    const closed = buffer.closeOpenAbsences();
+    assert.equal(closed.length, 1);
+    assert.equal(closed[0].kind, "content.masked");
+    assert.equal(closed[0].durationMs, 30_000);
+  });
+});

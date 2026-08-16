@@ -78,7 +78,7 @@ function ValueBox({
 }
 
 export type EditorSignal = {
-  kind: "editor.paste" | "editor.bulkInsert";
+  kind: "editor.paste" | "editor.bulkInsert" | "paste.blocked";
   chars: number;
 };
 
@@ -93,9 +93,29 @@ interface CodeEditorProps {
    * sandbox, which passes no callback, entirely unmonitored.
    */
   onEditorSignal?: (signal: EditorSignal) => void;
+  /**
+   * Hides the problem and the code behind a blur and makes them inert.
+   *
+   * The editor is told to mask, never told why. Keeping the reason out of here
+   * is what lets the same component serve /practice with none of this attached.
+   *
+   * Worth being honest about in the one place someone will read it: blur is a
+   * visual barrier, not a security boundary. The text is still in the DOM and
+   * anyone with devtools can read it. The purpose is to remove the effortless
+   * path — reading the problem on a second screen — and someone in devtools has
+   * already left the population this is aimed at.
+   */
+  masked?: boolean;
+  /** Refuses pastes into the editor and reports the attempt. */
+  blockPaste?: boolean;
 }
 
-function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
+function CodeEditor({
+  streamCallId,
+  onEditorSignal,
+  masked = false,
+  blockPaste = false,
+}: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
   const [selectedQuestion, setSelectedQuestion] = useState(CODING_QUESTIONS[0]);
   const [language, setLanguage] = useState<"javascript" | "python" | "java">(
@@ -103,6 +123,7 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   );
   const [code, setCode] = useState(selectedQuestion.starterCode[language]);
 
+  const [editorNode, setEditorNode] = useState<HTMLElement | null>(null);
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("cases");
@@ -112,6 +133,47 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
     if (runStatus === "success" || runStatus === "error")
       setActiveTab("result");
   }, [runStatus]);
+
+  /**
+   * Refuses pastes and drops into the editor.
+   *
+   * Listens in the capture phase on Monaco's container, which sees the event
+   * before the hidden textarea Monaco actually pastes into. Drop is covered too:
+   * dragging text in is the same act with a different gesture.
+   *
+   * This is a deterrent, not a barrier — devtools, a userscript, or simply
+   * retyping all defeat it. That is the point rather than a shortcoming. The
+   * cheat it cannot prevent gets pushed into typing, which is the one channel
+   * the editor can describe in detail, and `editor.bulkInsert` still fires on
+   * whatever arrives.
+   */
+  useEffect(() => {
+    if (!editorNode || !blockPaste) return;
+
+    const refuse = (event: ClipboardEvent | DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const text =
+        "clipboardData" in event
+          ? (event.clipboardData?.getData("text") ?? "")
+          : "";
+
+      onEditorSignal?.({ kind: "paste.blocked", chars: text.length });
+      toast.error("Pasting is disabled for this interview", {
+        description: "Type your solution. Your interviewer has been told.",
+        id: "paste-blocked",
+      });
+    };
+
+    editorNode.addEventListener("paste", refuse as EventListener, true);
+    editorNode.addEventListener("drop", refuse as EventListener, true);
+
+    return () => {
+      editorNode.removeEventListener("paste", refuse as EventListener, true);
+      editorNode.removeEventListener("drop", refuse as EventListener, true);
+    };
+  }, [editorNode, blockPaste, onEditorSignal]);
 
   const parsedResults = useMemo<ParsedTestResult[]>(() => {
     if (!result?.stdout) return [];
@@ -147,6 +209,10 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   const handleEditorMount: NonNullable<
     React.ComponentProps<typeof Editor>["onMount"]
   > = (editor) => {
+    // Captured before the early return: paste blocking needs the DOM node even
+    // when nothing is listening for signals.
+    setEditorNode(editor.getDomNode() ?? null);
+
     if (!onEditorSignal) return;
 
     editor.onDidPaste((event: { range: unknown }) => {
@@ -231,9 +297,25 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   }, [code, language, runStatus, selectedQuestion]);
 
   return (
-    <ResizablePanelGroup
-      orientation="vertical"
-      className="min-h-[calc(100vh-4rem-1px)]">
+    <div
+      className={cn(
+        "h-full",
+        masked &&
+          "pointer-events-none select-none blur-[10px] transition-[filter] duration-150",
+      )}
+      // Hidden from assistive technology too. Blurring the pixels while leaving
+      // the problem statement readable by a screen reader would hide it from
+      // exactly the candidate least able to work around it.
+      //
+      // No `inert`: React 18 rejects it as a non-boolean attribute and drops it,
+      // so it would read as protection that is not there. Keyboard focus can
+      // therefore still reach controls underneath — consistent with everything
+      // else here, this is a deterrent rather than a boundary, and the editor
+      // itself is switched to read-only while masked.
+      aria-hidden={masked || undefined}>
+      <ResizablePanelGroup
+        orientation="vertical"
+        className="min-h-[calc(100vh-4rem-1px)]">
       <ResizablePanel defaultSize={40}>
         <ScrollArea className="h-full">
           <div className="p-6">
@@ -396,6 +478,10 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
                   onChange={(v) => setCode(v || "")}
                   onMount={handleEditorMount}
                   options={{
+                    // Masked means unreadable, so it should also mean
+                    // uneditable — otherwise focus can stay in the editor and a
+                    // candidate types blindly into code they cannot see.
+                    readOnly: masked,
                     minimap: { enabled: false },
                     fontSize: 18,
                     lineNumbers: "on",
@@ -575,10 +661,11 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
                 <ScrollBar />
               </ScrollArea>
             </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   );
 }
 

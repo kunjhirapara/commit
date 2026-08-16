@@ -1,4 +1,4 @@
-import type { IntegrityMode } from "../../../convex/lib/integrityModes.ts";
+import type { MonitoredIntegrityMode } from "../../../convex/lib/integrityModes.ts";
 
 /**
  * The pre-join disclosure, per integrity mode.
@@ -17,7 +17,7 @@ import type { IntegrityMode } from "../../../convex/lib/integrityModes.ts";
  */
 
 /** `off` shows no disclosure at all, because there is nothing to disclose. */
-export type MonitoredMode = Exclude<IntegrityMode, "off">;
+export type MonitoredMode = MonitoredIntegrityMode;
 
 export type DisclosureCopy = {
   heading: string;
