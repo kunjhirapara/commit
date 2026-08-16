@@ -6,6 +6,10 @@ import {
   requirePermission,
 } from "./lib/authz";
 import { createServerError } from "./lib/errorUtils";
+import {
+  isMonitored,
+  resolveIntegrityMode,
+} from "./lib/integrityModes";
 
 /**
  * Interview integrity monitoring.
@@ -45,6 +49,12 @@ const TIER_A_KINDS = new Set([
   "editor.bulkInsert",
   "display.extended",
   "monitor.gap",
+  // Deterrent mode. All three describe a rule that was in force and what
+  // happened to it, which is exactly the kind of thing a reader should see in
+  // the summary rather than have to dig for in the timeline.
+  "content.masked",
+  "paste.blocked",
+  "fullscreen.exempted",
 ]);
 
 /**
@@ -93,15 +103,33 @@ export const startProctoringSession = mutation({
     fullscreenUsed: v.boolean(),
     disclosureAcknowledged: v.boolean(),
     userAgent: v.optional(v.string()),
+    /** Whether the client's enforcement kill switch was on. See the schema comment. */
+    enforcementActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { user, session } = await requireCandidateSession(
+    const { user, interview, session } = await requireCandidateSession(
       ctx,
       args.interviewId,
     );
 
+    /**
+     * The mode comes off the interview row, never from the client.
+     *
+     * The candidate is the one party with an interest in being monitored less,
+     * and they control the browser. If the mode arrived as an argument, opening
+     * a session in "observe" on a "deterrent" interview would be a one-line
+     * tamper that produced a report claiming rules were never enforced.
+     */
+    const mode = resolveIntegrityMode(interview.integrityMode);
+
+    // Nothing is recorded for an unmonitored interview — no session row, so the
+    // report reads "not monitored" rather than "monitored and found nothing".
+    if (!isMonitored(mode)) return null;
+
     const now = Date.now();
     const fields = {
+      integrityMode: mode,
+      enforcementActive: args.enforcementActive ?? false,
       displaySupport: args.displaySupport,
       fullscreenUsed: args.fullscreenUsed,
       userAgent: args.userAgent,
@@ -126,6 +154,7 @@ export const startProctoringSession = mutation({
       monitorGaps: 0,
       maxClockSkewMs: 0,
       eventsRecorded: 0,
+      maskedMs: 0,
       extendedAppearedMidSession: false,
       ...fields,
     });
@@ -215,10 +244,20 @@ export const recordProctoringBatch = mutation({
       });
     }
 
+    // Masked time is accumulated on the session as it arrives rather than summed
+    // over events at read time, so the report stays correct once the event list
+    // outgrows the 500-row window `getProctoringReport` reads.
+    const maskedInBatch = accepted.reduce(
+      (total, event) =>
+        event.kind === "content.masked" ? total + (event.durationMs ?? 0) : total,
+      0,
+    );
+
     await ctx.db.patch(session._id, {
       eventsRecorded: alreadyRecorded + accepted.length,
       lastHeartbeatAt: now,
       maxClockSkewMs: Math.max(session.maxClockSkewMs ?? 0, clockSkewMs),
+      maskedMs: (session.maskedMs ?? 0) + maskedInBatch,
     });
 
     return { recorded: accepted.length, throttled: false };
@@ -310,6 +349,58 @@ export const recordDisplayChange = mutation({
 });
 
 /**
+ * Records that the candidate declared fullscreen unusable.
+ *
+ * This is the escape hatch deterrent mode needs in order to be defensible. A
+ * hard fullscreen rule with no way out does not produce compliance, it produces
+ * candidates using a screen reader or a magnifier who cannot sit the interview
+ * at all.
+ *
+ * What makes it safe to offer is that it is not free and not hidden: the
+ * exemption, its timestamp and its stated reason all land on the report, the
+ * interviewer can see it while the call is still running, and they can simply
+ * ask about it. That is a better outcome than either blocking the candidate or
+ * letting the rule be disabled silently.
+ *
+ * Idempotent — the first exemption stands, so a second call cannot overwrite the
+ * originally stated reason with a blank one.
+ */
+export const recordFullscreenExemption = mutation({
+  args: {
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user, session } = await requireCandidateSession(
+      ctx,
+      args.interviewId,
+    );
+    if (!session || session.fullscreenExemptedAt) return null;
+
+    const now = Date.now();
+    const reason = args.reason?.trim().slice(0, 500) || undefined;
+
+    await ctx.db.patch(session._id, {
+      fullscreenExemptedAt: now,
+      fullscreenExemptionReason: reason,
+    });
+
+    await ctx.db.insert("proctoringEvents", {
+      interviewId: args.interviewId,
+      streamCallId: args.streamCallId,
+      candidateClerkId: user.clerkId,
+      kind: "fullscreen.exempted",
+      tier: "a",
+      startedAt: now,
+      metadata: reason ? JSON.stringify({ reason }) : undefined,
+    });
+
+    return null;
+  },
+});
+
+/**
  * The integrity report.
  *
  * `requireInterviewReviewAccess` already excludes candidates and covers the
@@ -381,6 +472,13 @@ export const getProctoringReport = query({
       reloads: absence("page.reload").length,
       extendedAppearedMidSession: session.extendedAppearedMidSession ?? false,
       fullscreenUsed: session.fullscreenUsed ?? false,
+      // Which rules were actually in force. A clean report means something
+      // different under each mode, so the band must never be read without it.
+      integrityMode: resolveIntegrityMode(session.integrityMode),
+      enforcementActive: session.enforcementActive ?? false,
+      maskedMs: session.maskedMs ?? 0,
+      blockedPastes: absence("paste.blocked").length,
+      fullscreenExempted: !!session.fullscreenExemptedAt,
     };
 
     return {
@@ -390,6 +488,9 @@ export const getProctoringReport = query({
         disclosureAcknowledgedAt: session.disclosureAcknowledgedAt,
         userAgent: session.userAgent,
         throttled: !!session.throttledAt,
+        integrityMode: resolveIntegrityMode(session.integrityMode),
+        fullscreenExemptedAt: session.fullscreenExemptedAt,
+        fullscreenExemptionReason: session.fullscreenExemptionReason,
       },
       summary,
       events: events.map((event) => ({

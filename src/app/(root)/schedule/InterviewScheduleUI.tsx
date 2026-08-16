@@ -35,6 +35,13 @@ import {
 import MeetingCard from "@/components/ui/MeetingCard";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
 import { getInterviewStartTimeMs, getInterviewTimezone } from "@/lib/utils";
+import {
+  INTEGRITY_MODES,
+  INTEGRITY_MODE_DESCRIPTIONS,
+  INTEGRITY_MODE_LABELS,
+  resolveIntegrityMode,
+  type IntegrityMode,
+} from "../../../../convex/lib/integrityModes";
 
 type Interview = Doc<"interviews">;
 
@@ -86,6 +93,7 @@ function InterviewScheduleUI() {
     browserFallbackInstructions: string;
     bufferBeforeMinutes: number;
     bufferAfterMinutes: number;
+    integrityMode: IntegrityMode;
   }>({
     title: "",
     description: "",
@@ -102,6 +110,7 @@ function InterviewScheduleUI() {
       "If video fails, refresh once and rejoin from a laptop or desktop Chrome browser.",
     bufferBeforeMinutes: DEFAULT_BUFFER_MINUTES.before,
     bufferAfterMinutes: DEFAULT_BUFFER_MINUTES.after,
+    integrityMode: resolveIntegrityMode(defaultTemplate.defaultIntegrityMode),
   });
   const [manageData, setManageData] = useState<{
     date: Date;
@@ -148,6 +157,7 @@ function InterviewScheduleUI() {
         browserFallbackInstructions,
         bufferBeforeMinutes,
         bufferAfterMinutes,
+        integrityMode,
       } = formData;
       const [hours, minutes] = time.split(":");
       const meetingDate = new Date(date);
@@ -217,6 +227,7 @@ function InterviewScheduleUI() {
           browserFallbackInstructions,
           bufferBeforeMinutes,
           bufferAfterMinutes,
+          integrityMode,
         });
       } catch (dbError) {
         await reportProvisioningFailure({
@@ -254,6 +265,9 @@ function InterviewScheduleUI() {
           "If video fails, refresh once and rejoin from a laptop or desktop Chrome browser.",
         bufferBeforeMinutes: DEFAULT_BUFFER_MINUTES.before,
         bufferAfterMinutes: DEFAULT_BUFFER_MINUTES.after,
+        integrityMode: resolveIntegrityMode(
+          defaultTemplate.defaultIntegrityMode,
+        ),
       });
     } catch (error) {
       logError("InterviewScheduleUI.scheduleMeeting", error, {
@@ -408,6 +422,12 @@ function InterviewScheduleUI() {
                       description: prev.description || template.description,
                       durationMinutes: template.durationMinutes,
                       meetingInstructions: template.instructions,
+                      // Follows the template rather than being preserved, so
+                      // switching to a round with different expectations does
+                      // not silently carry the previous round's rules across.
+                      integrityMode: resolveIntegrityMode(
+                        template.defaultIntegrityMode,
+                      ),
                     }));
                   }}>
                   <SelectTrigger className="w-full">
@@ -589,6 +609,37 @@ function InterviewScheduleUI() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Integrity monitoring
+                </label>
+                <Select
+                  value={formData.integrityMode}
+                  onValueChange={(value) =>
+                    setFormData({
+                      ...formData,
+                      integrityMode: resolveIntegrityMode(value),
+                    })
+                  }>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Integrity monitoring" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INTEGRITY_MODES.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {INTEGRITY_MODE_LABELS[mode]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {/* The consequence, spelled out at the point of choosing.
+                    Deterrent mode changes what the candidate can do, and that
+                    should not be discoverable only by reading the code. */}
+                <p className="text-xs text-muted-foreground">
+                  {INTEGRITY_MODE_DESCRIPTIONS[formData.integrityMode]}
+                </p>
               </div>
 
               <div className="flex gap-4">
