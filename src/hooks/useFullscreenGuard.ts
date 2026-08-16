@@ -9,6 +9,16 @@ type UseFullscreenGuardArgs = {
    * arrangement `useProctoring` uses.
    */
   enabled: boolean;
+  /**
+   * Whether the exemption was already taken before the room mounted.
+   *
+   * The pre-join screen takes it automatically when the browser refuses
+   * fullscreen outright. Without carrying that across, a candidate whose browser
+   * cannot do fullscreen at all would be masked the instant they entered the
+   * room and made to declare the same thing a second time — which is exactly the
+   * population this escape hatch exists for.
+   */
+  initiallyExempted?: boolean;
   onMaskStart: () => void;
   onMaskEnd: () => void;
   onExempt: (reason: string) => void;
@@ -36,12 +46,13 @@ type UseFullscreenGuardArgs = {
  */
 export const useFullscreenGuard = ({
   enabled,
+  initiallyExempted = false,
   onMaskStart,
   onMaskEnd,
   onExempt,
 }: UseFullscreenGuardArgs) => {
   const [isMasked, setIsMasked] = useState(false);
-  const [exempted, setExempted] = useState(false);
+  const [exempted, setExempted] = useState(initiallyExempted);
 
   // Held in refs so the listener effect does not re-subscribe whenever the
   // parent re-renders, which would drop an in-flight masking interval.
