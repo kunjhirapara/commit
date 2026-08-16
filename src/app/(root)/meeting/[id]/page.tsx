@@ -106,6 +106,9 @@ function MeetingPage() {
   );
 
   const [isSetUpComplete, setIsSetUpComplete] = useState(false);
+  // Carried from setup so a candidate whose browser refused fullscreen is not
+  // masked the moment they enter the room and asked to declare it twice.
+  const [fullscreenExempted, setFullscreenExempted] = useState(false);
   const interviewStatus = interview
     ? normalizeInterviewStatus(interview.status)
     : null;
@@ -195,10 +198,16 @@ function MeetingPage() {
         {!isSetUpComplete ? (
           <MeetingSetup
             interview={interview ?? undefined}
-            onSetupComplete={() => setIsSetUpComplete(true)}
+            onSetupComplete={(result) => {
+              setFullscreenExempted(!!result?.fullscreenExempted);
+              setIsSetUpComplete(true);
+            }}
           />
         ) : (
-          <MeetingRoom interview={interview ?? undefined} />
+          <MeetingRoom
+            interview={interview ?? undefined}
+            initiallyFullscreenExempted={fullscreenExempted}
+          />
         )}
       </StreamTheme>
     </StreamCall>

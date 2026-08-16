@@ -114,7 +114,14 @@ function NetworkPill({
   );
 }
 
-function MeetingRoom({ interview }: { interview?: Interview }) {
+function MeetingRoom({
+  interview,
+  initiallyFullscreenExempted = false,
+}: {
+  interview?: Interview;
+  /** Set when the pre-join screen already took the exemption for this candidate. */
+  initiallyFullscreenExempted?: boolean;
+}) {
   const router = useRouter();
   const call = useCall();
 
@@ -224,6 +231,7 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
 
   const { isMasked, returnToFullscreen, takeExemption } = useFullscreenGuard({
     enabled: enforcingForCandidate,
+    initiallyExempted: initiallyFullscreenExempted,
     onMaskStart: beginMask,
     onMaskEnd: endMask,
     onExempt: handleExemption,

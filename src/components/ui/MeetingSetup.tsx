@@ -63,7 +63,11 @@ function MeetingSetup({
   onSetupComplete,
 }: {
   interview?: Doc<"interviews">;
-  onSetupComplete: () => void;
+  /**
+   * Reports how setup finished, so the room can start in the right state.
+   * Currently just whether the fullscreen exemption was already taken here.
+   */
+  onSetupComplete: (result?: { fullscreenExempted: boolean }) => void;
 }) {
   const [isCameraDisabled, setIsCameraDisabled] = useState(true);
   const [isMicDisabled, setIsMicDisabled] = useState(false);
@@ -244,6 +248,10 @@ function MeetingSetup({
     setJoinError(null);
     setIsJoining(true);
 
+    // Carried out of the async block so the room can be told, rather than
+    // masking a candidate whose browser has already said it cannot do this.
+    let fullscreenExempted = false;
+
     const fallbackMessage =
       interview?.browserFallbackInstructions ||
       "We couldn't join the interview. Refresh once, confirm device permissions, and try again from a desktop Chrome browser.";
@@ -306,6 +314,7 @@ function MeetingSetup({
          * silently behaved like an observed one.
          */
         if (enforcing && !fullscreenUsed) {
+          fullscreenExempted = true;
           await recordFullscreenExemption({
             interviewId: interview._id,
             streamCallId: interview.streamCallId,
@@ -327,7 +336,7 @@ function MeetingSetup({
 
     try {
       await joinPromise;
-      onSetupComplete();
+      onSetupComplete({ fullscreenExempted });
     } catch (error) {
       logError("MeetingSetup.handleJoin", error, {
         interviewId: interview?._id,
