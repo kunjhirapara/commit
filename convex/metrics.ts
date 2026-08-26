@@ -24,6 +24,11 @@ const RETENTION_DAYS = {
   // Keeping them longer would mean a stray focus event from a year ago could
   // still surface against a candidate.
   proctoringEvents: 90,
+  // The edit history ages out with the events it is read alongside. It is the
+  // most revealing thing this system stores about a candidate — how they wrote,
+  // not merely that they switched tabs — so it should certainly not outlive the
+  // signals that are less telling.
+  proctoringAuthorship: 90,
 } as const;
 
 /** Rows deleted per table per run, so a single cron tick stays well inside limits. */
@@ -198,6 +203,19 @@ export const pruneExpiredRecords = internalMutation({
       await ctx.db.delete(row._id);
     }
     deleted.proctoringEvents = expiredProctoring.length;
+
+    // Same shape again: authorship batches key their index on `recordedAt`.
+    const authorshipCutoff =
+      now - RETENTION_DAYS.proctoringAuthorship * DAY_MS;
+    const expiredAuthorship = await ctx.db
+      .query("proctoringAuthorship")
+      .withIndex("by_created_at", (q) => q.lt("recordedAt", authorshipCutoff))
+      .take(PRUNE_BATCH_SIZE);
+
+    for (const row of expiredAuthorship) {
+      await ctx.db.delete(row._id);
+    }
+    deleted.proctoringAuthorship = expiredAuthorship.length;
 
     // Only terminal jobs are pruned; anything still pending or retrying stays.
     const jobCutoff = now - RETENTION_DAYS.backgroundJobs * DAY_MS;

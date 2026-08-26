@@ -6,7 +6,7 @@ import {
   parseTestOutput,
   type ParsedTestResult,
 } from "@/lib/test-harness";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -36,6 +36,7 @@ import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
+import type { EditorChange } from "@/lib/proctoring/authorship";
 
 /* ─────────────────────────────────────────────────────────── types ── */
 
@@ -82,6 +83,22 @@ export type EditorSignal = {
   chars: number;
 };
 
+/** The shape Monaco reports each edit in. Narrowed to what is actually read. */
+type MonacoChange = {
+  text?: string;
+  rangeOffset?: number;
+  rangeLength?: number;
+};
+
+/**
+ * How long after a DOM paste a model change is still attributed to that paste.
+ *
+ * Monaco applies the change synchronously after the event, so this only has to
+ * span one turn of the event loop. Generous enough to survive a slow frame,
+ * short enough that the next character typed is not mislabelled as pasted.
+ */
+const PASTE_WINDOW_MS = 100;
+
 interface CodeEditorProps {
   streamCallId?: string;
   /**
@@ -93,6 +110,14 @@ interface CodeEditorProps {
    * sandbox, which passes no callback, entirely unmonitored.
    */
   onEditorSignal?: (signal: EditorSignal) => void;
+  /**
+   * Reports every edit, so a caller can reconstruct how the code was written.
+   *
+   * Separate from `onEditorSignal` because it is a different kind of thing: one
+   * is a handful of notable moments, this is the raw stream. The editor still
+   * knows nothing about what either is for, and /practice passes neither.
+   */
+  onEditorChange?: (change: EditorChange) => void;
   /**
    * Hides the problem and the code behind a blur and makes them inert.
    *
@@ -113,6 +138,7 @@ interface CodeEditorProps {
 function CodeEditor({
   streamCallId,
   onEditorSignal,
+  onEditorChange,
   masked = false,
   blockPaste = false,
 }: CodeEditorProps) {
@@ -124,6 +150,24 @@ function CodeEditor({
   const [code, setCode] = useState(selectedQuestion.starterCode[language]);
 
   const [editorNode, setEditorNode] = useState<HTMLElement | null>(null);
+  const lastPasteAtRef = useRef(0);
+  /**
+   * Monaco's change listener is registered once at mount, so reading `language`
+   * or `selectedQuestion` from the closure would report whatever they were when
+   * the editor first appeared. Refs keep the labels honest after a switch.
+   */
+  const contextRef = useRef({
+    language,
+    questionId: selectedQuestion.id,
+    onEditorSignal,
+    onEditorChange,
+  });
+  contextRef.current = {
+    language,
+    questionId: selectedQuestion.id,
+    onEditorSignal,
+    onEditorChange,
+  };
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("cases");
@@ -148,9 +192,16 @@ function CodeEditor({
    * whatever arrives.
    */
   useEffect(() => {
-    if (!editorNode || !blockPaste) return;
+    if (!editorNode || (!blockPaste && !onEditorChange)) return;
 
-    const refuse = (event: ClipboardEvent | DragEvent) => {
+    const handle = (event: ClipboardEvent | DragEvent) => {
+      // Stamped whether or not the paste is refused. The DOM event fires before
+      // Monaco applies the change, which is the only ordering that lets the
+      // resulting model change be attributed to a paste rather than to typing.
+      lastPasteAtRef.current = Date.now();
+
+      if (!blockPaste) return;
+
       event.preventDefault();
       event.stopPropagation();
 
@@ -166,14 +217,14 @@ function CodeEditor({
       });
     };
 
-    editorNode.addEventListener("paste", refuse as EventListener, true);
-    editorNode.addEventListener("drop", refuse as EventListener, true);
+    editorNode.addEventListener("paste", handle as EventListener, true);
+    editorNode.addEventListener("drop", handle as EventListener, true);
 
     return () => {
-      editorNode.removeEventListener("paste", refuse as EventListener, true);
-      editorNode.removeEventListener("drop", refuse as EventListener, true);
+      editorNode.removeEventListener("paste", handle as EventListener, true);
+      editorNode.removeEventListener("drop", handle as EventListener, true);
     };
-  }, [editorNode, blockPaste, onEditorSignal]);
+  }, [editorNode, blockPaste, onEditorSignal, onEditorChange]);
 
   const parsedResults = useMemo<ParsedTestResult[]>(() => {
     if (!result?.stdout) return [];
@@ -213,24 +264,61 @@ function CodeEditor({
     // when nothing is listening for signals.
     setEditorNode(editor.getDomNode() ?? null);
 
-    if (!onEditorSignal) return;
-
     editor.onDidPaste((event: { range: unknown }) => {
       const model = editor.getModel();
       if (!model) return;
       const pasted = model.getValueInRange(event.range as never) ?? "";
-      onEditorSignal({ kind: "editor.paste", chars: pasted.length });
+      contextRef.current.onEditorSignal?.({
+        kind: "editor.paste",
+        chars: pasted.length,
+      });
     });
 
     editor.onDidChangeModelContent((event: any) => {
       if (event.isFlush) return;
-      const largest = (event.changes ?? []).reduce(
-        (max: number, change: { text?: string }) =>
-          Math.max(max, change.text?.length ?? 0),
+
+      const { onEditorSignal: signal, onEditorChange: change } =
+        contextRef.current;
+      const changes: MonacoChange[] = event.changes ?? [];
+
+      const largest = changes.reduce(
+        (max, item) => Math.max(max, item.text?.length ?? 0),
         0,
       );
-      if (largest > 0) {
-        onEditorSignal({ kind: "editor.bulkInsert", chars: largest });
+      if (largest > 0) signal?.({ kind: "editor.bulkInsert", chars: largest });
+
+      if (!change) return;
+
+      // Within this window the DOM paste event that preceded the model update is
+      // still the best explanation for it. Beyond it, the same characters
+      // arriving are the candidate typing.
+      const viaPaste = Date.now() - lastPasteAtRef.current < PASTE_WINDOW_MS;
+
+      for (const item of changes) {
+        const inserted = item.text?.length ?? 0;
+        const removed = item.rangeLength ?? 0;
+        if (inserted === 0 && removed === 0) continue;
+
+        const op =
+          inserted > 0 && removed === 0
+            ? "insert"
+            : inserted === 0
+              ? "delete"
+              : "replace";
+
+        change({
+          at: Date.now(),
+          op,
+          offset: item.rangeOffset ?? 0,
+          // What the change put into the document. For a replacement that is
+          // the new text, not the net difference — the history describes what
+          // was written, and a net count would report a rewrite as nothing.
+          charCount: op === "delete" ? removed : inserted,
+          text: op === "delete" ? undefined : item.text,
+          viaPaste,
+          language: contextRef.current.language,
+          questionId: contextRef.current.questionId,
+        });
       }
     });
   };

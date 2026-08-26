@@ -199,15 +199,17 @@ function MeetingRoom({
   const { enforcing, monitored } = resolveEnforcement(interview?.integrityMode);
   const enforcingForCandidate = enforcing && isCandidate;
 
-  const { reportEditorSignal, beginMask, endMask } = useProctoring({
-    interviewId: interview?._id,
-    streamCallId: interview?.streamCallId,
-    // `monitored` matters as much as `isCandidate`. MeetingSetup opens no
-    // session for an `off` interview, so without this the client would buffer
-    // events and post them against a session that does not exist — every batch
-    // rejected, every rejection logged, for an interview nobody asked to watch.
-    enabled: isCandidate && monitored,
-  });
+  const { reportEditorSignal, reportEditorChange, beginMask, endMask } =
+    useProctoring({
+      interviewId: interview?._id,
+      streamCallId: interview?.streamCallId,
+      // `monitored` matters as much as `isCandidate`. MeetingSetup opens no
+      // session for an `off` interview, so without this the client would buffer
+      // events and post them against a session that does not exist — every
+      // batch rejected, every rejection logged, for an interview nobody asked
+      // to watch.
+      enabled: isCandidate && monitored,
+    });
 
   const recordFullscreenExemption = useMutation(
     api.proctoring.recordFullscreenExemption,
@@ -734,6 +736,9 @@ function MeetingRoom({
                 // Undefined for everyone but the candidate, so the editor
                 // reports nothing at all for an interviewer.
                 onEditorSignal={isCandidate ? reportEditorSignal : undefined}
+                // The edit history, and the same rule: nothing at all is
+                // reported for an interviewer.
+                onEditorChange={isCandidate ? reportEditorChange : undefined}
                 masked={isMasked}
                 blockPaste={enforcingForCandidate}
               />
