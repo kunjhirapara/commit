@@ -5,6 +5,11 @@ import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { ProctoringBuffer } from "@/lib/proctoring/buffer";
 import {
+  AuthorshipCoalescer,
+  type AuthorshipSegment,
+  type EditorChange,
+} from "@/lib/proctoring/authorship";
+import {
   getDisplayChangeTarget,
   readDisplayState,
 } from "@/lib/proctoring/displays";
@@ -40,6 +45,7 @@ export const useProctoring = ({
   enabled,
 }: UseProctoringArgs) => {
   const recordBatch = useMutation(api.proctoring.recordProctoringBatch);
+  const recordAuthorship = useMutation(api.proctoring.recordAuthorshipBatch);
   const recordHeartbeat = useMutation(api.proctoring.recordHeartbeat);
   const recordDisplayChange = useMutation(api.proctoring.recordDisplayChange);
 
@@ -85,6 +91,63 @@ export const useProctoring = ({
   const buffer = useMemo(
     () => new ProctoringBuffer({ now: () => Date.now(), onFlush: send }),
     [send],
+  );
+
+  /**
+   * Coalesces edits into the session's edit history.
+   *
+   * Anchored to the moment the hook became active rather than to the server's
+   * session start, which the client cannot see. Offsets are therefore relative
+   * to joining the room, and the server stamps the batch on arrival — the same
+   * split as everywhere else here, where the client measures durations and the
+   * server owns absolute time.
+   */
+  const coalescer = useMemo(
+    () => new AuthorshipCoalescer({ sessionStartedAt: Date.now() }),
+    // Deliberately created once per mount. Rebuilding it would drop the run in
+    // progress and reset every offset to zero mid-interview.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  const sendAuthorship = useCallback(
+    (segments: AuthorshipSegment[]) => {
+      const { interviewId: id, streamCallId: callId } = idsRef.current;
+      if (!id || !callId || segments.length === 0) return;
+
+      void recordAuthorship({
+        interviewId: id as never,
+        streamCallId: callId,
+        segments,
+      }).catch((error) => {
+        // Swallowed like the event path: a failed report is covered by the
+        // heartbeat gap, and surfacing it would break silent operation.
+        logError("useProctoring.sendAuthorship", error, { interviewId: id });
+      });
+    },
+    [recordAuthorship],
+  );
+
+  const flushAuthorship = useCallback(
+    (closeOpen = false) => {
+      if (closeOpen) coalescer.closeOpen();
+
+      let batch = coalescer.drain();
+      while (batch.length > 0) {
+        sendAuthorship(
+          batch.splice(0, PROCTORING_THRESHOLDS.AUTHORSHIP_BATCH_SEGMENTS),
+        );
+      }
+    },
+    [coalescer, sendAuthorship],
+  );
+
+  const reportEditorChange = useCallback(
+    (change: EditorChange) => {
+      if (!active) return;
+      coalescer.record(change);
+    },
+    [active, coalescer],
   );
 
   useEffect(() => {
@@ -181,6 +244,14 @@ export const useProctoring = ({
       PROCTORING_THRESHOLDS.FLUSH_INTERVAL_MS,
     );
 
+    // Separate cadence from the event buffer. Segments only close when a run of
+    // editing ends, so flushing them on the event timer would send half of them
+    // while their run was still open, splitting one act across two batches.
+    const authorshipTimer = setInterval(
+      () => flushAuthorship(),
+      PROCTORING_THRESHOLDS.AUTHORSHIP_FLUSH_INTERVAL_MS,
+    );
+
     const heartbeatTimer = setInterval(() => {
       const { interviewId: id, streamCallId: callId } = idsRef.current;
       if (!id || !callId) return;
@@ -196,6 +267,9 @@ export const useProctoring = ({
     const onPageHide = () => {
       buffer.closeOpenAbsences();
       buffer.flush();
+      // Closes the run in progress: a candidate who closes the tab mid-line
+      // would otherwise lose that last stretch of writing entirely.
+      flushAuthorship(true);
     };
     window.addEventListener("pagehide", onPageHide);
 
@@ -208,11 +282,13 @@ export const useProctoring = ({
       window.removeEventListener("pagehide", onPageHide);
       window.removeEventListener("resize", sampleGeometry);
       clearInterval(flushTimer);
+      clearInterval(authorshipTimer);
       clearInterval(heartbeatTimer);
       buffer.closeOpenAbsences();
       buffer.flush();
+      flushAuthorship(true);
     };
-  }, [active, buffer, recordDisplayChange, recordHeartbeat]);
+  }, [active, buffer, flushAuthorship, recordDisplayChange, recordHeartbeat]);
 
   /**
    * Reports an editing signal. Called by CodeEditor, which stays unaware of
@@ -262,5 +338,5 @@ export const useProctoring = ({
     buffer.flush();
   }, [active, buffer]);
 
-  return { reportEditorSignal, beginMask, endMask };
+  return { reportEditorSignal, reportEditorChange, beginMask, endMask };
 };

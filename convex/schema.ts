@@ -365,11 +365,64 @@ export default defineSchema({
      * bound anything here. A counter on the row is authoritative.
      */
     eventsRecorded: v.optional(v.number()),
+    /** Same counter, for authorship segments, which have their own cap. */
+    authorshipSegmentsRecorded: v.optional(v.number()),
     /** Set once when the cap is hit, so throttling is visible rather than silent. */
     throttledAt: v.optional(v.number()),
   })
     .index("by_interview", ["interviewId"])
     .index("by_candidate", ["candidateClerkId"]),
+
+  /**
+   * How the solution came to exist: the edit history of the candidate's buffer.
+   *
+   * This is the only signal in the system that touches the way people actually
+   * cheat now. Invisible AI overlay assistants produce no tab switch, no blur
+   * and no paste — the candidate reads an answer and types it out — so every
+   * other detector here reports them as spotless. What remains visible is *how*
+   * the typing happened, and that is what these rows describe.
+   *
+   * It is an edit history, not a keystroke biometric. Raw inter-key intervals
+   * are reduced to a mean and a standard deviation in the browser and dropped;
+   * only the statistics are stored, and they cannot be inverted into a template
+   * that identifies anyone. Storing the raw vector instead would reintroduce
+   * GDPR Article 9 special-category data, which v1 deliberately refused —
+   * treat any such change as a new design decision rather than a refactor.
+   *
+   * One row per flushed batch rather than per segment, and one segment per run
+   * of editing rather than per keystroke. Naively this would be several thousand
+   * writes an interview; coalesced and batched it is a few dozen.
+   */
+  proctoringAuthorship: defineTable({
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    candidateClerkId: v.string(),
+    /** Batch ordering, server-assigned so a client cannot reorder its history. */
+    sequence: v.number(),
+    /** Server clock, authoritative as everywhere else in proctoring. */
+    recordedAt: v.number(),
+    segments: v.array(
+      v.object({
+        /** Milliseconds from the start of the session, not a wall clock. */
+        tOffsetMs: v.number(),
+        op: v.string(),
+        charCount: v.number(),
+        keystrokeCount: v.number(),
+        backspaceCount: v.number(),
+        durationMs: v.number(),
+        meanInterKeyMs: v.number(),
+        stdDevInterKeyMs: v.number(),
+        /** Inserted text, capped. Absent for deletions, which need only a length. */
+        text: v.optional(v.string()),
+        viaPaste: v.boolean(),
+        language: v.string(),
+        questionId: v.string(),
+      }),
+    ),
+  })
+    .index("by_interview", ["interviewId"])
+    .index("by_interview_sequence", ["interviewId", "sequence"])
+    .index("by_created_at", ["recordedAt"]),
 
   invitations: defineTable({
     email: v.string(),

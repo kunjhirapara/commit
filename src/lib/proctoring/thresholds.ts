@@ -37,6 +37,33 @@ export const PROCTORING_THRESHOLDS = {
   HEARTBEAT_MS: 30_000,
 
   /**
+   * Idle gap that ends a run of editing.
+   *
+   * Two seconds is long enough to survive looking at the problem statement
+   * mid-line, short enough that a genuine pause to think starts a new segment —
+   * which is the boundary the burst-after-idle detector reads.
+   */
+  SEGMENT_IDLE_MS: 2_000,
+
+  /**
+   * Longest run of editing kept as one segment.
+   *
+   * A cap exists because cadence statistics over a very long run average away
+   * the thing they are meant to expose: 500 characters of metronomic typing
+   * inside 5,000 characters of normal work would vanish into the mean.
+   */
+  MAX_SEGMENT_CHARS: 500,
+
+  /** Inserted text kept per segment. Enough to reconstruct, bounded for cost. */
+  MAX_SEGMENT_TEXT: 2_000,
+
+  /** Segments per mutation. One row carries a batch, as events do. */
+  AUTHORSHIP_BATCH_SEGMENTS: 50,
+
+  /** How often closed segments are sent. */
+  AUTHORSHIP_FLUSH_INTERVAL_MS: 20_000,
+
+  /**
    * Silence longer than this, while the call is still connected, is recorded as
    * a monitor gap. Generous enough to survive a slow network or a backgrounded
    * tab throttling timers, tight enough that disabling the monitor shows up.
