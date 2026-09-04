@@ -17,7 +17,7 @@ Tailwind v4, shadcn.
 
 Runs on a private VM: 4-core ARM, 24 GB RAM, 200 GB disk. Portainer stack, host
 nginx → `127.0.0.1:3000`, images built by GitHub Actions on `ubuntu-24.04-arm`
-and pushed to GHCR. Live at `commit.kunjdeveloper.me`.
+and pushed to GHCR. Live at `commit.kunjdeveloper.com`.
 
 **The goal that started this work:** open it to the public safely, watch what the
 box can take, keep users out of each other's data, and stop new users landing on
@@ -124,7 +124,7 @@ These are not preferences. Each one came from something going wrong.
 **CRITICAL — `robots.txt` and `sitemap.xml` are behind authentication.**
 
 ```
-$ curl -sI https://commit.kunjdeveloper.me/robots.txt
+$ curl -sI https://commit.kunjdeveloper.com/robots.txt
 HTTP/1.1 307 Temporary Redirect → /signin
 ```
 

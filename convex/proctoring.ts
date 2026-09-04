@@ -613,6 +613,48 @@ export const getProctoringReport = query({
 });
 
 /**
+ * The edit history for one interview, in order.
+ *
+ * A separate query from `getProctoringReport` on purpose. The report is polled
+ * live in the meeting room by the interviewer, and a session can hold thousands
+ * of segments with their text — pushing all of that through the reactive query
+ * that updates every few seconds would be wasteful for a payload almost nobody
+ * looks at during the call.
+ *
+ * Gated by `requireInterviewReviewAccess`, the same rule as the report, which
+ * already excludes the candidate. They generate this history and must never read
+ * it back: knowing which runs were flagged is precisely what would let someone
+ * tune their typing against the thresholds.
+ */
+export const getAuthorshipHistory = query({
+  args: { interviewId: v.id("interviews") },
+  handler: async (ctx, args) => {
+    await requireInterviewReviewAccess(ctx, args.interviewId);
+
+    const batches = await ctx.db
+      .query("proctoringAuthorship")
+      .withIndex("by_interview_sequence", (q) =>
+        q.eq("interviewId", args.interviewId),
+      )
+      .order("asc")
+      .take(200);
+
+    // Flattened in sequence order, then by offset within the session. Batches
+    // can arrive out of order after a retry, and a history assembled in arrival
+    // order would show the candidate writing the solution backwards.
+    const segments = batches
+      .flatMap((batch) => batch.segments)
+      .sort((a, b) => a.tOffsetMs - b.tOffsetMs);
+
+    return {
+      segments,
+      /** True when the per-session cap truncated what was kept. */
+      truncated: batches.length >= 200,
+    };
+  },
+});
+
+/**
  * A candidate's monitoring history across interviews.
  *
  * Admin and recruiter only, and returned per interview rather than as a running

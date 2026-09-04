@@ -64,6 +64,52 @@ export const PROCTORING_THRESHOLDS = {
   AUTHORSHIP_FLUSH_INTERVAL_MS: 20_000,
 
   /**
+   * Authorship detector thresholds.
+   *
+   * Every one of these is a starting guess, exactly as the v1 severity numbers
+   * were, and they are deliberately set to miss rather than to over-report. A
+   * detector that fires on honest work is worse than no detector: it costs a
+   * candidate an accusation, and it teaches interviewers to ignore the panel.
+   *
+   * Published accuracy for keystroke-based approaches sits between 75% and 86%
+   * in controlled conditions. This is coarser than that — statistics rather than
+   * raw timings — so assume less, and read every flag as a question to ask
+   * rather than an answer.
+   */
+  authorship: {
+    /** Shortest run worth judging. Below this, cadence is noise. */
+    minJudgeableChars: 150,
+
+    /**
+     * Cadence spread, as a fraction of the mean, below which typing looks
+     * mechanical. Transcribing from an overlay is metronomic; composing is not —
+     * it stutters, pauses mid-identifier, and backtracks.
+     */
+    transcriptionSpreadRatio: 0.35,
+
+    /** Correction rate below which a run shows no sign of being composed. */
+    lowBackspaceRate: 0.02,
+
+    /** Silence that makes what follows a "burst" rather than a continuation. */
+    burstIdleMs: 20_000,
+    /** Size a post-idle run must reach to be worth noting. */
+    burstChars: 200,
+
+    /**
+     * Sustained characters per minute treated as implausible.
+     *
+     * A fast touch typist reaches roughly 600. 900 is deliberately generous, so
+     * this fires on machine-speed insertion rather than on a quick typist.
+     */
+    impossibleCharsPerMinute: 900,
+
+    /** Solution size below which iteration says nothing either way. */
+    refinementMinChars: 400,
+    /** Deletions as a fraction of insertions, below which nothing was revised. */
+    refinementDeleteRatio: 0.05,
+  },
+
+  /**
    * Silence longer than this, while the call is still connected, is recorded as
    * a monitor gap. Generous enough to survive a slow network or a backgrounded
    * tab throttling timers, tight enough that disabling the monitor shows up.

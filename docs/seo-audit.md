@@ -1,4 +1,4 @@
-# SEO audit — commit.kunjdeveloper.me
+# SEO audit — commit.kunjdeveloper.com
 
 **Date:** 2026-08-01
 **Method:** `claude-seo` (AgricIDaniel) and `seo-geo` (ReScienceLab/opc-skills),
@@ -13,7 +13,7 @@ at all.
 ### CRITICAL 1 — `robots.txt` and `sitemap.xml` are behind authentication
 
 ```
-$ curl -sI https://commit.kunjdeveloper.me/robots.txt
+$ curl -sI https://commit.kunjdeveloper.com/robots.txt
 HTTP/1.1 307 Temporary Redirect
 location: /signin?redirect_url=...%2Frobots.txt
 ```
@@ -42,7 +42,7 @@ the directive list rather than HTML.
 ### CRITICAL 2 — auth redirects point at `0.0.0.0:3000`
 
 ```
-$ curl -sI https://commit.kunjdeveloper.me/dashboard
+$ curl -sI https://commit.kunjdeveloper.com/dashboard
 location: /signin?redirect_url=https%3A%2F%2F0.0.0.0%3A3000%2Fdashboard
 ```
 
@@ -67,7 +67,7 @@ rather than dangerous.
    removes the dependency on proxy headers entirely and is inside this repo's
    control.
 
-**Verify after fixing:** the `location` header names `commit.kunjdeveloper.me`.
+**Verify after fixing:** the `location` header names `commit.kunjdeveloper.com`.
 
 ## What is already right
 
