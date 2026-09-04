@@ -163,6 +163,27 @@ function InterviewScheduleUI() {
         await call.getOrCreate({
           data: {
             starts_at: meetingDate.toISOString(),
+            /**
+             * Authority has to follow the interview, not whoever created the
+             * call.
+             *
+             * Stream grants its `host` role only to the call's creator, and
+             * this form is used by recruiters and admins scheduling rounds that
+             * somebody else conducts. Without these members the interviewer
+             * joined as a plain `user`, so mute-users and block-users were
+             * refused — the host controls rendered and then did nothing.
+             *
+             * The candidate is named explicitly rather than left to the default
+             * so that the roles on the call are a complete statement rather than
+             * a partial one.
+             */
+            members: [
+              ...interviewerIds.map((userId: string) => ({
+                user_id: userId,
+                role: "host",
+              })),
+              { user_id: candidateId, role: "user" },
+            ],
             custom: {
               description: title,
               additionalDetails: description,
