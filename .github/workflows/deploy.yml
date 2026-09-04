@@ -5,6 +5,21 @@ on:
     branches:
       - main
 
+# Two merges in quick succession used to start two concurrent runs, and both were
+# wrong in ways that are easy to miss. They race to push the same :latest tag, so
+# the winner is whichever build finishes last rather than whichever commit is
+# newest; and verify-rollout below polls for its own commit for twelve minutes,
+# which a superseded run can never see, so it fails at the deadline and blames the
+# VM for a rollout that was simply overtaken.
+#
+# cancel-in-progress stays false on purpose. Cancelling mid-run can interrupt
+# `convex deploy` partway through a schema change or a docker push partway through
+# a manifest; queueing only ever costs wall-clock, on a repo that deploys a handful
+# of times a day. Do not "fix" this to true.
+concurrency:
+  group: deploy-main
+  cancel-in-progress: false
+
 jobs:
   build-and-push:
     runs-on: ubuntu-24.04-arm
@@ -78,8 +93,87 @@ jobs:
             NEXT_PUBLIC_STREAM_API_KEY=${{ secrets.NEXT_PUBLIC_STREAM_API_KEY }}
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
             DOCKER_GID=${{ vars.DOCKER_GID || '999' }}
+            BUILD_SHA=${{ github.sha }}
 
       - name: Summary
         run: |
           echo "::notice::Image pushed to ghcr.io/${{ github.repository }}:latest."
-          echo "::notice::Watchtower on the VM polls for it; no manual redeploy needed."
+          echo "::notice::Publishing is not deploying — verify-rollout checks whether the VM actually picked it up."
+
+  # Publishing an image is not the same as shipping it, and until this job
+  # existed nothing told the difference. A fix for robots.txt, the OG image and
+  # a broken auth redirect merged, built, and showed green here while the VM
+  # kept serving the previous container for hours — the workflow's own summary
+  # claimed "no manual redeploy needed", which was untrue because Watchtower had
+  # never been started on the box.
+  #
+  # This polls the public health endpoint until it reports the commit that was
+  # just built. It needs no access to the VM: the check is made from outside,
+  # against the same URL a user hits.
+  verify-rollout:
+    needs: build-and-push
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+
+    steps:
+      - name: Wait for the running container to report this commit
+        env:
+          APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+
+          if [ -z "${APP_URL:-}" ]; then
+            echo "::error::NEXT_PUBLIC_APP_URL is not set, so the rollout cannot be verified."
+            exit 1
+          fi
+
+          # Must match getBuildVersion() in src/lib/buildInfo.ts.
+          expected="$(printf '%s' "$COMMIT_SHA" | cut -c1-12 | tr '[:upper:]' '[:lower:]')"
+
+          # jq is present on GitHub's runners, but this job's whole value is that
+          # its verdict can be trusted. A missing tool must not be reported as a
+          # failed rollout, so fall back to sed rather than letting the pipeline
+          # swallow the error and blame the VM.
+          read_version() {
+            if command -v jq >/dev/null 2>&1; then
+              jq -r '.version // empty' 2>/dev/null
+            else
+              sed -n 's/.*"version":"\([^"]*\)".*/\1/p'
+            fi
+          }
+
+          # Watchtower polls every WATCHTOWER_POLL_INTERVAL seconds (300 by
+          # default), so 12 minutes gives it at least two chances plus time to
+          # pull an ARM image and restart.
+          deadline=$(( SECONDS + 720 ))
+          attempt=0
+          reported="unreachable"
+
+          while [ "$SECONDS" -lt "$deadline" ]; do
+            attempt=$(( attempt + 1 ))
+
+            body="$(curl -fsS --max-time 15 "${APP_URL%/}/api/health" 2>/dev/null || true)"
+            if [ -z "$body" ]; then
+              live=""
+              reported="unreachable"
+            else
+              live="$(printf '%s' "$body" | read_version)"
+              # An old container has no version field at all, which is a
+              # different fact from the host being down. Say which.
+              reported="${live:-serving-a-build-with-no-version}"
+            fi
+
+            if [ -n "$live" ] && [ "$live" = "$expected" ]; then
+              echo "::notice::Rollout confirmed after ${SECONDS}s — ${APP_URL} is serving ${expected}."
+              exit 0
+            fi
+
+            echo "attempt ${attempt} (${SECONDS}s): live=${reported} expected=${expected}"
+            sleep 30
+          done
+
+          echo "::error::The image was published but ${APP_URL} is still ${reported}, not ${expected}."
+          echo "::error::Nothing pulled it. Watchtower is defined in docker-compose.yml but has to be started once: in Portainer, Stacks -> commit -> Update the stack with 'Re-pull image' enabled, or run 'docker compose pull app && docker compose up -d app' on the VM."
+          echo "::error::Until that one-time redeploy happens, every merge will build green and reach nobody."
+          exit 1

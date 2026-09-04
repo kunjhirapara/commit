@@ -69,6 +69,15 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json /app/backup-worker/p
 # ownership instead of root:root (which would EACCES the non-root worker).
 RUN mkdir -p /data/backups && chown -R nextjs:nodejs /data
 
+# The commit this image was built from, surfaced at /api/health so a rollout can
+# be verified from outside the VM — see src/lib/buildInfo.ts.
+#
+# Declared last on purpose: an ARG/ENV changes on every commit, and anything
+# below it in the file would be rebuilt each time. Everything expensive (apk,
+# user creation, the dependency copies) is already above.
+ARG BUILD_SHA=""
+ENV BUILD_SHA=$BUILD_SHA
+
 USER nextjs
 EXPOSE 3000
 
