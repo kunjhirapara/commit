@@ -1,7 +1,5 @@
-"use client";
-
 import Link from "next/link";
-import { SignUpButton } from "@clerk/nextjs";
+import SignUpCta from "@/components/marketing/SignUpCta";
 import {
   CalendarClockIcon,
   ClipboardCheckIcon,
@@ -96,12 +94,12 @@ export default function LandingPage() {
         </p>
 
         <div className="flex flex-col gap-3 sm:flex-row">
-          <SignUpButton mode="modal">
+          <SignUpCta>
             <Button size="lg" className="gap-2">
               <PlayIcon className="size-4" />
               Try the practice sandbox
             </Button>
-          </SignUpButton>
+          </SignUpCta>
           <Button size="lg" variant="outline" asChild>
             <Link href="#how-it-works">See how it works</Link>
           </Button>
@@ -170,11 +168,11 @@ export default function LandingPage() {
           Three problems, three languages, real test cases. It runs in a locked
           down container, so nothing you write can reach the network.
         </p>
-        <SignUpButton mode="modal">
+        <SignUpCta>
           <Button size="lg" className="mt-6">
             Create a free account
           </Button>
-        </SignUpButton>
+        </SignUpCta>
       </section>
     </div>
   );

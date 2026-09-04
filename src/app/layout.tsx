@@ -21,7 +21,12 @@ import { getValidatedServerEnv } from "@/lib/env";
  */
 const jakartaSans = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  // 800 was dropped because `font-extrabold` appears nowhere in the app: the
+  // file was fetched on every visit and never rendered a glyph. Each weight is
+  // its own request against the render-blocking budget, so the remaining four
+  // are the ones Tailwind actually asks for — font-normal, font-medium,
+  // font-semibold and font-bold.
+  weight: ["400", "500", "600", "700"],
   variable: "--font-jakarta-sans",
   display: "swap",
 });
