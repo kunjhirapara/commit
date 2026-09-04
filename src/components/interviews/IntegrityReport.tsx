@@ -7,6 +7,7 @@ import { resolveSeverity } from "@/lib/proctoring/severity";
 import { PROCTORING_CAVEAT } from "@/lib/proctoring/thresholds";
 import type { ProctoringSummary, SeverityBand } from "@/lib/proctoring/types";
 import { Skeleton } from "@/components/ui/skeleton";
+import AuthorshipFindings from "./AuthorshipFindings";
 import { cn } from "@/lib/utils";
 
 const BAND_STYLES: Record<SeverityBand, string> = {
@@ -271,6 +272,10 @@ function IntegrityReport({ interviewId }: { interviewId: string }) {
           reason={report.session.fullscreenExemptionReason}
         />
       ) : null}
+
+      {/* What the edit history suggests. Kept below the measures because it is
+          the softest evidence here and should be read last, not first. */}
+      <AuthorshipFindings interviewId={interviewId} />
 
       {/* The rule is shown so a reader can disagree with it rather than with an
           unexplained band. */}
