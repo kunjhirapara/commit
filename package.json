@@ -11,6 +11,7 @@
     "test": "node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "backup:start": "node --experimental-strip-types scripts/backup-job.ts",
     "runner:digests": "node --experimental-strip-types scripts/runner-digests.ts",
+    "brand:assets": "node --experimental-strip-types scripts/generate-brand-assets.ts",
     "ci:validate": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

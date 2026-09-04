@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import { LEGAL_VERSION } from "@/lib/legal";
 
 export const metadata: Metadata = {
   title: "Recording Disclosure",
@@ -43,10 +45,21 @@ export default function RecordingDisclosurePage() {
           <CardTitle>Recording Disclosure</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-muted-foreground">
-          <p>Version 2026-04-22</p>
+          <p>Version {LEGAL_VERSION}</p>
           <p>
             Commit may capture interview recordings only when the employer has enabled
             recording for that workflow and disclosed the purpose to participants.
+          </p>
+          <p>
+            Recording is separate from interview integrity monitoring, which
+            applies to candidates whether or not a call is recorded. What that
+            monitors, and why it exists, is set out in the{" "}
+            <Link
+              className="font-medium text-foreground underline"
+              href="/privacy">
+              privacy policy
+            </Link>
+            .
           </p>
           <p>
             The platform records acknowledgement state, jurisdiction, and access activity to
@@ -63,7 +76,13 @@ export default function RecordingDisclosurePage() {
           </div>
           <p>
             This page is product guidance only and does not replace review by your legal or privacy
-            team for the markets where you hire.
+            team for the markets where you hire. It forms part of the{" "}
+            <Link
+              className="font-medium text-foreground underline"
+              href="/terms">
+              terms of service
+            </Link>
+            .
           </p>
         </CardContent>
       </Card>
