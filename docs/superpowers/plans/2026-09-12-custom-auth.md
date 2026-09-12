@@ -702,11 +702,32 @@ git commit -m "feat(auth): verified-email-only account linking rule"
 
 **Resolve the open mechanism question first.** The spec leaves one thing deliberately unsettled: whether these are `internalMutation`s called from Next with the Convex deploy key, or ordinary mutations guarded by `INTERNAL_API_KEY`.
 
-- [ ] **Step 1: Spike the preferred mechanism**
+- [x] **Step 1: Spike the preferred mechanism — DONE, and it reversed the preference**
 
-Write a throwaway `internalQuery` and try calling it from a Next route with `fetchQuery(internal.authAdapter.probe, {})`. If it succeeds with the deploy key available server-side, use `internalMutation`/`internalQuery` throughout. If it does not, use ordinary mutations whose first line asserts a shared secret argument matches `process.env.INTERNAL_API_KEY`, exactly as `src/app/api/notifications/email/route.ts` already does.
+Probe (`convex/authAdapterProbe.ts`, since deleted) deployed an `internalQuery`
+and a public `query`, then called both from a Next-side context:
 
-Record the outcome in a comment at the top of `convex/authAdapter.ts` so the next reader knows it was decided by experiment, not preference. Delete the probe.
+```
+PUBLIC  call: public-ok
+INTERNAL call (no key) REJECTED: Server Error
+CONVEX_DEPLOY_KEY present: false
+```
+
+Internal functions are genuinely unreachable from outside Convex — good. But
+reaching them *deliberately* from Next requires the **Convex deploy key**, and
+there is no narrower credential: a deploy key can deploy code, read and write
+every table, and rewrite environment variables. Putting one in the app server's
+runtime turns "the Next server was compromised" into "the entire Convex
+deployment was compromised", which is a strictly larger blast radius than the
+data access the adapter actually needs.
+
+**Decision: the second option.** Ordinary mutations whose first act is to
+compare a dedicated `AUTH_ADAPTER_SECRET` in constant time. The plan originally
+preferred internal functions; the spike is why it does not any more.
+
+A dedicated secret rather than reusing `INTERNAL_API_KEY`: that one guards
+Convex calling *into* Next, and sharing one credential across both directions
+means a leak in either direction compromises both.
 
 - [ ] **Step 2: Implement the user and account functions**
 
