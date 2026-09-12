@@ -8,6 +8,7 @@
 
 import nodemailer, { type Transporter } from "nodemailer";
 import { retryAsync, isTransientSmtpError } from "@/lib/retry";
+import { resolveEmailMode, type EmailMode } from "./mode";
 
 export interface EmailPayload {
   to: string;
@@ -28,18 +29,13 @@ export interface EmailResult {
 
 let transport: Transporter | null = null;
 
-const isSmtpConfigured = () =>
-  Boolean(
-    process.env.SMTP_HOST &&
-    process.env.SMTP_PORT &&
-    process.env.SMTP_USER &&
-    process.env.SMTP_PASS,
-  );
+const currentMode = (): EmailMode =>
+  resolveEmailMode(process.env, process.env.NODE_ENV);
 
 const getTransport = (): Transporter | null => {
   if (transport) return transport;
 
-  if (!isSmtpConfigured()) {
+  if (currentMode() !== "send") {
     console.warn(
       "[email/transport] SMTP credentials are not configured. Emails will be logged but NOT sent.",
     );
@@ -78,7 +74,25 @@ export const sendEmail = async (payload: EmailPayload): Promise<EmailResult> => 
   const mailer = getTransport();
 
   if (!mailer) {
-    // Dev-mode fallback: log instead of sending
+    // Production with no usable SMTP configuration. This used to report success
+    // and log, in every environment — which meant a missing deploy secret
+    // produced a silent outage rather than an error: the app said the mail was
+    // sent, nothing arrived, and nothing distinguished it from a working
+    // system. Password resets and magic links go through here now, so that
+    // failure mode locks people out of the product invisibly.
+    if (currentMode() === "misconfigured") {
+      console.error(
+        "[email/transport] SMTP is not configured in production. Refusing to report a send that did not happen.",
+        { to: payload.to, subject: payload.subject },
+      );
+
+      return {
+        success: false,
+        error: "Email transport is not configured",
+      };
+    }
+
+    // Development convenience: log instead of sending.
     console.info("[email/transport] DEV-MODE email (not sent):", {
       to: payload.to,
       subject: payload.subject,
@@ -150,7 +164,7 @@ export const verifyTransport = async (): Promise<{
   verified: boolean;
   error?: string;
 }> => {
-  if (!isSmtpConfigured()) {
+  if (currentMode() !== "send") {
     return { configured: false, verified: false, error: "SMTP not configured." };
   }
 
