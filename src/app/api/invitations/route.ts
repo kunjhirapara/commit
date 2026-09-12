@@ -5,6 +5,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { getValidatedServerEnv } from "@/lib/env";
 import { sendEmail, resolveEmailTemplate } from "@/lib/email";
+import { absoluteUrl } from "@/lib/siteUrl";
 
 const ALLOWED_ROLES = [
   "interviewer",
@@ -108,9 +109,11 @@ export async function POST(req: NextRequest) {
       inviterName:
         inviter?.fullName ?? inviter?.firstName ?? inviter?.primaryEmailAddress?.emailAddress ?? "A team admin",
       invitedRole: invitation.role,
-      invitationUrl: `${env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/accept-invitation?token=${encodeURIComponent(invitation.invitationToken)}`,
+      invitationUrl: absoluteUrl(
+        `/accept-invitation?token=${encodeURIComponent(invitation.invitationToken)}`,
+      ),
       invitationExpiresAt: invitation.expiresAt,
-      settingsUrl: `${env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/settings`,
+      settingsUrl: absoluteUrl("/settings"),
     });
 
     if (!template) {
