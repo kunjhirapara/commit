@@ -10,6 +10,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { sendEmail, resolveEmailTemplate } from "@/lib/email";
+import { absoluteUrl } from "@/lib/siteUrl";
 import type { EmailTemplateData } from "@/lib/email";
 import { isServerFeatureEnabled } from "@/lib/featureFlags";
 import {
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
     timezone: rest.timezone,
     reason: rest.reason,
     interviewUrl: rest.interviewUrl,
-    settingsUrl: rest.settingsUrl ?? `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/settings`,
+    settingsUrl: rest.settingsUrl ?? absoluteUrl("/settings"),
     metadata: rest.metadata,
   };
 
