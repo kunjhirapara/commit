@@ -18,6 +18,7 @@
     "@clerk/nextjs": "^6.0.0",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
+    "@node-rs/argon2": "^2.2.1",
     "@stream-io/node-sdk": "^0.7.52",
     "@stream-io/video-react-sdk": "^1.35.1",
     "class-variance-authority": "^0.7.1",
