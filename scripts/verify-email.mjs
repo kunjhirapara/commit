@@ -95,7 +95,15 @@ const main = async () => {
   const spf = txt.filter((r) => r.toLowerCase().startsWith("v=spf1"));
 
   if (spf.length === 0) {
-    bad(`no SPF record on ${domain} — receivers cannot confirm the relay may send as you.`);
+    // A warning rather than a failure, because it is genuinely optional for
+    // some setups: Brevo on a shared IP authenticates the envelope sender
+    // against its own domain and asks for an SPF include only on a dedicated
+    // IP. Calling that a problem would make this script cry wolf on a correctly
+    // configured domain, which is how people learn to ignore it.
+    warn(
+      `no SPF record on ${domain}. Required by most relays, but not by Brevo on a shared IP — ` +
+        `confirm against your provider's own instructions rather than assuming.`,
+    );
   } else if (spf.length > 1) {
     // This is the classic self-inflicted outage: two SPF records is not "more
     // SPF", it is a permerror, and receivers treat the domain as unauthenticated.
