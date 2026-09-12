@@ -109,6 +109,17 @@ export default defineSchema({
     role: userRole,
     customRoleId: v.optional(v.id("roleDefinitions")),
     clerkId: v.string(),
+    // Populated by convex/migrations/authBackfill.ts. Optional because Convex
+    // validates the schema against existing rows, which do not carry it yet —
+    // clerkId therefore stays required until the backfill has run everywhere.
+    legacyClerkId: v.optional(v.string()),
+    // Stream.io identity, stored explicitly rather than reusing whichever id
+    // happens to be current. Stream keys call and recording history by the
+    // user_id we passed it, which was the Clerk id; migrating users to a new
+    // identifier without carrying this would silently cost every migrated user
+    // access to their own past recordings.
+    streamUserId: v.optional(v.string()),
+    emailVerified: v.optional(v.number()),
     skills: v.optional(v.array(v.string())),
     availabilitySummary: v.optional(v.string()),
     permissionTags: v.optional(v.array(v.string())),
@@ -118,6 +129,9 @@ export default defineSchema({
     hasCompletedOnboarding: v.optional(v.boolean()),
   })
     .index("by_clerk_id", ["clerkId"])
+    // Kept through the migration and afterwards for support lookups: a user who
+    // reports a problem against an old audit-log entry is identified by Clerk id.
+    .index("by_legacy_clerk_id", ["legacyClerkId"])
     .index("by_email", ["email"])
     // Dashboards need "every interviewer" and "every candidate". Without this
     // they collected the whole table and filtered in JS, which is fine at ten
@@ -130,6 +144,45 @@ export default defineSchema({
       searchField: "name",
       filterFields: ["role"],
     }),
+
+  // --- Auth.js tables -------------------------------------------------------
+  // Owned by the Auth.js adapter (src/lib/auth/convexAdapter.ts) and written
+  // only by convex/authAdapter.ts. Nothing else should touch these three.
+
+  // OAuth identities linked to a user. Field names are snake_case because the
+  // Auth.js Adapter interface defines them that way and the adapter passes them
+  // straight through; renaming them here would mean mapping on every read.
+  authAccounts: defineTable({
+    userId: v.id("users"),
+    type: v.string(),
+    provider: v.string(),
+    providerAccountId: v.string(),
+    refresh_token: v.optional(v.string()),
+    access_token: v.optional(v.string()),
+    expires_at: v.optional(v.number()),
+    token_type: v.optional(v.string()),
+    scope: v.optional(v.string()),
+    id_token: v.optional(v.string()),
+    session_state: v.optional(v.string()),
+  })
+    .index("by_provider_account", ["provider", "providerAccountId"])
+    .index("by_user", ["userId"]),
+
+  // Magic-link and email-verification tokens. Only a hash is stored: a leaked
+  // database snapshot must not hand the reader working sign-in links.
+  authVerificationTokens: defineTable({
+    identifier: v.string(),
+    tokenHash: v.string(),
+    expires: v.number(),
+  }).index("by_identifier_token", ["identifier", "tokenHash"]),
+
+  // Password hashes live here rather than on `users` so that no existing user
+  // query can return one by accident — several of them return whole documents.
+  authCredentials: defineTable({
+    userId: v.id("users"),
+    passwordHash: v.string(),
+    updatedAt: v.number(),
+  }).index("by_user", ["userId"]),
 
   roleDefinitions: defineTable({
     name: v.string(),
