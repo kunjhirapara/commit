@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+import { absoluteUrl } from "@/lib/siteUrl";
 
 export default function robots(): MetadataRoute.Robots {
   return {
@@ -22,6 +22,6 @@ export default function robots(): MetadataRoute.Robots {
         "/call-ended",
       ],
     },
-    sitemap: `${siteUrl}/sitemap.xml`,
+    sitemap: absoluteUrl("/sitemap.xml"),
   };
 }

@@ -6,6 +6,7 @@ import ConvexClerkProvider from "@/components/providers/ConvexClerkProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
 import { getValidatedServerEnv } from "@/lib/env";
+import { siteUrl } from "@/lib/siteUrl";
 
 /**
  * The body face, self-hosted at build time.
@@ -44,7 +45,6 @@ const geistMono = localFont({
   display: "swap",
 });
 
-const siteUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 const siteDescription =
   "Run technical interviews end to end: HD video, a shared code editor, and a sandboxed runner for JavaScript, Python and Java — plus structured scorecards for the debrief.";
 
