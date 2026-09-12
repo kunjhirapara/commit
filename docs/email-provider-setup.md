@@ -1,7 +1,24 @@
 # Email provider setup
 
-**Status:** ready to execute; blocked only on creating the Brevo account.
+**Status:** working end to end on a throwaway SMTP account; swap in Brevo credentials for production.
 **Date:** 2026-09-12
+
+## Current state
+
+Both send paths are configured and proven, against **Ethereal** — a real SMTP
+server that needs no signup and *captures* messages instead of delivering them.
+It exists to prove the plumbing, not to serve production: nothing it accepts
+reaches a real inbox.
+
+| | Configured | Proven by |
+| --- | --- | --- |
+| Next.js (`.env.local`) | yes | `scripts/verify-email.mjs --send` accepted a message |
+| Convex (dev deployment) | yes | `checkEmailHealth` → `verified: true`; a role-invitation email sent and accepted |
+
+Going live is therefore a credential swap, not an integration: replace
+`SMTP_HOST`, `SMTP_USER` and `SMTP_PASS` in both places with Brevo's, publish
+two DNS records, and re-run the same two verification commands. Everything else
+is already in place and tested.
 
 ## Why this exists
 
@@ -115,9 +132,21 @@ specifically, rather than mixed in with Zoho's.
 Brevo: **SMTP & API → SMTP**. The login is your Brevo account email; the
 password is the generated **SMTP key**, not your account password.
 
-### 5. Set the environment
+### 5. Set the environment — in **two** places
 
-Locally in `.env.local`, and as deploy secrets in production:
+This is the step most likely to be half-done, because the app sends mail from
+two runtimes that do not share configuration:
+
+- `src/lib/email/transport.ts` runs in **Next.js** and serves the API routes.
+- `convex/notifications/emailActions.ts` runs on **Convex's servers** and has
+  its own nodemailer transport. Convex functions cannot read Next's
+  environment.
+
+Setting only one gives a system that appears to work while half its mail
+silently fails — and the Convex half is the one that sends interview
+invitations and reminders.
+
+**Next.js** — `.env.local` locally, deploy secrets in production:
 
 ```
 SMTP_HOST=smtp-relay.brevo.com
@@ -129,6 +158,18 @@ SMTP_FROM_NAME=Commit
 SMTP_FROM_EMAIL=notifications@mail.commit.kunjdeveloper.com
 ```
 
+**Convex** — the same seven values, on each deployment:
+
+```bash
+npx convex env set SMTP_HOST smtp-relay.brevo.com
+npx convex env set SMTP_PORT 587
+npx convex env set SMTP_SECURE false
+npx convex env set SMTP_USER <your brevo account email>
+npx convex env set SMTP_PASS <the generated SMTP key>
+npx convex env set SMTP_FROM_NAME Commit
+npx convex env set SMTP_FROM_EMAIL notifications@mail.commit.kunjdeveloper.com
+```
+
 Port 587 with `SMTP_SECURE=false` is correct — that is STARTTLS, which upgrades
 to TLS after connecting. Setting `true` on 587 makes the handshake fail. Use
 `true` only with port 465.
@@ -136,15 +177,23 @@ to TLS after connecting. Setting `true` on 587 makes the handshake fail. Use
 **No application code changes.** `src/lib/email/transport.ts` speaks plain SMTP
 through nodemailer, so the provider is entirely a matter of configuration.
 
-### 6. Verify
+### 6. Verify — again, both runtimes
 
 ```bash
+# Next.js side: DNS authentication, credentials, and a real message.
 node scripts/verify-email.mjs
 node scripts/verify-email.mjs --send you@example.com
+
+# Convex side: its own transport, which the script above cannot reach.
+npx convex run notifications/emailActions:checkEmailHealth '{}'
+# expect: { "configured": true, "service": "email", "verified": true }
 ```
 
-The first checks SPF, DKIM and DMARC for the sending domain and confirms the
-credentials authenticate. The second sends a real message.
+The whole path was exercised this way against a throwaway SMTP account before
+any provider was chosen, so both commands are known to work: `checkEmailHealth`
+returned `verified: true`, and a role-invitation email sent through
+`sendRoleInvitationEmail` was accepted with a message id on the configured
+sending domain.
 
 Then open the delivered message and check its headers show `dkim=pass` and
 `spf=pass`. Nothing automated can confirm inbox placement — only a human
