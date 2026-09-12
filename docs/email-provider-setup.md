@@ -1,6 +1,7 @@
 # Email provider setup
 
-**Status:** working end to end on a throwaway SMTP account; swap in Brevo credentials for production.
+**Provider:** Resend (free tier)
+**Status:** working end to end on a throwaway SMTP account; swap in Resend credentials for production.
 **Date:** 2026-09-12
 
 ## Current state
@@ -15,10 +16,9 @@ reaches a real inbox.
 | Next.js (`.env.local`) | yes | `scripts/verify-email.mjs --send` accepted a message |
 | Convex (dev deployment) | yes | `checkEmailHealth` → `verified: true`; a role-invitation email sent and accepted |
 
-Going live is therefore a credential swap, not an integration: replace
-`SMTP_HOST`, `SMTP_USER` and `SMTP_PASS` in both places with Brevo's, publish
-two DNS records, and re-run the same two verification commands. Everything else
-is already in place and tested.
+Going live is therefore a credential swap, not an integration: replace three
+values in both places, publish the DNS records Resend generates, and re-run the
+same two verification commands.
 
 ## Why this exists
 
@@ -32,22 +32,41 @@ SendGrid was the obvious choice until [Twilio retired its free plan on 27 May
 2025](https://www.twilio.com/en-us/changelog/sendgrid-free-plan). New accounts
 get a 60-day trial and then $19.95/month.
 
-## What was chosen, and what was rejected
+## Why Resend, and what it costs us
 
-**Brevo**, free tier, over SMTP.
-
-| Option | Free tier | Why not chosen |
+| Option | Free tier | Verdict |
 | --- | --- | --- |
-| **Brevo** | 300/day (~9,000/mo) | **Chosen.** Highest daily ceiling of the free tiers. |
-| Resend | 3,000/mo, 100/day cap | Better developer experience, but the 100/day cap throttles the migration's one-time password-reset mail-out. Reconsider if the user count stays under ~80. |
-| SMTP2GO | 1,000/mo | Only five days of reporting history on free. |
-| MailerSend | 500/mo | Cut from 3,000 in December 2025. Too tight. |
-| Amazon SES | ~$0.10/1,000 | Not free, though ~$0.30/month at this volume. Best deliverability, worst setup effort. Worth revisiting at scale. |
+| **Resend** | 3,000/mo, **100/day cap**, 1 domain | **Chosen.** No branding on sent mail, transactional-only infrastructure, better API. |
+| Brevo | 300/day (~9,000/mo) | Higher ceiling, but stamps its own branding on free-plan mail and shares IP pools with marketing senders. |
+| SMTP2GO | 1,000/mo | Five days of reporting history on free. |
+| MailerSend | 500/mo | Cut from 3,000 in December 2025. |
+| Amazon SES | ~$0.10/1,000 | Not free, ~$0.30/month at this volume. Best deliverability, worst setup. Revisit at scale. |
 
-The daily cap is the deciding factor, and it is specific to us: Task 15 of the
-Auth.js migration emails *every existing user* a set-your-password link at once,
-because Clerk password hashes cannot be exported. A 100/day cap turns that into
-a multi-day dribble during which some users cannot sign in at all.
+Brevo was the initial pick, on the strength of its 300/day ceiling against the
+Auth.js migration's one-time password-reset mail-out. That reasoning was too
+narrow: **the burst is one-time, the branding is permanent.** A password reset
+carrying a third-party logo reads as less trustworthy exactly when trust matters
+most, since users are already primed to treat unexpected auth mail as phishing.
+
+Resend's shared IP pools also carry only transactional mail. Brevo's carry
+marketing blasts too, and a noisy neighbour on a shared IP affects everyone on it.
+
+### The 100/day cap, and how to survive the migration
+
+3,000/month ÷ 30 is exactly 100/day, so the daily cap is not headroom on top of
+the monthly figure — it *is* the monthly figure spread evenly. You cannot burst.
+
+Task 15 of the Auth.js migration emails every existing user a set-your-password
+link at once, because Clerk password hashes cannot be exported. Two ways through:
+
+1. **Stagger it** over two or three days. It is a migration, not an outage, and
+   OAuth and magic-link users need no reset at all.
+2. **Pay for one month** of Resend Pro ($20), then drop back to free.
+
+Both cost less than permanently branding every auth email.
+
+**Also know:** the free tier allows exactly one verified sending domain. Wanting
+separate staging and production senders moves you to Pro on its own.
 
 ### Self-hosting was considered and rejected
 
@@ -63,7 +82,7 @@ The VM could run Postfix. For outbound transactional mail it is the wrong tool:
 - It is permanent work: PTR, DKIM rotation, DMARC reports, blocklist
   monitoring, bounce handling.
 
-The saving is roughly zero, because the free tiers cover this volume. The cost
+The saving is roughly zero, because the free tier covers this volume. The cost
 is an ongoing liability against the domain's reputation.
 
 ## Current DNS (verified 2026-09-12)
@@ -77,7 +96,7 @@ is an ongoing liability against the domain's reputation.
 | DKIM | `zmail._domainkey` present | Zoho's selector — note it is `zmail`, not `zoho` |
 | DMARC | `v=DMARC1; p=none; rua=...@gmail.com; sp=none` | Monitoring only |
 
-`commit.kunjdeveloper.com` has no SPF, DKIM or DMARC of its own.
+`commit.kunjdeveloper.com` has no mail records of its own.
 
 **Human mailboxes are already solved.** Zoho covers `you@kunjdeveloper.com`.
 Nothing below changes that, and app mail must not be sent through those mailbox
@@ -87,50 +106,58 @@ the reputation of your personal correspondence too.
 
 ## The plan
 
-Send app mail as **`notifications@mail.commit.kunjdeveloper.com`** — a dedicated
-subdomain, so app reputation and human-mail reputation are independent.
+Send app mail as **`notifications@commit.kunjdeveloper.com`** — the app's own
+subdomain, which Resend also recommends over an apex domain, so that app
+reputation and human-mail reputation stay independent.
 
-### 1. Create the Brevo account
+### 1. Create the Resend account and add the domain
 
-Sign up at brevo.com and verify the address. This step cannot be automated; it
-needs a real mailbox and account ownership.
+Sign up at resend.com, then **Domains → Add Domain** and enter
+`commit.kunjdeveloper.com`. This step cannot be automated; it needs a real
+mailbox and account ownership.
 
-### 2. Authenticate the sending subdomain
+### 2. Publish the DNS records Resend generates
 
-In Brevo: **Senders, Domains & Dedicated IPs → Domains → Add a domain**, and
-enter `mail.commit.kunjdeveloper.com`.
-
-Brevo then shows two records to publish. Both values are generated per account,
-so they cannot be written here in advance:
-
-| Type | Name | Value |
-| --- | --- | --- |
-| TXT | `mail.commit.kunjdeveloper.com` | `brevo-code:<generated>` |
-| TXT | `mail._domainkey.mail.commit.kunjdeveloper.com` | `v=DKIM1; k=rsa; p=<generated>` |
-
-Add them in Cloudflare DNS, **proxy disabled** (TXT records are never proxied).
-
-**No SPF change is required.** Brevo authenticates the envelope sender against
-its own domain on shared IPs, and only asks for an SPF include when you move to
-a dedicated IP. The existing `include:zoho.in` record stays exactly as it is.
-
-`mail._domainkey` was checked and is currently unused on this domain, so it does
-not collide with Zoho's `zmail._domainkey`.
-
-### 3. Add a DMARC record for the subdomain (optional but worth it)
+Resend shows the exact records once the domain is added. The values are
+account- and region-specific, so they cannot be written here in advance, but
+the shape is:
 
 | Type | Name | Value |
 | --- | --- | --- |
-| TXT | `_dmarc.mail.commit.kunjdeveloper.com` | `v=DMARC1; p=none; rua=mailto:kunjhirapara2@gmail.com` |
+| MX | `send.commit.kunjdeveloper.com` | `feedback-smtp.<region>.amazonses.com`, priority 10 |
+| TXT | `send.commit.kunjdeveloper.com` | `v=spf1 include:amazonses.com ~all` |
+| TXT | `resend._domainkey.commit.kunjdeveloper.com` | `p=<generated key>` |
 
-The root record's `sp=none` already covers subdomains permissively, so this
-changes no delivery behaviour. What it buys is reports scoped to app mail
-specifically, rather than mixed in with Zoho's.
+Add them in Cloudflare, **proxy disabled** (MX and TXT are never proxied).
 
-### 4. Get the SMTP key
+**Your existing SPF record is not touched.** This is worth being explicit about,
+because merging SPF records wrongly is the classic way to break a working
+domain. Resend's SPF goes on `send.commit.kunjdeveloper.com`, which has no SPF
+record today — it is a new record on a new name, not an edit to the root's
+`include:zoho.in`. SPF is per-name, and a domain may have exactly one SPF record
+*per name*; two on the same name is a permanent error, not a longer list.
 
-Brevo: **SMTP & API → SMTP**. The login is your Brevo account email; the
-password is the generated **SMTP key**, not your account password.
+Likewise the new MX on `send.commit.kunjdeveloper.com` does not affect the Zoho
+MX on the root: different names, independent records.
+
+Resend puts SPF on that subdomain rather than the From domain because SPF is
+checked against the envelope return-path, not the visible From address. This is
+also why `scripts/verify-email.mjs` checks both names.
+
+### 3. Add a DMARC record for the sending domain (optional)
+
+| Type | Name | Value |
+| --- | --- | --- |
+| TXT | `_dmarc.commit.kunjdeveloper.com` | `v=DMARC1; p=none; rua=mailto:kunjhirapara2@gmail.com` |
+
+Resend does not require it. The root record's `sp=none` already covers
+subdomains permissively, so this changes no delivery behaviour. What it buys is
+reports scoped to app mail rather than mixed in with Zoho's.
+
+### 4. Create an API key
+
+Resend: **API Keys → Create API Key**, with send permission. It begins `re_`.
+This doubles as the SMTP password; there is no separate SMTP credential.
 
 ### 5. Set the environment — in **two** places
 
@@ -149,33 +176,32 @@ invitations and reminders.
 **Next.js** — `.env.local` locally, deploy secrets in production:
 
 ```
-SMTP_HOST=smtp-relay.brevo.com
+SMTP_HOST=smtp.resend.com
 SMTP_PORT=587
 SMTP_SECURE=false
-SMTP_USER=<your brevo account email>
-SMTP_PASS=<the generated SMTP key>
+SMTP_USER=resend
+SMTP_PASS=<your re_ API key>
 SMTP_FROM_NAME=Commit
-SMTP_FROM_EMAIL=notifications@mail.commit.kunjdeveloper.com
+SMTP_FROM_EMAIL=notifications@commit.kunjdeveloper.com
 ```
+
+`SMTP_USER` is the literal string `resend`, not an email address. Port 587 is
+STARTTLS, so `SMTP_SECURE=false`; use `true` only with 465 or 2465.
 
 **Convex** — the same seven values, on each deployment:
 
 ```bash
-npx convex env set SMTP_HOST smtp-relay.brevo.com
+npx convex env set SMTP_HOST smtp.resend.com
 npx convex env set SMTP_PORT 587
 npx convex env set SMTP_SECURE false
-npx convex env set SMTP_USER <your brevo account email>
-npx convex env set SMTP_PASS <the generated SMTP key>
+npx convex env set SMTP_USER resend
+npx convex env set SMTP_PASS <your re_ API key>
 npx convex env set SMTP_FROM_NAME Commit
-npx convex env set SMTP_FROM_EMAIL notifications@mail.commit.kunjdeveloper.com
+npx convex env set SMTP_FROM_EMAIL notifications@commit.kunjdeveloper.com
 ```
 
-Port 587 with `SMTP_SECURE=false` is correct — that is STARTTLS, which upgrades
-to TLS after connecting. Setting `true` on 587 makes the handshake fail. Use
-`true` only with port 465.
-
-**No application code changes.** `src/lib/email/transport.ts` speaks plain SMTP
-through nodemailer, so the provider is entirely a matter of configuration.
+**No application code changes.** Both transports speak plain SMTP through
+nodemailer, so the provider is entirely a matter of configuration.
 
 ### 6. Verify — again, both runtimes
 
@@ -199,12 +225,15 @@ Then open the delivered message and check its headers show `dkim=pass` and
 `spf=pass`. Nothing automated can confirm inbox placement — only a human
 looking at a real inbox can.
 
+DNS propagation can take up to 24 hours. Warnings about missing SPF or DKIM
+before then are expected and disappear once the records resolve.
+
 ## Rollback
 
-Clear the `SMTP_*` variables. In production the app now refuses to send and
-reports failure rather than silently reporting success; in development it falls
-back to logging. The DNS records are inert once nothing sends through Brevo, and
-can be deleted at leisure.
+Clear the `SMTP_*` variables in both runtimes. In production the app now refuses
+to send and reports failure rather than silently reporting success; in
+development it falls back to logging. The DNS records are inert once nothing
+sends through Resend, and can be deleted at leisure.
 
 ## Related change
 

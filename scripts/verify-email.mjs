@@ -90,29 +90,50 @@ const main = async () => {
   console.log(`\nSending identity: ${fromEmail}\nDomain checked:   ${domain}\n`);
 
   // 1. SPF
+  //
+  // Checked on the From domain *and* on send.<domain>, because SPF is verified
+  // against the envelope return-path rather than the visible From address, and
+  // several providers put the return-path on a subdomain. Resend is one: mail
+  // from notifications@example.com returns to send.example.com, so the SPF
+  // record lives there and looking only at the From domain reports a false
+  // alarm on a correctly configured setup.
   console.log("SPF");
-  const txt = await resolveTxt(domain);
-  const spf = txt.filter((r) => r.toLowerCase().startsWith("v=spf1"));
+  const spfOn = async (name) =>
+    (await resolveTxt(name)).filter((r) => r.toLowerCase().startsWith("v=spf1"));
 
-  if (spf.length === 0) {
-    // A warning rather than a failure, because it is genuinely optional for
-    // some setups: Brevo on a shared IP authenticates the envelope sender
-    // against its own domain and asks for an SPF include only on a dedicated
-    // IP. Calling that a problem would make this script cry wolf on a correctly
-    // configured domain, which is how people learn to ignore it.
+  const spf = await spfOn(domain);
+  const returnPathDomain = `send.${domain}`;
+  const returnPathSpf = await spfOn(returnPathDomain);
+
+  if (returnPathSpf.length > 0) {
+    ok(`${returnPathDomain} — ${returnPathSpf[0]}`);
+    if (spf.length === 0) {
+      console.log(`           (none on ${domain} itself, which is expected for Resend)`);
+    }
+  }
+
+  if (spf.length === 0 && returnPathSpf.length === 0) {
+    // A warning rather than a failure: it is genuinely optional for some
+    // setups. Brevo on a shared IP authenticates the envelope sender against
+    // its own domain and asks for an include only on a dedicated IP. A checker
+    // that cries wolf on a correct configuration is one people stop reading.
     warn(
-      `no SPF record on ${domain}. Required by most relays, but not by Brevo on a shared IP — ` +
-        `confirm against your provider's own instructions rather than assuming.`,
+      `no SPF record on ${domain} or ${returnPathDomain}. Required by most relays ` +
+        `(Resend included), but not by Brevo on a shared IP — check your provider's instructions.`,
     );
   } else if (spf.length > 1) {
     // This is the classic self-inflicted outage: two SPF records is not "more
     // SPF", it is a permerror, and receivers treat the domain as unauthenticated.
     bad(`${spf.length} SPF records on ${domain}. More than one is a permanent error — merge them into a single record.`);
-  } else {
-    ok(spf[0]);
+  } else if (spf.length === 1) {
+    ok(`${domain} — ${spf[0]}`);
     if (/-all\s*$/.test(spf[0])) {
       warn("policy is -all (hard fail). Correct once every sender is listed; locks out any you forgot.");
     }
+  }
+
+  if (returnPathSpf.length > 1) {
+    bad(`${returnPathSpf.length} SPF records on ${returnPathDomain}. More than one is a permanent error.`);
   }
 
   // 2. DKIM
