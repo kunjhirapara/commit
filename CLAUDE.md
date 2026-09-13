@@ -92,8 +92,8 @@ This is the most common source of silent bugs.
 | | |
 |---|---|
 | `users._id` | Convex document id. What an Auth.js session subject carries. |
-| `users.clerkId` | Historical app id. Referenced by `interviewerIds`, `candidateId`, `auditLogs.actorClerkId`. For Auth.js-created users it equals `_id`. |
-| `users.streamUserId` | The id **Stream** knows them by — always the original Clerk id. |
+| `users.clerkId` | The **internal user id**, despite the name. Referenced as a plain `v.string()` by `interviewerIds`, `candidateId`, `auditLogs.actorClerkId`. For Auth.js-created users it equals `_id`; for the accounts that predate the migration it is still their original Clerk id. |
+| `users.streamUserId` | The id **Stream** knows them by — whatever it was when their first call was created. |
 
 Anything talking to Stream must go through `resolveStreamUserId`
 (`src/lib/auth/streamIdentity.ts`). Passing the session id instead does not
@@ -101,9 +101,14 @@ error: it mints a valid token for a user Stream has never seen, and their calls
 and recordings are simply absent.
 
 `convex/lib/subjectResolution.ts` is the one place that turns a token subject
-into a user row, and it tries the document id, then `by_clerk_id`, then
-`by_legacy_clerk_id`, because a token may come from either provider at any point
-in the migration.
+into a user row. It is a single `db.get` on the document id: Auth.js is the only
+provider in `convex/auth.config.ts`, so that is the only thing a subject can be.
+The `by_clerk_id` / `by_legacy_clerk_id` fallbacks went with Clerk — no token in
+existence carries a Clerk id, so those reads could only ever miss.
+
+`clerkId` is deliberately **not** dropped. It stopped being an authentication
+identifier when Clerk was removed, but it is still the id the rest of the
+database references, so renaming it is a data migration of its own.
 
 ### `convex/lib/*` exists so Convex logic can be tested
 
@@ -217,5 +222,4 @@ usually in a hurry.
   behind them.
 - `docs/superpowers/plans/2026-09-12-custom-auth.md` — the Clerk→Auth.js
   migration, including a list of where the plan turned out to be wrong.
-- `README.md` — local setup and Docker runtime images. Its auth section still
-  describes Clerk and is out of date.
+- `README.md` — local setup and Docker runtime images.

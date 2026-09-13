@@ -15,7 +15,6 @@
     "ci:validate": "npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
-    "@clerk/nextjs": "^6.0.0",
     "@hookform/resolvers": "^5.2.2",
     "@monaco-editor/react": "^4.7.0",
     "@node-rs/argon2": "^2.2.1",
@@ -40,7 +39,6 @@
     "react-player": "^3.4.0",
     "react-resizable-panels": "^4.10.0",
     "sonner": "^2.0.7",
-    "svix": "^1.90.0",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.3.6"

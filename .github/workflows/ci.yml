@@ -12,10 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       NEXT_PUBLIC_CONVEX_URL: https://example.convex.cloud
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_placeholder
       NEXT_PUBLIC_STREAM_API_KEY: stream_test_placeholder
       STREAM_SECRET_KEY: stream_secret_placeholder
-      CLERK_WEBHOOK_SECRET: webhook_secret_placeholder
       SMTP_HOST: smtp.example.com
       SMTP_PORT: "587"
       SMTP_USER: smtp-user
@@ -41,5 +39,6 @@ jobs:
 
       - name: Unit tests
         run: npm run test
-      # Production build is validated in deploy.yml with real secrets;
-      # running it here with placeholder keys fails Clerk's prerender validation.
+      # Production build is validated in deploy.yml with real secrets. It is not
+      # repeated here: prerendering reaches code that reads AUTH_* at request
+      # time, and placeholder values make it fail for reasons CI cannot act on.
