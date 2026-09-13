@@ -423,3 +423,36 @@ export const signInLinkTemplate = (params: {
     html: wrapLayout(`Sign in to ${BRAND_NAME}`, body),
   };
 };
+
+/**
+ * The password-reset email.
+ *
+ * Like the sign-in link, this is a credential rather than a notification, so
+ * the same two rules apply: the link is a button with no plain-text URL beside
+ * it, and the copy says what to do if the mail was unexpected.
+ *
+ * It says a little more than the sign-in one, because a reset request someone
+ * did not make is a stronger signal that their address is being targeted — and
+ * because the reassurance is concrete: the existing password keeps working
+ * until this link is used.
+ */
+export const passwordResetTemplate = (params: {
+  url: string;
+  expiresInMinutes: number;
+}): EmailTemplate => {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${BRAND_DARK};">Reset your password</h1>
+    <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:${TEXT_COLOR};">
+      Use the button below to choose a new password. The link expires in ${escapeHtml(String(params.expiresInMinutes))} minutes and can only be used once.
+    </p>
+    <div style="text-align:center;margin:28px 0 8px;">${ctaButton("Choose a new password", params.url)}</div>
+    <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:${MUTED_COLOR};">
+      If you did not ask to reset your password, you can ignore this email. Your current password keeps working and nothing changes until this link is used.
+    </p>
+  `;
+
+  return {
+    subject: `Reset your ${BRAND_NAME} password`,
+    html: wrapLayout(`Reset your ${BRAND_NAME} password`, body),
+  };
+};

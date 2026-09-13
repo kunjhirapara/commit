@@ -1,5 +1,7 @@
 import { hash, verify } from "@node-rs/argon2";
 
+import { MIN_PASSWORD_LENGTH } from "./passwordPolicy.ts";
+
 /**
  * Password hashing.
  *
@@ -10,12 +12,11 @@ import { hash, verify } from "@node-rs/argon2";
  */
 
 /**
- * Twelve, because length beats composition rules: a long passphrase is both
- * stronger and easier to remember than a short string with a symbol bolted on.
- * Enforced in `hashPassword` rather than only in the form, so a caller that
- * skips the form cannot store a weak password.
+ * Re-exported so server code can import the whole password policy from here,
+ * while the sign-up form imports the constant from ./passwordPolicy.ts without
+ * dragging @node-rs/argon2 into the browser bundle.
  */
-export const MIN_PASSWORD_LENGTH = 12;
+export { MIN_PASSWORD_LENGTH };
 
 export const hashPassword = async (plain: string): Promise<string> => {
   if (plain.length < MIN_PASSWORD_LENGTH) {

@@ -79,6 +79,21 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/apple-icon"), true);
   });
 
+  it("exposes the reset-password page", () => {
+    // Everyone reaching it is unable to sign in by definition, so gating it
+    // sends them to /signin, whose only way out is a link back to here.
+    assert.equal(isPublicRoute("/reset-password"), true);
+  });
+
+  it("matches on a pathname, not a URL with a query string", () => {
+    // Documenting the contract rather than asserting a preference: callers pass
+    // req.nextUrl.pathname, which never carries a query. A caller that passed a
+    // full URL would find the reset link treated as private and redirected to
+    // /signin -- so if that ever happens, this is the test that explains why.
+    assert.equal(isPublicRoute("/reset-password?token=abc"), false);
+    assert.equal(isPublicRoute("/signin?redirect_url=%2Fdashboard"), false);
+  });
+
   it("exposes the Auth.js endpoints, which are used before anyone is signed in", () => {
     assert.equal(isPublicRoute("/api/auth/signin"), true);
     assert.equal(isPublicRoute("/api/auth/callback/google"), true);

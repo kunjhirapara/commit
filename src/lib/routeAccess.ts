@@ -60,6 +60,9 @@ export const PUBLIC_ROUTES: RegExp[] = [
   // declarations for pages that were never built.
   /^\/signin(\/|$)/,
   /^\/signup(\/|$)/,
+  // Everyone who reaches this is, by definition, unable to sign in. Gating it
+  // would redirect them to /signin, whose only way out is a link back to here.
+  /^\/reset-password(\/|$)/,
   /^\/terms(\/|$)/,
   /^\/privacy(\/|$)/,
   /^\/recording-disclosure(\/|$)/,
