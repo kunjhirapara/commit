@@ -143,6 +143,20 @@ jobs:
             fi
           }
 
+          # Whether the running image can actually sign anyone in. Absent on any
+          # image built before this check existed, which reads as empty and is
+          # deliberately not treated as a failure -- an old image has no opinion.
+          read_auth() {
+            if command -v jq >/dev/null 2>&1; then
+              # NOT `.integrations.auth // empty`. jq's // treats false as unset,
+              # so that form returns empty for auth:false -- the one case this
+              # check exists to catch -- and the gate would pass silently.
+              jq -r 'if (.integrations | has("auth")) then (.integrations.auth | tostring) else "" end' 2>/dev/null
+            else
+              sed -n 's/.*"auth":\(true\|false\).*/\1/p'
+            fi
+          }
+
           # Watchtower polls every WATCHTOWER_POLL_INTERVAL seconds (300 by
           # default), so 12 minutes gives it at least two chances plus time to
           # pull an ARM image and restart.
@@ -166,6 +180,21 @@ jobs:
 
             if [ -n "$live" ] && [ "$live" = "$expected" ]; then
               echo "::notice::Rollout confirmed after ${SECONDS}s — ${APP_URL} is serving ${expected}."
+
+              # Shipping is not the same as working, in the same way that
+              # publishing was not the same as shipping. An image that reaches
+              # the VM before the Auth.js variables are set boots, serves pages
+              # and reports healthy while nobody can log in -- so a green deploy
+              # here would be the second lie this job exists to stop telling.
+              auth="$(printf '%s' "$body" | read_auth)"
+
+              if [ "$auth" = "false" ]; then
+                echo "::error::${APP_URL} is serving ${expected}, but it cannot sign anyone in."
+                echo "::error::The Auth.js environment variables are not set on the VM. The container log names the missing ones; it does not publish them, because /api/health is public."
+                echo "::error::Set AUTH_SECRET, AUTH_ADAPTER_SECRET and AUTH_JWT_PRIVATE_KEY / AUTH_JWT_PUBLIC_KEY / AUTH_JWT_KID, then redeploy. AUTH_ADAPTER_SECRET must be the SAME value in the Convex environment."
+                exit 1
+              fi
+
               exit 0
             fi
 
