@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getValidatedServerEnv } from "@/lib/env";
+import { getAuthReadiness } from "@/lib/auth/readiness";
 import { getBuildVersion } from "@/lib/buildInfo";
 
 export async function GET() {
@@ -12,6 +13,27 @@ export async function GET() {
   try {
     const env = getValidatedServerEnv();
 
+    /**
+     * Whether anyone can actually sign in.
+     *
+     * Not covered by the flags below, all of which predate Auth.js. An image
+     * that switches sign-in to Auth.js can reach a deployment before anyone
+     * sets the Auth.js variables, and the result is an app that boots, serves
+     * pages and reports healthy while nobody can log in.
+     *
+     * Reported as a bare boolean on purpose. This endpoint is public — the
+     * container healthcheck polls it with no session — and publishing the names
+     * of the secrets a deployment is missing is a map for anyone probing it.
+     * The names go to the server log instead, where an operator can act on them.
+     */
+    const auth = getAuthReadiness(process.env);
+
+    if (!auth.ready) {
+      console.error(
+        `[health] auth is not configured; sign-in will fail. Missing: ${auth.missing.join(", ")}`,
+      );
+    }
+
     return NextResponse.json({
       status: "healthy",
       version,
@@ -21,6 +43,7 @@ export async function GET() {
         convex: !!env.NEXT_PUBLIC_CONVEX_URL,
         stream: !!env.NEXT_PUBLIC_STREAM_API_KEY && !!env.STREAM_SECRET_KEY,
         webhooks: !!env.CLERK_WEBHOOK_SECRET,
+        auth: auth.ready,
       },
     });
   } catch (error) {
