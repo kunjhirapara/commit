@@ -174,6 +174,8 @@ jobs:
           done
 
           echo "::error::The image was published but ${APP_URL} is still ${reported}, not ${expected}."
-          echo "::error::Nothing pulled it. Watchtower is defined in docker-compose.yml but has to be started once: in Portainer, Stacks -> commit -> Update the stack with 'Re-pull image' enabled, or run 'docker compose pull app && docker compose up -d app' on the VM."
-          echo "::error::Until that one-time redeploy happens, every merge will build green and reach nobody."
+          echo "::error::Nothing pulled it. Watchtower is defined in docker-compose.yml but has to be created once, and naming a single service will NOT create it: 'docker compose up -d app' touches app alone, and Watchtower is not one of its dependencies. That ships this commit by hand and leaves the next merge stuck in exactly the same way."
+          echo "::error::To fix the cause, on the VM: 'docker compose pull && docker compose up -d' with no service name. Or in Portainer, Stacks -> commit -> Update the stack with 'Re-pull image' enabled."
+          echo "::error::Either one recreates every container whose definition has drifted, not just app, so a live interview call will be dropped — pick a quiet moment."
+          echo "::error::Then confirm with 'docker ps --filter name=commit-watchtower'. Until that container is running, every merge will build green and reach nobody."
           exit 1
