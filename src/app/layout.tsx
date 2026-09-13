@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
-import ConvexClerkProvider from "@/components/providers/ConvexClerkProvider";
+import ConvexAuthProvider from "@/components/providers/ConvexAuthProvider";
 import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
 import { getValidatedServerEnv } from "@/lib/env";
@@ -97,7 +97,7 @@ export default function RootLayout({
   getValidatedServerEnv();
 
   return (
-    <ConvexClerkProvider>
+    <ConvexAuthProvider>
       <html lang="en" suppressHydrationWarning>
         <head>
           {/*
@@ -132,6 +132,6 @@ export default function RootLayout({
           <Toaster position="top-right" />
         </body>
       </html>
-    </ConvexClerkProvider>
+    </ConvexAuthProvider>
   );
 }

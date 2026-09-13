@@ -1,6 +1,11 @@
 "use server";
 
-import { auth, currentUser } from "@clerk/nextjs/server";
+import {
+  getCurrentConvexUser,
+  getCurrentUserId,
+  mintConvexTokenForCurrentUser,
+} from "@/lib/auth/serverSession";
+import { resolveStreamUserId } from "@/lib/auth/streamIdentity";
 import { StreamClient } from "@stream-io/node-sdk";
 import { fetchMutation, fetchQuery } from "convex/nextjs";
 import { api } from "../../convex/_generated/api";
@@ -21,11 +26,25 @@ export type AuthorizedRecording = {
 
 export const streamTokenProvider = async () => {
   try {
-    const user = await currentUser();
+    const user = await getCurrentConvexUser();
     getValidatedServerEnv();
 
     if (!user) {
       throw new Error("User not authenticated");
+    }
+
+    /**
+     * The id Stream knows them by, which is no longer the id we know them by.
+     *
+     * Stream keys calls and recordings by the user_id it was given, and that
+     * has always been the Clerk id. Passing the Convex document id here would
+     * mint a valid token for a user Stream has never seen: no error, just an
+     * empty list where their interviews used to be.
+     */
+    const streamUserId = resolveStreamUserId(user);
+
+    if (!streamUserId) {
+      throw new Error("User has no Stream identity");
     }
 
     const streamClient = new StreamClient(
@@ -33,7 +52,7 @@ export const streamTokenProvider = async () => {
       requireEnvVar("STREAM_SECRET_KEY"),
     );
 
-    return streamClient.generateUserToken({ user_id: user.id });
+    return streamClient.generateUserToken({ user_id: streamUserId });
   } catch (error) {
     logError("streamTokenProvider", error);
 
@@ -46,14 +65,14 @@ export const streamTokenProvider = async () => {
 
 export const listAuthorizedRecordings = async (): Promise<AuthorizedRecording[]> => {
   try {
-    const { userId, getToken } = await auth();
+    const userId = await getCurrentUserId();
     const env = getValidatedServerEnv();
 
     if (!userId) {
       throw new Error("User not authenticated");
     }
 
-    const token = await getToken({ template: "convex" });
+    const token = await mintConvexTokenForCurrentUser();
     const interviews = await fetchQuery(
       api.interviews.getAuthorizedRecordingInterviews,
       {},
@@ -123,14 +142,14 @@ export const endInterviewMeeting = async ({
   streamCallId: string;
 }) => {
   try {
-    const { userId, getToken } = await auth();
+    const userId = await getCurrentUserId();
     const env = getValidatedServerEnv();
 
     if (!userId) {
       throw new Error("User not authenticated");
     }
 
-    const token = await getToken({ template: "convex" });
+    const token = await mintConvexTokenForCurrentUser();
     const convexAuth = {
       token: token ?? undefined,
       url: env.NEXT_PUBLIC_CONVEX_URL,
@@ -192,7 +211,13 @@ export const endInterviewMeeting = async ({
     } else {
       const response = await streamCall.get();
       const createdById = response.call.created_by?.id;
-      const isStreamHost = createdById === userId || viewer.role === "admin";
+      // Compared against the Stream identity, not the session id. Stream
+      // recorded created_by as the Clerk id; under Auth.js `userId` is the
+      // Convex document id, so comparing that would never match and nobody
+      // could end an ad-hoc meeting they had started themselves.
+      const isStreamHost =
+        (createdById && createdById === resolveStreamUserId(viewer)) ||
+        viewer.role === "admin";
 
       if (!isStreamHost) {
         throw new Error("Only the host can end this meeting.");

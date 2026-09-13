@@ -1,7 +1,7 @@
-import { useUser } from "@clerk/nextjs";
-import { api } from "../../convex/_generated/api";
 import { useConvexAuth, useQuery } from "convex/react";
-import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
+
+import { api } from "../../convex/_generated/api";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { isRoleStateLoading } from "@/lib/auth/roleLoading";
 
 import {
@@ -21,17 +21,16 @@ const BASE_PERMISSIONS = ROLE_PERMISSIONS;
 export type AppPermission = Permission;
 
 export const useUserRole = () => {
-  // `isLoaded` matters as much as `user`: Clerk reports `user: undefined` both
-  // when nobody is signed in and while it is still initialising, and treating
-  // those the same is what made every refresh look like a denial.
-  const { user, isLoaded: isClerkLoaded } = useUser();
+  // "Loaded" matters as much as "signed in": treating "we have not been told
+  // yet" the same as "there is no user" is what made every refresh look like a
+  // denial. See isRoleStateLoading, which has that bug written down.
+  //
+  // No sync gating any more. Under Clerk the Convex row was created afterwards
+  // by a webhook, so this had to wait for it; the Auth.js adapter creates the
+  // row before the session exists.
+  const { userId, isLoaded: isSessionLoaded } = useCurrentUser();
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
-  const { status: syncStatus, clerkId: syncedClerkId } = useUserSyncStatus();
-  const isSyncedCurrentUser =
-    syncStatus === "ready" && syncedClerkId === user?.id;
-  const shouldWaitForSync =
-    !!user && (syncStatus === "loading" || syncStatus === "syncing");
-  const canQueryCurrentUser = !!user && isAuthenticated && isSyncedCurrentUser;
+  const canQueryCurrentUser = !!userId && isAuthenticated;
 
   const userData = useQuery(
     api.users.getCurrentUser,
@@ -47,10 +46,9 @@ export const useUserRole = () => {
    */
   const isOwner = userData?.isOwner === true;
   const isLoading = isRoleStateLoading({
-    isClerkLoaded,
-    hasUser: !!user,
+    isSessionLoaded,
+    hasUser: !!userId,
     isConvexAuthLoading,
-    isWaitingForSync: shouldWaitForSync,
     isQueryingCurrentUser: canQueryCurrentUser,
     hasUserData: userData !== undefined,
   });

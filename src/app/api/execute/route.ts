@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import {
+  getCurrentConvexUser,
+  mintConvexTokenForCurrentUser,
+} from "@/lib/auth/serverSession";
 import { fetchMutation } from "convex/nextjs";
 import { z } from "zod";
 import { api } from "@/../convex/_generated/api";
@@ -66,16 +69,23 @@ async function recordRunEvent(
 }
 
 export async function POST(req: NextRequest) {
-  const { userId, getToken } = await auth();
+  const user = await getCurrentConvexUser();
+  const userId = user?._id;
+
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
   // Practice mode is open to every signed-in user, so a verified email is the one
   // thing between "anyone on the internet" and "spawns containers on the host".
-  const user = await currentUser();
-  const emailVerified =
-    user?.primaryEmailAddress?.verification?.status === "verified";
+  //
+  // `emailVerified` is a timestamp the adapter writes when a provider asserts
+  // the address: Google and GitHub on sign-in, and the magic link by the act of
+  // being clicked. /api/auth/register deliberately does not set it, so someone
+  // who signed up with a password has to prove the address once -- by using a
+  // sign-in link -- before they can spawn a container. That is the gate working
+  // as described rather than an oversight.
+  const emailVerified = typeof user.emailVerified === "number";
 
   if (!emailVerified) {
     return NextResponse.json(
@@ -127,7 +137,7 @@ export async function POST(req: NextRequest) {
 
   const { language, code } = parsed.data;
 
-  const convexToken = await getToken({ template: "convex" });
+  const convexToken = await mintConvexTokenForCurrentUser();
 
   let release: (() => void) | undefined;
   try {

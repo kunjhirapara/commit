@@ -25,16 +25,24 @@
  *      moment anyone migrates, and the reason this is not simply the old query.
  *      Subject is their document id while `clerkId` is still `user_2...`, so
  *      only the id lookup finds them.
- *   4. A legacy user presenting a Clerk token, *after* the backfill. This is the
- *      one that is easy to miss and expensive to miss. The backfill moves the
- *      Clerk id to `legacyClerkId` and sets `clerkId` to the document id, so a
- *      Clerk subject then matches neither the id nor `by_clerk_id`. Without the
- *      third lookup, running the backfill signs out every Clerk user at once —
- *      and it would look like the backfill corrupted the table rather than like
- *      a missing index read.
+ *   4. A Clerk subject that is only present as `legacyClerkId`.
  *
- * The two fallbacks are removed with the `clerkId` column in the final task of
- * the migration. Until then, deleting either one strands the case it covers.
+ * Case 4 is defence rather than a live requirement, and the distinction is
+ * worth stating plainly because an earlier version of this comment got it
+ * wrong. The backfill (Task 14) copies `clerkId` into `legacyClerkId` and
+ * `streamUserId`; it does *not* rewrite `clerkId`, precisely because
+ * `interviewerIds`, `candidateId` and `auditLogs.actorClerkId` all reference
+ * that value across the database. So after the backfill, case 2 still resolves
+ * through `by_clerk_id` on its own.
+ *
+ * The third lookup earns its place at the other end of the migration: Task 16
+ * makes `clerkId` optional and then drops it, at which point `legacyClerkId` is
+ * the only remaining record of a Clerk id. It costs one indexed read on a path
+ * that has already missed twice, and it means the order of those two steps
+ * cannot strand anyone.
+ *
+ * Both fallbacks are removed with the `clerkId` column in the final task of the
+ * migration.
  */
 
 /**

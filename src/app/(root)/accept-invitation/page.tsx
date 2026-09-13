@@ -2,14 +2,13 @@
 
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useMutation } from "convex/react";
 import { toast } from "sonner";
 import { api } from "../../../../convex/_generated/api";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
-import { useUserSyncStatus } from "@/components/providers/UserSyncStatusProvider";
 
 const getInvitationErrorMessage = (error: unknown) => {
   const message =
@@ -50,8 +49,7 @@ export default function AcceptInvitationPage() {
 function AcceptInvitationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, isSignedIn } = useUser();
-  const { status: syncStatus, clerkId: syncedClerkId } = useUserSyncStatus();
+  const { user, isSignedIn, isLoaded } = useCurrentUser();
   const acceptInvitation = useMutation(api.users.acceptInvitation);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [acceptedRole, setAcceptedRole] = useState<string | null>(null);
@@ -61,9 +59,16 @@ function AcceptInvitationContent() {
     [searchParams],
   );
 
-  const invitedEmail = user?.primaryEmailAddress?.emailAddress ?? user?.emailAddresses[0]?.emailAddress;
-  const accountReady =
-    !!user && syncStatus === "ready" && syncedClerkId === user.id;
+  const invitedEmail = user?.email;
+  /**
+   * The account exists as far as Convex is concerned.
+   *
+   * This used to wait on the Clerk-to-Convex sync, because Clerk created the
+   * account on its side and a webhook copied it over afterwards -- so a
+   * signed-in user could genuinely have no row yet. The Auth.js adapter creates
+   * the row before the session exists, so having the record is the whole check.
+   */
+  const accountReady = isLoaded && !!user;
 
   const handleAccept = async () => {
     if (!token) {

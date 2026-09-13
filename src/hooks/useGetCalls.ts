@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
 import { Call, useStreamVideoClient } from "@stream-io/video-react-sdk";
+
+import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { resolveStreamUserId } from "@/lib/auth/streamIdentity";
 import {
   getDisplayErrorMessage,
   getErrorDetails,
@@ -8,7 +10,16 @@ import {
 } from "@/lib/errors";
 
 const useGetCalls = () => {
-  const { user, isLoaded: isUserLoaded } = useUser();
+  const { user, isLoaded: isUserLoaded } = useCurrentUser();
+  /**
+   * Queried by the id Stream knows them by, not the one the session carries.
+   *
+   * `created_by_user_id` and `members` hold whatever user_id Stream was given
+   * when each call was made, which has always been the Clerk id. Filtering on
+   * the Convex document id instead matches nothing, and the failure is silent:
+   * no error, just an empty "your calls" list for every migrated user.
+   */
+  const streamUserId = resolveStreamUserId(user);
   const client = useStreamVideoClient();
   const [calls, setCalls] = useState<Call[]>();
   const [isLoading, setIsLoading] = useState(true);
@@ -18,7 +29,7 @@ const useGetCalls = () => {
   useEffect(() => {
     const loadCalls = async () => {
       if (!isUserLoaded) return;
-      if (!client || !user?.id) {
+      if (!client || !streamUserId) {
         setIsLoading(false);
         return;
       }
@@ -33,15 +44,15 @@ const useGetCalls = () => {
           filter_conditions: {
             starts_at: { $exists: true },
             $or: [
-              { created_by_user_id: user.id },
-              { members: { $in: [user.id] } },
+              { created_by_user_id: streamUserId },
+              { members: { $in: [streamUserId] } },
             ],
           },
         });
 
         setCalls(calls);
       } catch (error) {
-        logError("useGetCalls", error, { userId: user.id });
+        logError("useGetCalls", error, { userId: streamUserId });
         setCalls([]);
         setError(
           getDisplayErrorMessage(
@@ -56,7 +67,7 @@ const useGetCalls = () => {
     };
 
     loadCalls();
-  }, [client, user?.id, isUserLoaded]);
+  }, [client, streamUserId, isUserLoaded]);
 
   const now = new Date();
 

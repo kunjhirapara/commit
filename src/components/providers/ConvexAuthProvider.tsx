@@ -4,7 +4,6 @@ import { ConvexReactClient, ConvexProviderWithAuth } from "convex/react";
 import { SessionProvider, useSession } from "next-auth/react";
 import { useCallback, useMemo, useRef } from "react";
 
-import { UserSyncStatusProvider } from "@/components/providers/UserSyncStatusProvider";
 import { getValidatedClientEnv } from "@/lib/env";
 
 const clientEnv = getValidatedClientEnv();
@@ -128,8 +127,13 @@ const useConvexAuthBridge = () => {
 function ConvexAuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <SessionProvider>
+      {/*
+        No UserSyncStatusProvider. It existed to gate queries until a webhook
+        had copied the Clerk account into Convex; the adapter creates the row
+        before the session exists, so there is nothing left to wait for.
+      */}
       <ConvexProviderWithAuth client={convex} useAuth={useConvexAuthBridge}>
-        <UserSyncStatusProvider>{children}</UserSyncStatusProvider>
+        {children}
       </ConvexProviderWithAuth>
     </SessionProvider>
   );

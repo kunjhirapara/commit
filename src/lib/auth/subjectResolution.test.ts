@@ -61,10 +61,13 @@ const makeCtx = (options: {
 };
 
 /**
- * These are the four ways a signed-in user can arrive while both providers are
- * registered. Case 3 is the one the original by_clerk_id query got wrong, and
- * case 4 is the one the backfill creates. Neither symptom is an error — both
- * are a signed-in user being told their account is not ready yet.
+ * The ways a signed-in user can arrive while both providers are registered.
+ *
+ * Case 3 is the one the original by_clerk_id query got wrong. The legacyClerkId
+ * case covers the far end of the migration, once Task 16 drops the clerkId
+ * column — not the state the backfill leaves, which keeps clerkId intact.
+ * Neither symptom is an error: both are a signed-in user being told their
+ * account is not ready yet.
  */
 describe("resolveUserBySubject", () => {
   it("finds a user Auth.js created, whose clerkId is their own id", async () => {
@@ -91,11 +94,11 @@ describe("resolveUserBySubject", () => {
     assert.deepEqual(await resolveUserBySubject(ctx, "k5xyz"), row);
   });
 
-  it("finds a legacy user presenting a Clerk token, after the backfill", async () => {
-    // The backfill sets clerkId to the document id and moves the Clerk id to
-    // legacyClerkId, so a Clerk subject now matches neither the id nor
-    // by_clerk_id. Without this lookup, running the backfill signs out every
-    // Clerk user at once.
+  it("finds a user whose Clerk id survives only as legacyClerkId", async () => {
+    // Not the state the backfill leaves -- it copies clerkId to legacyClerkId
+    // without rewriting clerkId, because interviewerIds and auditLogs reference
+    // that value. This is the state after Task 16 drops the clerkId column,
+    // and covering it means the order of those two steps cannot strand anyone.
     const row: Row = {
       _id: "k5xyz",
       clerkId: "k5xyz",
