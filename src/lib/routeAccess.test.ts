@@ -79,6 +79,29 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/apple-icon"), true);
   });
 
+  it("exposes the Auth.js endpoints, which are used before anyone is signed in", () => {
+    assert.equal(isPublicRoute("/api/auth/signin"), true);
+    assert.equal(isPublicRoute("/api/auth/callback/google"), true);
+    assert.equal(isPublicRoute("/api/auth/callback/github"), true);
+    assert.equal(isPublicRoute("/api/auth/session"), true);
+    assert.equal(isPublicRoute("/api/auth/csrf"), true);
+  });
+
+  it("exposes the Convex token route, which answers 401 itself", () => {
+    // Public in the middleware sense only. The route checks the session and
+    // returns 401, which the Convex client understands; a middleware redirect
+    // would reach it as HTML that fails to parse as a token.
+    assert.equal(isPublicRoute("/api/auth/convex-token"), true);
+  });
+
+  it("does not make neighbouring API paths public by prefix", () => {
+    // /api/auth must not open /api/authorize or anything merely starting with
+    // the same letters.
+    assert.equal(isPublicRoute("/api/authorize"), false);
+    assert.equal(isPublicRoute("/api/authz"), false);
+    assert.equal(isPublicRoute("/api/authenticate"), false);
+  });
+
   it("anchors the metadata patterns rather than matching prefixes", () => {
     // Unanchored patterns would hand a signed-out visitor anything living under
     // these names.
