@@ -6,6 +6,10 @@ import {
   requirePermission,
 } from "./lib/authz";
 import { createServerError } from "./lib/errorUtils";
+import {
+  isMonitored,
+  resolveIntegrityMode,
+} from "./lib/integrityModes";
 
 /**
  * Interview integrity monitoring.
@@ -37,6 +41,19 @@ const MAX_EVENTS_PER_SESSION = 2_000;
 /** Silence longer than this, while the session is open, counts as a gap. */
 const HEARTBEAT_GRACE_MS = 90_000;
 
+/** Segments one authorship batch may carry. Beyond this the client is misbehaving. */
+const MAX_SEGMENTS_PER_BATCH = 50;
+
+/**
+ * Ceiling on authorship segments for a single interview.
+ *
+ * A 45-minute coding round lands in the low hundreds once runs of editing are
+ * coalesced. Three thousand is far enough above that to keep a real history
+ * intact, and low enough that a client stuck in a loop cannot run up the
+ * deployment quota.
+ */
+const MAX_AUTHORSHIP_SEGMENTS_PER_SESSION = 3_000;
+
 const TIER_A_KINDS = new Set([
   "focus.lost",
   "tab.hidden",
@@ -45,6 +62,12 @@ const TIER_A_KINDS = new Set([
   "editor.bulkInsert",
   "display.extended",
   "monitor.gap",
+  // Deterrent mode. All three describe a rule that was in force and what
+  // happened to it, which is exactly the kind of thing a reader should see in
+  // the summary rather than have to dig for in the timeline.
+  "content.masked",
+  "paste.blocked",
+  "fullscreen.exempted",
 ]);
 
 /**
@@ -93,15 +116,33 @@ export const startProctoringSession = mutation({
     fullscreenUsed: v.boolean(),
     disclosureAcknowledged: v.boolean(),
     userAgent: v.optional(v.string()),
+    /** Whether the client's enforcement kill switch was on. See the schema comment. */
+    enforcementActive: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { user, session } = await requireCandidateSession(
+    const { user, interview, session } = await requireCandidateSession(
       ctx,
       args.interviewId,
     );
 
+    /**
+     * The mode comes off the interview row, never from the client.
+     *
+     * The candidate is the one party with an interest in being monitored less,
+     * and they control the browser. If the mode arrived as an argument, opening
+     * a session in "observe" on a "deterrent" interview would be a one-line
+     * tamper that produced a report claiming rules were never enforced.
+     */
+    const mode = resolveIntegrityMode(interview.integrityMode);
+
+    // Nothing is recorded for an unmonitored interview — no session row, so the
+    // report reads "not monitored" rather than "monitored and found nothing".
+    if (!isMonitored(mode)) return null;
+
     const now = Date.now();
     const fields = {
+      integrityMode: mode,
+      enforcementActive: args.enforcementActive ?? false,
       displaySupport: args.displaySupport,
       fullscreenUsed: args.fullscreenUsed,
       userAgent: args.userAgent,
@@ -126,6 +167,7 @@ export const startProctoringSession = mutation({
       monitorGaps: 0,
       maxClockSkewMs: 0,
       eventsRecorded: 0,
+      maskedMs: 0,
       extendedAppearedMidSession: false,
       ...fields,
     });
@@ -215,10 +257,20 @@ export const recordProctoringBatch = mutation({
       });
     }
 
+    // Masked time is accumulated on the session as it arrives rather than summed
+    // over events at read time, so the report stays correct once the event list
+    // outgrows the 500-row window `getProctoringReport` reads.
+    const maskedInBatch = accepted.reduce(
+      (total, event) =>
+        event.kind === "content.masked" ? total + (event.durationMs ?? 0) : total,
+      0,
+    );
+
     await ctx.db.patch(session._id, {
       eventsRecorded: alreadyRecorded + accepted.length,
       lastHeartbeatAt: now,
       maxClockSkewMs: Math.max(session.maxClockSkewMs ?? 0, clockSkewMs),
+      maskedMs: (session.maskedMs ?? 0) + maskedInBatch,
     });
 
     return { recorded: accepted.length, throttled: false };
@@ -310,6 +362,152 @@ export const recordDisplayChange = mutation({
 });
 
 /**
+ * Records a batch of authorship segments.
+ *
+ * Append-only and candidate-only, like every other write here. The cap uses the
+ * same durable counter on the session row that events use, for the same reason:
+ * the in-memory limiter cannot bound anything across Convex isolates.
+ *
+ * Hitting the cap stops recording but is not silent — `throttledAt` is set and a
+ * Tier B event is written, so a report can say the history is incomplete rather
+ * than presenting a truncated one as whole.
+ */
+export const recordAuthorshipBatch = mutation({
+  args: {
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    segments: v.array(
+      v.object({
+        tOffsetMs: v.number(),
+        op: v.string(),
+        charCount: v.number(),
+        keystrokeCount: v.number(),
+        backspaceCount: v.number(),
+        durationMs: v.number(),
+        meanInterKeyMs: v.number(),
+        stdDevInterKeyMs: v.number(),
+        text: v.optional(v.string()),
+        viaPaste: v.boolean(),
+        language: v.string(),
+        questionId: v.string(),
+      }),
+    ),
+  },
+  handler: async (ctx, args) => {
+    const { user, session } = await requireCandidateSession(
+      ctx,
+      args.interviewId,
+    );
+
+    if (!session || args.segments.length === 0) {
+      return { recorded: 0, throttled: false };
+    }
+
+    const now = Date.now();
+    const alreadyRecorded = session.authorshipSegmentsRecorded ?? 0;
+
+    if (alreadyRecorded >= MAX_AUTHORSHIP_SEGMENTS_PER_SESSION) {
+      if (!session.throttledAt) {
+        await ctx.db.patch(session._id, { throttledAt: now });
+        await ctx.db.insert("proctoringEvents", {
+          interviewId: args.interviewId,
+          streamCallId: args.streamCallId,
+          candidateClerkId: user.clerkId,
+          kind: "batch.throttled",
+          tier: "b",
+          startedAt: now,
+          metadata: JSON.stringify({
+            cap: MAX_AUTHORSHIP_SEGMENTS_PER_SESSION,
+            of: "authorship",
+          }),
+        });
+      }
+      return { recorded: 0, throttled: true };
+    }
+
+    const accepted = args.segments.slice(
+      0,
+      Math.min(
+        MAX_SEGMENTS_PER_BATCH,
+        MAX_AUTHORSHIP_SEGMENTS_PER_SESSION - alreadyRecorded,
+      ),
+    );
+
+    // Derived from the durable counter rather than sent by the client, so the
+    // order of the history is ours and cannot be rewritten by replaying a batch.
+    const sequence = Math.floor(alreadyRecorded / MAX_SEGMENTS_PER_BATCH);
+
+    await ctx.db.insert("proctoringAuthorship", {
+      interviewId: args.interviewId,
+      streamCallId: args.streamCallId,
+      candidateClerkId: user.clerkId,
+      sequence,
+      recordedAt: now,
+      segments: accepted,
+    });
+
+    await ctx.db.patch(session._id, {
+      authorshipSegmentsRecorded: alreadyRecorded + accepted.length,
+      lastHeartbeatAt: now,
+    });
+
+    return { recorded: accepted.length, throttled: false };
+  },
+});
+
+/**
+ * Records that the candidate declared fullscreen unusable.
+ *
+ * This is the escape hatch deterrent mode needs in order to be defensible. A
+ * hard fullscreen rule with no way out does not produce compliance, it produces
+ * candidates using a screen reader or a magnifier who cannot sit the interview
+ * at all.
+ *
+ * What makes it safe to offer is that it is not free and not hidden: the
+ * exemption, its timestamp and its stated reason all land on the report, the
+ * interviewer can see it while the call is still running, and they can simply
+ * ask about it. That is a better outcome than either blocking the candidate or
+ * letting the rule be disabled silently.
+ *
+ * Idempotent — the first exemption stands, so a second call cannot overwrite the
+ * originally stated reason with a blank one.
+ */
+export const recordFullscreenExemption = mutation({
+  args: {
+    interviewId: v.id("interviews"),
+    streamCallId: v.string(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const { user, session } = await requireCandidateSession(
+      ctx,
+      args.interviewId,
+    );
+    if (!session || session.fullscreenExemptedAt) return null;
+
+    const now = Date.now();
+    const reason = args.reason?.trim().slice(0, 500) || undefined;
+
+    await ctx.db.patch(session._id, {
+      fullscreenExemptedAt: now,
+      fullscreenExemptionReason: reason,
+    });
+
+    await ctx.db.insert("proctoringEvents", {
+      interviewId: args.interviewId,
+      streamCallId: args.streamCallId,
+      candidateClerkId: user.clerkId,
+      kind: "fullscreen.exempted",
+      tier: "a",
+      startedAt: now,
+      metadata: reason ? JSON.stringify({ reason }) : undefined,
+    });
+
+    return null;
+  },
+});
+
+/**
  * The integrity report.
  *
  * `requireInterviewReviewAccess` already excludes candidates and covers the
@@ -381,6 +579,13 @@ export const getProctoringReport = query({
       reloads: absence("page.reload").length,
       extendedAppearedMidSession: session.extendedAppearedMidSession ?? false,
       fullscreenUsed: session.fullscreenUsed ?? false,
+      // Which rules were actually in force. A clean report means something
+      // different under each mode, so the band must never be read without it.
+      integrityMode: resolveIntegrityMode(session.integrityMode),
+      enforcementActive: session.enforcementActive ?? false,
+      maskedMs: session.maskedMs ?? 0,
+      blockedPastes: absence("paste.blocked").length,
+      fullscreenExempted: !!session.fullscreenExemptedAt,
     };
 
     return {
@@ -390,6 +595,9 @@ export const getProctoringReport = query({
         disclosureAcknowledgedAt: session.disclosureAcknowledgedAt,
         userAgent: session.userAgent,
         throttled: !!session.throttledAt,
+        integrityMode: resolveIntegrityMode(session.integrityMode),
+        fullscreenExemptedAt: session.fullscreenExemptedAt,
+        fullscreenExemptionReason: session.fullscreenExemptionReason,
       },
       summary,
       events: events.map((event) => ({
@@ -400,6 +608,48 @@ export const getProctoringReport = query({
         durationMs: event.durationMs,
         magnitude: event.magnitude,
       })),
+    };
+  },
+});
+
+/**
+ * The edit history for one interview, in order.
+ *
+ * A separate query from `getProctoringReport` on purpose. The report is polled
+ * live in the meeting room by the interviewer, and a session can hold thousands
+ * of segments with their text — pushing all of that through the reactive query
+ * that updates every few seconds would be wasteful for a payload almost nobody
+ * looks at during the call.
+ *
+ * Gated by `requireInterviewReviewAccess`, the same rule as the report, which
+ * already excludes the candidate. They generate this history and must never read
+ * it back: knowing which runs were flagged is precisely what would let someone
+ * tune their typing against the thresholds.
+ */
+export const getAuthorshipHistory = query({
+  args: { interviewId: v.id("interviews") },
+  handler: async (ctx, args) => {
+    await requireInterviewReviewAccess(ctx, args.interviewId);
+
+    const batches = await ctx.db
+      .query("proctoringAuthorship")
+      .withIndex("by_interview_sequence", (q) =>
+        q.eq("interviewId", args.interviewId),
+      )
+      .order("asc")
+      .take(200);
+
+    // Flattened in sequence order, then by offset within the session. Batches
+    // can arrive out of order after a retry, and a history assembled in arrival
+    // order would show the candidate writing the solution backwards.
+    const segments = batches
+      .flatMap((batch) => batch.segments)
+      .sort((a, b) => a.tOffsetMs - b.tOffsetMs);
+
+    return {
+      segments,
+      /** True when the per-session cap truncated what was kept. */
+      truncated: batches.length >= 200,
     };
   },
 });

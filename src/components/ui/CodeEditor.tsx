@@ -6,7 +6,7 @@ import {
   parseTestOutput,
   type ParsedTestResult,
 } from "@/lib/test-harness";
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -36,6 +36,7 @@ import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
+import type { EditorChange } from "@/lib/proctoring/authorship";
 
 /* ─────────────────────────────────────────────────────────── types ── */
 
@@ -78,9 +79,25 @@ function ValueBox({
 }
 
 export type EditorSignal = {
-  kind: "editor.paste" | "editor.bulkInsert";
+  kind: "editor.paste" | "editor.bulkInsert" | "paste.blocked";
   chars: number;
 };
+
+/** The shape Monaco reports each edit in. Narrowed to what is actually read. */
+type MonacoChange = {
+  text?: string;
+  rangeOffset?: number;
+  rangeLength?: number;
+};
+
+/**
+ * How long after a DOM paste a model change is still attributed to that paste.
+ *
+ * Monaco applies the change synchronously after the event, so this only has to
+ * span one turn of the event loop. Generous enough to survive a slow frame,
+ * short enough that the next character typed is not mislabelled as pasted.
+ */
+const PASTE_WINDOW_MS = 100;
 
 interface CodeEditorProps {
   streamCallId?: string;
@@ -93,9 +110,38 @@ interface CodeEditorProps {
    * sandbox, which passes no callback, entirely unmonitored.
    */
   onEditorSignal?: (signal: EditorSignal) => void;
+  /**
+   * Reports every edit, so a caller can reconstruct how the code was written.
+   *
+   * Separate from `onEditorSignal` because it is a different kind of thing: one
+   * is a handful of notable moments, this is the raw stream. The editor still
+   * knows nothing about what either is for, and /practice passes neither.
+   */
+  onEditorChange?: (change: EditorChange) => void;
+  /**
+   * Hides the problem and the code behind a blur and makes them inert.
+   *
+   * The editor is told to mask, never told why. Keeping the reason out of here
+   * is what lets the same component serve /practice with none of this attached.
+   *
+   * Worth being honest about in the one place someone will read it: blur is a
+   * visual barrier, not a security boundary. The text is still in the DOM and
+   * anyone with devtools can read it. The purpose is to remove the effortless
+   * path — reading the problem on a second screen — and someone in devtools has
+   * already left the population this is aimed at.
+   */
+  masked?: boolean;
+  /** Refuses pastes into the editor and reports the attempt. */
+  blockPaste?: boolean;
 }
 
-function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
+function CodeEditor({
+  streamCallId,
+  onEditorSignal,
+  onEditorChange,
+  masked = false,
+  blockPaste = false,
+}: CodeEditorProps) {
   const { resolvedTheme } = useTheme();
   const [selectedQuestion, setSelectedQuestion] = useState(CODING_QUESTIONS[0]);
   const [language, setLanguage] = useState<"javascript" | "python" | "java">(
@@ -103,6 +149,25 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   );
   const [code, setCode] = useState(selectedQuestion.starterCode[language]);
 
+  const [editorNode, setEditorNode] = useState<HTMLElement | null>(null);
+  const lastPasteAtRef = useRef(0);
+  /**
+   * Monaco's change listener is registered once at mount, so reading `language`
+   * or `selectedQuestion` from the closure would report whatever they were when
+   * the editor first appeared. Refs keep the labels honest after a switch.
+   */
+  const contextRef = useRef({
+    language,
+    questionId: selectedQuestion.id,
+    onEditorSignal,
+    onEditorChange,
+  });
+  contextRef.current = {
+    language,
+    questionId: selectedQuestion.id,
+    onEditorSignal,
+    onEditorChange,
+  };
   const [runStatus, setRunStatus] = useState<RunStatus>("idle");
   const [result, setResult] = useState<ExecutionResult | null>(null);
   const [activeTab, setActiveTab] = useState<ActiveTab>("cases");
@@ -112,6 +177,54 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
     if (runStatus === "success" || runStatus === "error")
       setActiveTab("result");
   }, [runStatus]);
+
+  /**
+   * Refuses pastes and drops into the editor.
+   *
+   * Listens in the capture phase on Monaco's container, which sees the event
+   * before the hidden textarea Monaco actually pastes into. Drop is covered too:
+   * dragging text in is the same act with a different gesture.
+   *
+   * This is a deterrent, not a barrier — devtools, a userscript, or simply
+   * retyping all defeat it. That is the point rather than a shortcoming. The
+   * cheat it cannot prevent gets pushed into typing, which is the one channel
+   * the editor can describe in detail, and `editor.bulkInsert` still fires on
+   * whatever arrives.
+   */
+  useEffect(() => {
+    if (!editorNode || (!blockPaste && !onEditorChange)) return;
+
+    const handle = (event: ClipboardEvent | DragEvent) => {
+      // Stamped whether or not the paste is refused. The DOM event fires before
+      // Monaco applies the change, which is the only ordering that lets the
+      // resulting model change be attributed to a paste rather than to typing.
+      lastPasteAtRef.current = Date.now();
+
+      if (!blockPaste) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const text =
+        "clipboardData" in event
+          ? (event.clipboardData?.getData("text") ?? "")
+          : "";
+
+      onEditorSignal?.({ kind: "paste.blocked", chars: text.length });
+      toast.error("Pasting is disabled for this interview", {
+        description: "Type your solution. Your interviewer has been told.",
+        id: "paste-blocked",
+      });
+    };
+
+    editorNode.addEventListener("paste", handle as EventListener, true);
+    editorNode.addEventListener("drop", handle as EventListener, true);
+
+    return () => {
+      editorNode.removeEventListener("paste", handle as EventListener, true);
+      editorNode.removeEventListener("drop", handle as EventListener, true);
+    };
+  }, [editorNode, blockPaste, onEditorSignal, onEditorChange]);
 
   const parsedResults = useMemo<ParsedTestResult[]>(() => {
     if (!result?.stdout) return [];
@@ -147,24 +260,65 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   const handleEditorMount: NonNullable<
     React.ComponentProps<typeof Editor>["onMount"]
   > = (editor) => {
-    if (!onEditorSignal) return;
+    // Captured before the early return: paste blocking needs the DOM node even
+    // when nothing is listening for signals.
+    setEditorNode(editor.getDomNode() ?? null);
 
     editor.onDidPaste((event: { range: unknown }) => {
       const model = editor.getModel();
       if (!model) return;
       const pasted = model.getValueInRange(event.range as never) ?? "";
-      onEditorSignal({ kind: "editor.paste", chars: pasted.length });
+      contextRef.current.onEditorSignal?.({
+        kind: "editor.paste",
+        chars: pasted.length,
+      });
     });
 
     editor.onDidChangeModelContent((event: any) => {
       if (event.isFlush) return;
-      const largest = (event.changes ?? []).reduce(
-        (max: number, change: { text?: string }) =>
-          Math.max(max, change.text?.length ?? 0),
+
+      const { onEditorSignal: signal, onEditorChange: change } =
+        contextRef.current;
+      const changes: MonacoChange[] = event.changes ?? [];
+
+      const largest = changes.reduce(
+        (max, item) => Math.max(max, item.text?.length ?? 0),
         0,
       );
-      if (largest > 0) {
-        onEditorSignal({ kind: "editor.bulkInsert", chars: largest });
+      if (largest > 0) signal?.({ kind: "editor.bulkInsert", chars: largest });
+
+      if (!change) return;
+
+      // Within this window the DOM paste event that preceded the model update is
+      // still the best explanation for it. Beyond it, the same characters
+      // arriving are the candidate typing.
+      const viaPaste = Date.now() - lastPasteAtRef.current < PASTE_WINDOW_MS;
+
+      for (const item of changes) {
+        const inserted = item.text?.length ?? 0;
+        const removed = item.rangeLength ?? 0;
+        if (inserted === 0 && removed === 0) continue;
+
+        const op =
+          inserted > 0 && removed === 0
+            ? "insert"
+            : inserted === 0
+              ? "delete"
+              : "replace";
+
+        change({
+          at: Date.now(),
+          op,
+          offset: item.rangeOffset ?? 0,
+          // What the change put into the document. For a replacement that is
+          // the new text, not the net difference — the history describes what
+          // was written, and a net count would report a rewrite as nothing.
+          charCount: op === "delete" ? removed : inserted,
+          text: op === "delete" ? undefined : item.text,
+          viaPaste,
+          language: contextRef.current.language,
+          questionId: contextRef.current.questionId,
+        });
       }
     });
   };
@@ -231,9 +385,25 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
   }, [code, language, runStatus, selectedQuestion]);
 
   return (
-    <ResizablePanelGroup
-      orientation="vertical"
-      className="min-h-[calc(100vh-4rem-1px)]">
+    <div
+      className={cn(
+        "h-full",
+        masked &&
+          "pointer-events-none select-none blur-[10px] transition-[filter] duration-150",
+      )}
+      // Hidden from assistive technology too. Blurring the pixels while leaving
+      // the problem statement readable by a screen reader would hide it from
+      // exactly the candidate least able to work around it.
+      //
+      // No `inert`: React 18 rejects it as a non-boolean attribute and drops it,
+      // so it would read as protection that is not there. Keyboard focus can
+      // therefore still reach controls underneath — consistent with everything
+      // else here, this is a deterrent rather than a boundary, and the editor
+      // itself is switched to read-only while masked.
+      aria-hidden={masked || undefined}>
+      <ResizablePanelGroup
+        orientation="vertical"
+        className="min-h-[calc(100vh-4rem-1px)]">
       <ResizablePanel defaultSize={40}>
         <ScrollArea className="h-full">
           <div className="p-6">
@@ -396,6 +566,10 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
                   onChange={(v) => setCode(v || "")}
                   onMount={handleEditorMount}
                   options={{
+                    // Masked means unreadable, so it should also mean
+                    // uneditable — otherwise focus can stay in the editor and a
+                    // candidate types blindly into code they cannot see.
+                    readOnly: masked,
                     minimap: { enabled: false },
                     fontSize: 18,
                     lineNumbers: "on",
@@ -575,10 +749,11 @@ function CodeEditor({ streamCallId, onEditorSignal }: CodeEditorProps) {
                 <ScrollBar />
               </ScrollArea>
             </div>
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </ResizablePanel>
-    </ResizablePanelGroup>
+            </ResizablePanel>
+          </ResizablePanelGroup>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
   );
 }
 

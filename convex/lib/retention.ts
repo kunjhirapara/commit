@@ -36,6 +36,15 @@ export const RETENTION_DAYS = {
    * behind after the data it summarised had expired.
    */
   proctoringSessions: 90,
+  /**
+   * Must also match proctoringEvents.
+   *
+   * The edit history is the most revealing thing this system stores about a
+   * candidate — how they wrote a solution, not merely that they switched tabs —
+   * so it must not outlive the signals that are less telling. The same
+   * published 90-day promise covers it.
+   */
+  proctoringAuthorship: 90,
 } as const;
 
 export type RetentionTable = keyof typeof RETENTION_DAYS;

@@ -11,6 +11,7 @@ import {
   requirePermission,
 } from "./lib/authz";
 import { createServerError } from "./lib/errorUtils";
+import { resolveIntegrityMode } from "./lib/integrityModes";
 
 const INTERVIEW_STATUSES = [
   "draft",
@@ -631,6 +632,7 @@ export const createInterview = mutation({
     browserFallbackInstructions: v.optional(v.string()),
     bufferBeforeMinutes: v.number(),
     bufferAfterMinutes: v.number(),
+    integrityMode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user } = await requirePermission(ctx, "scheduleInterviews");
@@ -651,6 +653,9 @@ export const createInterview = mutation({
 
     const interviewId = await ctx.db.insert("interviews", {
       ...args,
+      // Normalised on the way in so the row always holds a mode the rest of the
+      // system recognises, rather than whatever the form happened to send.
+      integrityMode: resolveIntegrityMode(args.integrityMode),
       startTime: args.scheduledStartTime,
       scheduledEndTime,
       reminderSentAt: undefined,
@@ -745,6 +750,7 @@ export const updateInterview = mutation({
     browserFallbackInstructions: v.optional(v.string()),
     bufferBeforeMinutes: v.number(),
     bufferAfterMinutes: v.number(),
+    integrityMode: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const { user, interview } = await requireInterviewAccess(
@@ -775,8 +781,15 @@ export const updateInterview = mutation({
       excludeInterviewId: args.interviewId,
     });
 
-    await ctx.db.patch(args.interviewId, {
-      ...args,
+    // `interviewId` is the address of the row, not a column on it. Spreading the
+    // whole args object into the patch wrote it back as a document field, which
+    // the table schema does not declare; splitting it out here keeps the patch to
+    // real columns.
+    const { interviewId, ...fields } = args;
+
+    await ctx.db.patch(interviewId, {
+      ...fields,
+      integrityMode: resolveIntegrityMode(args.integrityMode),
       startTime: args.scheduledStartTime,
       scheduledEndTime,
       lifecycleEvents: appendLifecycleEvent(interview.lifecycleEvents, {

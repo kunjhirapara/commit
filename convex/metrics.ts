@@ -193,6 +193,19 @@ export const pruneExpiredRecords = internalMutation({
     }
     deleted.proctoringSessions = expiredSessions.length;
 
+    // Same shape again: authorship batches key their index on `recordedAt`.
+    const authorshipCutoff =
+      now - RETENTION_DAYS.proctoringAuthorship * DAY_MS;
+    const expiredAuthorship = await ctx.db
+      .query("proctoringAuthorship")
+      .withIndex("by_created_at", (q) => q.lt("recordedAt", authorshipCutoff))
+      .take(PRUNE_BATCH_SIZE);
+
+    for (const row of expiredAuthorship) {
+      await ctx.db.delete(row._id);
+    }
+    deleted.proctoringAuthorship = expiredAuthorship.length;
+
     // Only terminal jobs are pruned; anything still pending or retrying stays.
     const jobCutoff = now - RETENTION_DAYS.backgroundJobs * DAY_MS;
     const staleJobs = await ctx.db

@@ -33,7 +33,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Doc } from "../../../convex/_generated/dataModel";
 import { api } from "../../../convex/_generated/api";
@@ -55,6 +55,9 @@ import ErrorState from "./ErrorState";
 import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
 import { useProctoring } from "@/hooks/useProctoring";
+import { useFullscreenGuard } from "@/hooks/useFullscreenGuard";
+import FullscreenGuardOverlay from "./FullscreenGuardOverlay";
+import { resolveEnforcement } from "@/lib/proctoring/enforcement";
 import IntegrityReport from "@/components/interviews/IntegrityReport";
 import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
@@ -111,7 +114,14 @@ function NetworkPill({
   );
 }
 
-function MeetingRoom({ interview }: { interview?: Interview }) {
+function MeetingRoom({
+  interview,
+  initiallyFullscreenExempted = false,
+}: {
+  interview?: Interview;
+  /** Set when the pre-join screen already took the exemption for this candidate. */
+  initiallyFullscreenExempted?: boolean;
+}) {
   const router = useRouter();
   const call = useCall();
 
@@ -206,10 +216,54 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
     !!currentUser &&
     interview.candidateId === currentUser.clerkId;
 
-  const { reportEditorSignal } = useProctoring({
-    interviewId: interview?._id,
-    streamCallId: interview?.streamCallId,
-    enabled: isCandidate,
+  /**
+   * Deterrent enforcement, for the candidate only.
+   *
+   * The interviewer must never be masked or paste-blocked: they switch away to
+   * notes and a CV constantly, and applying the candidate's rules to them would
+   * make the room unusable for the person running it.
+   */
+  const { enforcing, monitored } = resolveEnforcement(interview?.integrityMode);
+  const enforcingForCandidate = enforcing && isCandidate;
+
+  const { reportEditorSignal, reportEditorChange, beginMask, endMask } =
+    useProctoring({
+      interviewId: interview?._id,
+      streamCallId: interview?.streamCallId,
+      // `monitored` matters as much as `isCandidate`. MeetingSetup opens no
+      // session for an `off` interview, so without this the client would buffer
+      // events and post them against a session that does not exist — every
+      // batch rejected, every rejection logged, for an interview nobody asked
+      // to watch.
+      enabled: isCandidate && monitored,
+    });
+
+  const recordFullscreenExemption = useMutation(
+    api.proctoring.recordFullscreenExemption,
+  );
+
+  const handleExemption = useCallback(
+    (reason: string) => {
+      if (!interview) return;
+      void recordFullscreenExemption({
+        interviewId: interview._id,
+        streamCallId: interview.streamCallId,
+        reason: reason || undefined,
+      }).catch((error) =>
+        logError("MeetingRoom.recordFullscreenExemption", error, {
+          interviewId: interview._id,
+        }),
+      );
+    },
+    [interview, recordFullscreenExemption],
+  );
+
+  const { isMasked, returnToFullscreen, takeExemption } = useFullscreenGuard({
+    enabled: enforcingForCandidate,
+    initiallyExempted: initiallyFullscreenExempted,
+    onMaskStart: beginMask,
+    onMaskEnd: endMask,
+    onExempt: handleExemption,
   });
 
   const canSendAudio = useHasPermissions(OwnCapability.SEND_AUDIO);
@@ -754,13 +808,24 @@ function MeetingRoom({ interview }: { interview?: Interview }) {
                 </div>
               </details>
             ) : null}
-            <div className="min-h-0 flex-1">
+            <div className="relative min-h-0 flex-1">
               <CodeEditor
                 streamCallId={interview?.streamCallId}
                 // Undefined for everyone but the candidate, so the editor
                 // reports nothing at all for an interviewer.
                 onEditorSignal={isCandidate ? reportEditorSignal : undefined}
+                // The edit history, and the same rule: nothing at all is
+                // reported for an interviewer.
+                onEditorChange={isCandidate ? reportEditorChange : undefined}
+                masked={isMasked}
+                blockPaste={enforcingForCandidate}
               />
+              {isMasked ? (
+                <FullscreenGuardOverlay
+                  onReturnToFullscreen={returnToFullscreen}
+                  onTakeExemption={takeExemption}
+                />
+              ) : null}
             </div>
           </div>
         </ResizablePanel>

@@ -16,6 +16,9 @@
  */
 export type ProctoringTier = "a" | "b";
 
+export type { IntegrityMode } from "../../../convex/lib/integrityModes.ts";
+import type { IntegrityMode } from "../../../convex/lib/integrityModes.ts";
+
 export const PROCTORING_EVENT_KINDS = [
   // Tier A
   "focus.lost",
@@ -25,6 +28,12 @@ export const PROCTORING_EVENT_KINDS = [
   "editor.bulkInsert",
   "display.extended",
   "monitor.gap",
+  // Tier A, deterrent mode only. Each describes a rule that was in force and
+  // what became of it, which is what a reader needs in the summary rather than
+  // buried in the timeline.
+  "content.masked",
+  "paste.blocked",
+  "fullscreen.exempted",
   // Tier B
   "window.geometry",
   "page.reload",
@@ -47,10 +56,17 @@ export const PROCTORING_EVENT_KINDS = [
 
 export type ProctoringEventKind = (typeof PROCTORING_EVENT_KINDS)[number];
 
-/** Absence-style signals, which are recorded as intervals rather than edges. */
+/**
+ * Absence-style signals, which are recorded as intervals rather than edges.
+ *
+ * `content.masked` joins these rather than getting its own path so it inherits
+ * the interval collapsing and the sub-second debounce the buffer already does.
+ * Duration is what matters: "the problem was hidden for four minutes" is a fact
+ * an interviewer can weigh, "left fullscreen three times" is not.
+ */
 export type ProctoringAbsenceKind = Extract<
   ProctoringEventKind,
-  "focus.lost" | "tab.hidden"
+  "focus.lost" | "tab.hidden" | "content.masked"
 >;
 
 /**
@@ -90,6 +106,16 @@ export type ProctoringSummary = {
   extendedAppearedMidSession: boolean;
   /** False means fullscreen was never entered, so exits mean nothing. */
   fullscreenUsed: boolean;
+  /** Which rules were in force. A clean result means different things under each. */
+  integrityMode: IntegrityMode;
+  /** False means the kill switch was off, so deterrent rules were not applied. */
+  enforcementActive: boolean;
+  /** Total time the problem and editor were hidden. Deterrent mode only. */
+  maskedMs: number;
+  /** Pastes the editor refused. Evidence of intent, though not of success. */
+  blockedPastes: number;
+  /** The candidate declared fullscreen unusable. Context, never evidence. */
+  fullscreenExempted: boolean;
 };
 
 export type SeverityBand = "clear" | "minor" | "notable";

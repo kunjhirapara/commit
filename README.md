@@ -14,6 +14,7 @@ It offers real-time video, collaborative code execution, structured feedback sco
 - **Interactive Dashboards:** Comprehensive pipelines, schedules, and analytics powered by Convex's reactive datastore.
 - **Structured Feedback Scorecards:** Blind-grading, weighted scoring, and internal candidate packet drafting.
 - **Automated Notifications:** Email and in-app notifications with timezone-awareness and retry support.
+- **Interview Integrity:** Per-interview monitoring modes, from silent recording to enforced fullscreen and blocked pastes, with an integrity report the interviewer reads during and after the call. Signals, never a score — and honest in the UI about what it cannot see.
 
 - **Practice Sandbox:** Any signed-in user can work through coding problems solo at `/practice`, without needing a scheduled interview.
 
@@ -85,7 +86,36 @@ STREAM_SECRET_KEY=your_stream_secret_key
 
 # App Base (For email notifications)
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Feature flags (optional). Comma-separated name=true/false.
+# Server-only flags:
+FEATURE_FLAGS=emailDeliveryApi=true,strictApiRateLimiting=true
+# Flags the browser needs. Anything here ships in the client bundle.
+NEXT_PUBLIC_FEATURE_FLAGS=integrityDeterrentMode=false
 ```
+
+### Interview integrity modes
+
+Every interview carries an integrity mode, chosen when it is scheduled:
+
+| Mode | What the candidate experiences |
+| --- | --- |
+| `off` | Nothing is recorded and no notice is shown. |
+| `observe` | Focus changes, pastes and second displays are recorded. They are told before joining and never interrupted. **The default**, including for interviews scheduled before modes existed. |
+| `deterrent` | The above, plus fullscreen is required, the problem and editor are hidden if they leave it, and pasting into the editor is blocked. |
+
+`deterrent` additionally requires `integrityDeterrentMode=true` in
+`NEXT_PUBLIC_FEATURE_FLAGS`. That flag is the kill switch for enforcement: with
+it off, a deterrent interview degrades to `observe` — still recorded, nothing
+enforced — and the pre-join notice describes the quieter behaviour that will
+actually happen. Enforcement is the only part of this that acts on a candidate's
+screen mid-interview, so it is off until switched on deliberately.
+
+Design and the reasoning behind every threshold:
+`docs/superpowers/specs/2026-08-15-interview-integrity-v2-design.md`. It is worth
+reading §13 before relying on any of it — a candidate with a second device or an
+invisible desktop overlay produces a clean report under every mode here, and no
+browser-based scheme changes that.
 
 ### 3. Docker Code Compiler Setup 🐳
 

@@ -66,6 +66,27 @@ export const resolveSeverity = (summary: ProctoringSummary): SeverityResult => {
     );
   }
 
+  if (summary.maskedMs > severity.notableMaskedMs) {
+    notable.push(
+      `The problem and editor were hidden for ${formatSeconds(summary.maskedMs)} after leaving fullscreen.`,
+    );
+  } else if (summary.maskedMs >= severity.minorMaskedMs) {
+    minor.push(
+      `The problem and editor were hidden for ${formatSeconds(summary.maskedMs)} after leaving fullscreen.`,
+    );
+  }
+
+  // Counted, not banded. A refused paste is evidence of intent but not of
+  // success, and the code that resulted is measured by the insert thresholds
+  // above either way — banding both would punish the same act twice.
+  if (summary.blockedPastes > 0) {
+    caveats.push(
+      summary.blockedPastes === 1
+        ? "One paste into the editor was blocked."
+        : `${summary.blockedPastes} pastes into the editor were blocked.`,
+    );
+  }
+
   if (summary.extendedAppearedMidSession) {
     notable.push("A second display was connected after the interview started.");
   } else if (summary.displaySupport === "extended") {
@@ -83,6 +104,29 @@ export const resolveSeverity = (summary: ProctoringSummary): SeverityResult => {
   if (!summary.fullscreenUsed) {
     caveats.push(
       "Fullscreen was not in use, so leaving fullscreen was not something that could be detected.",
+    );
+  }
+
+  /**
+   * The exemption is a caveat, never a mark against the candidate.
+   *
+   * It exists so that someone using a screen reader or a magnifier can sit the
+   * interview at all. Letting it move the band would convert an accessibility
+   * accommodation into a penalty, which is the precise failure the escape hatch
+   * was added to prevent. It is reported because the reader needs to know the
+   * rule stopped applying, not because taking it is suspicious.
+   */
+  if (summary.fullscreenExempted) {
+    caveats.push(
+      "The candidate said fullscreen was unusable, so it was not required for the rest of the interview.",
+    );
+  }
+
+  // Deterrent mode was scheduled but the kill switch was off. Without saying so,
+  // this report would read as though rules had been enforced and never broken.
+  if (summary.integrityMode === "deterrent" && !summary.enforcementActive) {
+    caveats.push(
+      "This interview was set to enforce rules, but enforcement was disabled, so none were applied.",
     );
   }
 

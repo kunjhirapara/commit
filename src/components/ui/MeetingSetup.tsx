@@ -38,6 +38,8 @@ import { cn } from "@/lib/utils";
 import { useUserRole } from "@/hooks/useUserRole";
 import { readDisplayState } from "@/lib/proctoring/displays";
 import ProctoringDisclosure from "./ProctoringDisclosure";
+import { resolveEnforcement } from "@/lib/proctoring/enforcement";
+import type { MonitoredMode } from "@/lib/proctoring/disclosure";
 
 function humanizePermission(state: string): string {
   switch (state) {
@@ -61,7 +63,11 @@ function MeetingSetup({
   onSetupComplete,
 }: {
   interview?: Doc<"interviews">;
-  onSetupComplete: () => void;
+  /**
+   * Reports how setup finished, so the room can start in the right state.
+   * Currently just whether the fullscreen exemption was already taken here.
+   */
+  onSetupComplete: (result?: { fullscreenExempted: boolean }) => void;
 }) {
   const [isCameraDisabled, setIsCameraDisabled] = useState(true);
   const [isMicDisabled, setIsMicDisabled] = useState(false);
@@ -76,10 +82,27 @@ function MeetingSetup({
   const { user: currentUser } = useUserRole();
   const isCandidate =
     !!interview && !!currentUser && interview.candidateId === currentUser.clerkId;
+
+  /**
+   * How this interview is monitored.
+   *
+   * Read from the interview row, and only ever used here to decide what to show
+   * and whether to open a session — the server re-derives it from the same row
+   * when the session is created, so nothing here is load-bearing for integrity.
+   */
+  const { mode: integrityMode, enforcing, monitored } = resolveEnforcement(
+    interview?.integrityMode,
+  );
+  /** `off` shows no disclosure and opens no session — there is nothing to disclose. */
+  const showsDisclosure = isCandidate && monitored;
+
   const [proctoringAcknowledged, setProctoringAcknowledged] = useState(false);
   const [wantsFullscreen, setWantsFullscreen] = useState(true);
   const startProctoringSession = useMutation(
     api.proctoring.startProctoringSession,
+  );
+  const recordFullscreenExemption = useMutation(
+    api.proctoring.recordFullscreenExemption,
   );
 
   const call = useCall();
@@ -217,13 +240,17 @@ function MeetingSetup({
 
     // The disclosure is the lawful basis for monitoring silently, so it gates
     // joining rather than merely being displayed.
-    if (isCandidate && !proctoringAcknowledged) {
+    if (showsDisclosure && !proctoringAcknowledged) {
       toast.error("Please confirm you understand how this interview is monitored.");
       return;
     }
 
     setJoinError(null);
     setIsJoining(true);
+
+    // Carried out of the async block so the room can be told, rather than
+    // masking a candidate whose browser has already said it cannot do this.
+    let fullscreenExempted = false;
 
     const fallbackMessage =
       interview?.browserFallbackInstructions ||
@@ -241,13 +268,13 @@ function MeetingSetup({
         });
       }
 
-      if (interview && isCandidate) {
+      if (interview && showsDisclosure) {
         // Fullscreen has to be requested inside the click that started this, so
         // it happens here rather than after the join resolves. A refusal is not
         // an error — the session simply records that fullscreen was not in use,
         // and the report says so instead of showing an unearned clean result.
         let fullscreenUsed = false;
-        if (wantsFullscreen) {
+        if (wantsFullscreen || enforcing) {
           try {
             await document.documentElement.requestFullscreen();
             fullscreenUsed = !!document.fullscreenElement;
@@ -268,6 +295,7 @@ function MeetingSetup({
           displaySupport: support,
           fullscreenUsed,
           disclosureAcknowledged: true,
+          enforcementActive: enforcing,
           userAgent:
             typeof navigator === "undefined" ? undefined : navigator.userAgent,
         }).catch((error) =>
@@ -275,6 +303,28 @@ function MeetingSetup({
             interviewId: interview._id,
           }),
         );
+
+        /**
+         * Fullscreen was required and the browser said no.
+         *
+         * The candidate is not blocked — an integrity feature must never be the
+         * reason someone cannot attend their own interview. It takes the same
+         * exemption the in-call overlay offers, so the interviewer sees the rule
+         * stopped applying and why, rather than seeing a deterrent session that
+         * silently behaved like an observed one.
+         */
+        if (enforcing && !fullscreenUsed) {
+          fullscreenExempted = true;
+          await recordFullscreenExemption({
+            interviewId: interview._id,
+            streamCallId: interview.streamCallId,
+            reason: "browser-refused",
+          }).catch((error) =>
+            logError("MeetingSetup.recordFullscreenExemption", error, {
+              interviewId: interview._id,
+            }),
+          );
+        }
       }
     })();
 
@@ -286,7 +336,7 @@ function MeetingSetup({
 
     try {
       await joinPromise;
-      onSetupComplete();
+      onSetupComplete({ fullscreenExempted });
     } catch (error) {
       logError("MeetingSetup.handleJoin", error, {
         interviewId: interview?._id,
@@ -647,8 +697,15 @@ function MeetingSetup({
 
             {/* Integrity monitoring notice — candidate only, since only the
                 candidate is monitored. */}
-            {isCandidate ? (
+            {showsDisclosure ? (
               <ProctoringDisclosure
+                // Narrowed rather than cast: `showsDisclosure` already excludes
+                // "off", and spelling the two out keeps the type honest.
+                mode={
+                  (integrityMode === "deterrent"
+                    ? "deterrent"
+                    : "observe") satisfies MonitoredMode
+                }
                 acknowledged={proctoringAcknowledged}
                 onAcknowledgedChange={setProctoringAcknowledged}
                 fullscreen={wantsFullscreen}
@@ -664,7 +721,7 @@ function MeetingSetup({
                 disabled={
                   isJoining ||
                   hasBlockedPermissions ||
-                  (isCandidate && !proctoringAcknowledged)
+                  (showsDisclosure && !proctoringAcknowledged)
                 }
                 onClick={handleJoin}>
                 {isJoining ? (

@@ -37,6 +37,79 @@ export const PROCTORING_THRESHOLDS = {
   HEARTBEAT_MS: 30_000,
 
   /**
+   * Idle gap that ends a run of editing.
+   *
+   * Two seconds is long enough to survive looking at the problem statement
+   * mid-line, short enough that a genuine pause to think starts a new segment —
+   * which is the boundary the burst-after-idle detector reads.
+   */
+  SEGMENT_IDLE_MS: 2_000,
+
+  /**
+   * Longest run of editing kept as one segment.
+   *
+   * A cap exists because cadence statistics over a very long run average away
+   * the thing they are meant to expose: 500 characters of metronomic typing
+   * inside 5,000 characters of normal work would vanish into the mean.
+   */
+  MAX_SEGMENT_CHARS: 500,
+
+  /** Inserted text kept per segment. Enough to reconstruct, bounded for cost. */
+  MAX_SEGMENT_TEXT: 2_000,
+
+  /** Segments per mutation. One row carries a batch, as events do. */
+  AUTHORSHIP_BATCH_SEGMENTS: 50,
+
+  /** How often closed segments are sent. */
+  AUTHORSHIP_FLUSH_INTERVAL_MS: 20_000,
+
+  /**
+   * Authorship detector thresholds.
+   *
+   * Every one of these is a starting guess, exactly as the v1 severity numbers
+   * were, and they are deliberately set to miss rather than to over-report. A
+   * detector that fires on honest work is worse than no detector: it costs a
+   * candidate an accusation, and it teaches interviewers to ignore the panel.
+   *
+   * Published accuracy for keystroke-based approaches sits between 75% and 86%
+   * in controlled conditions. This is coarser than that — statistics rather than
+   * raw timings — so assume less, and read every flag as a question to ask
+   * rather than an answer.
+   */
+  authorship: {
+    /** Shortest run worth judging. Below this, cadence is noise. */
+    minJudgeableChars: 150,
+
+    /**
+     * Cadence spread, as a fraction of the mean, below which typing looks
+     * mechanical. Transcribing from an overlay is metronomic; composing is not —
+     * it stutters, pauses mid-identifier, and backtracks.
+     */
+    transcriptionSpreadRatio: 0.35,
+
+    /** Correction rate below which a run shows no sign of being composed. */
+    lowBackspaceRate: 0.02,
+
+    /** Silence that makes what follows a "burst" rather than a continuation. */
+    burstIdleMs: 20_000,
+    /** Size a post-idle run must reach to be worth noting. */
+    burstChars: 200,
+
+    /**
+     * Sustained characters per minute treated as implausible.
+     *
+     * A fast touch typist reaches roughly 600. 900 is deliberately generous, so
+     * this fires on machine-speed insertion rather than on a quick typist.
+     */
+    impossibleCharsPerMinute: 900,
+
+    /** Solution size below which iteration says nothing either way. */
+    refinementMinChars: 400,
+    /** Deletions as a fraction of insertions, below which nothing was revised. */
+    refinementDeleteRatio: 0.05,
+  },
+
+  /**
    * Silence longer than this, while the call is still connected, is recorded as
    * a monitor gap. Generous enough to survive a slow network or a backgrounded
    * tab throttling timers, tight enough that disabling the monitor shows up.
@@ -54,6 +127,18 @@ export const PROCTORING_THRESHOLDS = {
     notableInsertChars: 400,
     /** Client/server clock disagreement above this is notable. */
     notableClockSkewMs: 30_000,
+    /**
+     * Time with the problem and editor hidden before the session stops being
+     * clear, and the point beyond which it is notable.
+     *
+     * Deliberately more forgiving than the unfocused thresholds. Masking is a
+     * consequence of a rule this application imposed, and a candidate whose
+     * window manager dropped them out of fullscreen once should not be marked
+     * for it. Sustained masking is different: the problem was on screen and then
+     * it was not, for minutes, while they were meant to be solving it.
+     */
+    minorMaskedMs: 20_000,
+    notableMaskedMs: 90_000,
   },
 } as const;
 
@@ -62,9 +147,9 @@ export const PROCTORING_THRESHOLDS = {
  * the numbers so it reads like a sentence a person wrote.
  */
 export const SEVERITY_RULE_TEXT =
-  "Clear: under 30s away and no bulk paste. " +
-  "Minor: up to 2 minutes away, or one paste of 121–400 characters. " +
-  "Notable: more than either, or the monitor stopped reporting, or the clock was off, " +
+  "Clear: under 30s away, no bulk paste, and under 20s with the problem hidden. " +
+  "Minor: up to 2 minutes away, or one paste of 121–400 characters, or up to 90s hidden. " +
+  "Notable: more than any of those, or the monitor stopped reporting, or the clock was off, " +
   "or a second display appeared mid-interview.";
 
 /**
