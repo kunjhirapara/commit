@@ -61,6 +61,17 @@ describe("isPublicRoute", () => {
     assert.equal(isPublicRoute("/opengraph-image"), true);
   });
 
+  it("exposes the JWKS endpoint Convex verifies our tokens against", () => {
+    // Convex fetches this with no session. Gating it behind auth would make
+    // every authenticated Convex call fail, because Convex could not retrieve
+    // the key needed to check the token the caller just presented.
+    assert.equal(isPublicRoute("/.well-known/jwks.json"), true);
+  });
+
+  it("does not expose anything else under /.well-known", () => {
+    assert.equal(isPublicRoute("/.well-known/secrets"), false);
+  });
+
   it("exposes the generated icon routes", () => {
     // Next serves the icon file conventions at extensionless paths, so the
     // matcher's extension list cannot skip them either.

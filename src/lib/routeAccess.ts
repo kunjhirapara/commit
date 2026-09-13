@@ -72,6 +72,11 @@ export const PUBLIC_ROUTES: RegExp[] = [
   /^\/robots\.txt$/,
   /^\/sitemap\.xml$/,
   /^\/opengraph-image$/,
+  // Convex fetches this unauthenticated to verify the JWTs we mint for it. If
+  // middleware answered with 307 → /signin, Convex would reject every token and
+  // the failure would surface as "you must be signed in" on calls made by users
+  // who are signed in — a permissions bug that is really a routing bug.
+  /^\/\.well-known\/jwks\.json$/,
   // Same trap as /opengraph-image: Next serves the icon conventions at
   // extensionless paths, so the matcher cannot skip them and a signed-out
   // visitor would get a redirect where a favicon should be.
