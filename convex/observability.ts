@@ -109,13 +109,21 @@ export const captureHealthSnapshot = mutation({
     // dashboard mount, and Convex retains function logs. Only presence is checked.
     const envChecks = [
       {
-        provider: "clerk",
-        status: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-          ? "healthy"
-          : "unhealthy",
-        message: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
-          ? "Clerk publishable key configured."
-          : "Missing Clerk publishable key.",
+        // The Convex half of authentication. SITE_URL is what auth.config.ts
+        // registers as the token issuer, and AUTH_ADAPTER_SECRET is what guards
+        // the adapter mutations Auth.js calls to create users and link
+        // accounts. Either one missing means nobody can sign in, and the
+        // symptom appears in the Next app rather than here.
+        provider: "auth",
+        status:
+          process.env.SITE_URL && process.env.AUTH_ADAPTER_SECRET
+            ? "healthy"
+            : "unhealthy",
+        message: !process.env.SITE_URL
+          ? "Missing SITE_URL, so no token issuer is configured."
+          : !process.env.AUTH_ADAPTER_SECRET
+            ? "Missing AUTH_ADAPTER_SECRET, so every adapter call is rejected."
+            : "Auth issuer and adapter secret configured.",
       },
       {
         provider: "convex",
@@ -136,13 +144,6 @@ export const captureHealthSnapshot = mutation({
           process.env.STREAM_SECRET_KEY
             ? "Stream video credentials configured."
             : "Missing Stream credentials.",
-      },
-      {
-        provider: "webhooks",
-        status: process.env.CLERK_WEBHOOK_SECRET ? "healthy" : "degraded",
-        message: process.env.CLERK_WEBHOOK_SECRET
-          ? "Webhook secret configured."
-          : "Webhook secret missing. Clerk sync will fail.",
       },
       {
         provider: "ownership",

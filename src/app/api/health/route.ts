@@ -39,10 +39,8 @@ export async function GET() {
       version,
       checkedAt: new Date().toISOString(),
       integrations: {
-        clerk: !!env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
         convex: !!env.NEXT_PUBLIC_CONVEX_URL,
         stream: !!env.NEXT_PUBLIC_STREAM_API_KEY && !!env.STREAM_SECRET_KEY,
-        webhooks: !!env.CLERK_WEBHOOK_SECRET,
         auth: auth.ready,
       },
     });

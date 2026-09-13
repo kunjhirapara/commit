@@ -67,11 +67,14 @@ export const createUser = mutation({
       // Public sign-up produces candidates. Elevating anyone beyond that stays
       // an explicit, audited action, exactly as it was under Clerk.
       role: "candidate",
-      // clerkId is still required by the schema and read in 137 places across
-      // convex/. Rather than churn all of them mid-migration, a user created by
-      // Auth.js becomes its own id here — which is what the field always meant
-      // semantically, and what identity.subject now carries. It is dropped in
-      // the final task of the migration.
+      // clerkId is no longer an authentication identifier — nothing verifies a
+      // token against it any more. It stays because it is the *internal user id*
+      // that interviews.candidateId, interviews.interviewerIds and
+      // auditLogs.actorClerkId hold, as plain v.string(), in hundreds of places.
+      // Renaming it is a data migration of its own, not part of removing Clerk.
+      //
+      // A user created by Auth.js becomes its own id here, which is what the
+      // field always meant semantically and what identity.subject now carries.
       //
       // A Convex id does not exist until the row does, so this is written twice:
       // a placeholder that cannot collide, then the real id. The placeholder is
@@ -343,8 +346,8 @@ export const setCredential = mutation({
  *
  * `source` is "server" rather than "auth": the schema's union does not include
  * an auth source, and widening it for this would be a migration for no gain.
- * `provider: "authjs"` is what distinguishes these rows, mirroring the
- * `provider: "clerk"` the webhook path already writes.
+ * `provider: "authjs"` is what distinguishes these rows from every other
+ * telemetry row sharing that source.
  */
 export const recordAuthEvent = mutation({
   args: {

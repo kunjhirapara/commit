@@ -33,14 +33,10 @@ yarn-error.log*
 
 # vercel
 .vercel
-.clerk
 
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-
-# clerk configuration (can include secrets)
-/.clerk/
 
 # convex local state
 .convex/

@@ -1,6 +1,6 @@
 # Commit 💻
 
-Commit is a modern, real-time technical interviewing platform built with [Next.js](https://nextjs.org), [Convex](https://convex.dev/), [Clerk](https://clerk.com/), and [Stream](https://getstream.io/).
+Commit is a modern, real-time technical interviewing platform built with [Next.js](https://nextjs.org), [Convex](https://convex.dev/), [Auth.js](https://authjs.dev/), and [Stream](https://getstream.io/).
 
 It offers real-time video, collaborative code execution, structured feedback scorecards, and scheduling tools to make technical interviewing seamless and professional.
 
@@ -10,7 +10,7 @@ It offers real-time video, collaborative code execution, structured feedback sco
 
 - **Real-Time Video Intervews:** Powered by Stream with customizable rooms, host controls, and health metrics.
 - **Live Collaborative Code Editor:** Secure code execution environment for Python, JavaScript, and Java using Monaco Editor and Docker.
-- **Identity & Roles:** Secure authentication via Clerk with a robust Hybrid RBAC (Role-Based Access Control) system.
+- **Identity & Roles:** Self-hosted authentication via Auth.js — Google, GitHub, email magic links and passwords — with a Hybrid RBAC (Role-Based Access Control) system.
 - **Interactive Dashboards:** Comprehensive pipelines, schedules, and analytics powered by Convex's reactive datastore.
 - **Structured Feedback Scorecards:** Blind-grading, weighted scoring, and internal candidate packet drafting.
 - **Automated Notifications:** Email and in-app notifications with timezone-awareness and retry support.
@@ -68,17 +68,32 @@ Ensure you have the following installed on your local machine:
 
 ### 2. Set Up Environment Variables
 
-Create a `.env.local` file in the root of the project. Your environment variables should include keys for Clerk, Convex, Stream, and SMTP (optional for local dev).
+Copy `.env.example` to `.env.local` — it is the authoritative list, with a note
+on every variable and how to generate the ones that need generating. The
+essentials:
 
 ```env
 # Convex
 NEXT_PUBLIC_CONVEX_URL=your_convex_url
 
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_pub_key
-CLERK_SECRET_KEY=your_clerk_secret_key
-# Required for user syncing across Convex
-CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
+# Auth.js — see .env.example for the full set and how to generate each one
+AUTH_SECRET=openssl rand -base64 32
+AUTH_URL=http://localhost:3000
+AUTH_ADAPTER_SECRET=a long random string, also set on the Convex deployment
+AUTH_JWT_KID=k1
+AUTH_JWT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+"
+AUTH_JWT_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----
+...
+-----END PUBLIC KEY-----
+"
+# OAuth providers are optional locally; email + password works without them.
+AUTH_GOOGLE_ID=...
+AUTH_GOOGLE_SECRET=...
+AUTH_GITHUB_ID=...
+AUTH_GITHUB_SECRET=...
 
 # Stream (Video & Chat)
 NEXT_PUBLIC_STREAM_API_KEY=your_stream_api_key
@@ -225,16 +240,34 @@ access — but if you would rather not have a second container holding it, delet
 the service and add `0 4 * * * docker image prune -f` to the host crontab
 instead. Set `IMAGE_GC_INTERVAL_SECONDS` to change the cadence.
 
-### Clerk + Convex Auth
+### Auth.js + Convex
 
-Convex validates Clerk JWTs against the issuer configured in `convex/auth.config.ts`. Set this on the Convex deployment itself, not only in `.env.local` or your Docker/Portainer environment:
+The Next server mints a short-lived RS256 JWT for the signed-in user. Convex
+verifies it against the public half, which the app serves at
+`/.well-known/jwks.json`; `convex/auth.config.ts` registers exactly one
+`customJwt` provider pointing there.
+
+Two variables must be set **on the Convex deployment itself**, not only in
+`.env.local` or your Docker/Portainer environment:
 
 ```bash
-npx convex env set CLERK_ISSUER_URL https://your-clerk-issuer
+npx convex env set SITE_URL https://your-public-origin
+npx convex env set AUTH_ADAPTER_SECRET the-same-value-the-app-has
 npx convex deploy
 ```
 
-Use the issuer from the Clerk JWT template used for Convex, and keep the JWT template audience/application ID as `convex`. If this value points at a development Clerk instance while the deployed frontend uses production Clerk keys, Convex will reject browser tokens with `No auth provider found matching the given token`.
+`SITE_URL` is what Convex derives the issuer and JWKS URL from, so it has to be
+the origin the browser actually reaches — if it points somewhere else, Convex
+rejects every token with `No auth provider found matching the given token`.
+`AUTH_ADAPTER_SECRET` guards `convex/authAdapter.ts`, which Auth.js calls to
+create and read users; it must be identical on both sides or every sign-in
+fails.
+
+`AUTH_URL` deserves its own warning. Auth.js only trusts the request host when
+`AUTH_URL`, `AUTH_TRUST_HOST`, `VERCEL` or `CF_PAGES` is set — and it uses `??`,
+so setting `AUTH_URL` to the **empty string** stops that chain at the first term
+and yields `false`, at which point every auth route answers 500. An empty value
+is strictly worse than an absent one. `/api/health` checks for exactly this.
 
 ---
 
@@ -279,21 +312,26 @@ so they are *not* covered by the app container's limit and get their own caps in
 | monitoring profile | ~1.1 | ~2 GB |
 
 The practical ceilings are external before they are local: Stream
-participant-minutes first, then Convex function calls and bandwidth, then Clerk
-MAU.
+participant-minutes first, then Convex function calls and bandwidth. Auth is
+self-hosted, so it has no per-user ceiling of its own beyond the database.
 
 ---
 
 ## ✅ Before opening public signup
 
-- [ ] Rotate `STREAM_SECRET_KEY` and `CLERK_WEBHOOK_SECRET`. An earlier version
-      of `convex/observability.ts` logged both to Convex function logs on every
-      developer-dashboard load, so treat the old values as compromised. Update
-      them in the Portainer stack env and in GitHub Actions secrets.
-- [ ] Use a **production** Clerk instance, with the domain, redirect URLs and
-      webhook endpoint pointing at the public origin, and **email verification
-      required at signup** — the code runner refuses unverified accounts.
-- [ ] Confirm `CLERK_ISSUER_URL` on the Convex deployment matches that instance.
+- [ ] Rotate `STREAM_SECRET_KEY`. An earlier version of
+      `convex/observability.ts` logged it to Convex function logs on every
+      developer-dashboard load, so treat the old value as compromised. Update it
+      in the Portainer stack env and in GitHub Actions secrets.
+- [ ] Rotate the OAuth client secrets, `AUTH_SECRET`, `AUTH_ADAPTER_SECRET` and
+      `INTERNAL_API_KEY`, and bump `AUTH_JWT_KID` when you replace the keypair —
+      the kid names the key in both halves, so changing the key without changing
+      the kid leaves cached JWKS entries rejecting valid tokens.
+- [ ] Point the Google and GitHub OAuth apps' authorised redirect URIs at the
+      public origin: `https://<origin>/api/auth/callback/{google,github}`.
+- [ ] Confirm `SITE_URL` and `AUTH_ADAPTER_SECRET` on the Convex deployment match
+      the app, and that `/api/health` reports `auth: true` — email verification
+      is required before the code runner will run anything.
 - [ ] Set `NEXT_PUBLIC_APP_URL` to the public origin so invitation links resolve.
 - [ ] Restore-test one backup zip from the `backup-data` volume.
 - [ ] Set `OWNER_EMAILS` on the Convex deployment to your own address, then sign

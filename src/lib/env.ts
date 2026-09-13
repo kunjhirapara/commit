@@ -2,13 +2,11 @@ import { z } from "zod";
 
 const requiredServerEnvSchema = z.object({
   NEXT_PUBLIC_CONVEX_URL: z.string().url(),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
   NEXT_PUBLIC_STREAM_API_KEY: z.string().min(1),
   STREAM_SECRET_KEY: z.string().min(1),
 });
 
 const optionalServerEnvSchema = requiredServerEnvSchema.extend({
-  CLERK_WEBHOOK_SECRET: z.string().min(1).optional(),
   // SMTP (optional in dev – emails are logged to console)
   SMTP_HOST: z.string().min(1).optional(),
   SMTP_PORT: z.string().optional(),
@@ -26,7 +24,6 @@ const optionalServerEnvSchema = requiredServerEnvSchema.extend({
 });
 
 const productionServerEnvSchema = requiredServerEnvSchema.extend({
-  CLERK_WEBHOOK_SECRET: z.string().min(1),
   // SMTP required in production
   SMTP_HOST: z.string().min(1),
   SMTP_PORT: z.string().min(1),
@@ -41,7 +38,6 @@ const productionServerEnvSchema = requiredServerEnvSchema.extend({
 
 const clientEnvSchema = z.object({
   NEXT_PUBLIC_CONVEX_URL: z.string().url(),
-  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: z.string().min(1),
   NEXT_PUBLIC_STREAM_API_KEY: z.string().min(1),
   NEXT_PUBLIC_APP_URL: z.string().url().optional(),
   NEXT_PUBLIC_FEATURE_FLAGS: z.string().optional(),
@@ -88,8 +84,6 @@ export const getValidatedClientEnv = () => {
 
   const parsed = clientEnvSchema.safeParse({
     NEXT_PUBLIC_CONVEX_URL: process.env.NEXT_PUBLIC_CONVEX_URL,
-    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
-      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
     NEXT_PUBLIC_STREAM_API_KEY: process.env.NEXT_PUBLIC_STREAM_API_KEY,
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
     NEXT_PUBLIC_FEATURE_FLAGS: process.env.NEXT_PUBLIC_FEATURE_FLAGS,

@@ -1,6 +1,5 @@
 /**
- * Finding the signed-in user from `identity.subject`, while two auth providers
- * are registered at once.
+ * Finding the signed-in user from `identity.subject`.
  *
  * Kept import-free and in convex/lib for the same reason as ./retention.ts and
  * ./owner.ts: a test can then import it without pulling in the Convex server
@@ -8,63 +7,28 @@
  * not throw — it silently reports that a signed-in user has no account, and
  * tells them to sign out and try again, which does not help.
  *
- * During the Clerk migration `subject` means one of two different things, since
- * convex/auth.config.ts registers both providers and either can have minted the
- * token on any given request:
+ * `subject` is now always the Convex document id of the user. Auth.js is the
+ * only provider registered in convex/auth.config.ts, and it takes the subject
+ * from the id the adapter returned, so there is exactly one thing it can be.
  *
- *   - Auth.js — the Convex document id of the user.
- *   - Clerk   — the Clerk user id, stored in `users.clerkId`.
+ * This used to try three lookups. While Clerk was also registered, a token
+ * could arrive carrying a Clerk user id instead, and resolving it meant falling
+ * back to `by_clerk_id` and then `by_legacy_clerk_id`. Both fallbacks went with
+ * Clerk: no token in existence carries a Clerk id any more, so those reads
+ * could only ever miss.
  *
- * Three cases have to resolve, and only the first two are obvious:
- *
- *   1. A user Auth.js created. convex/authAdapter.ts sets their `clerkId` to
- *      their own document id, so either lookup finds them.
- *   2. A legacy user presenting a Clerk token, before the backfill. Subject is
- *      the Clerk id, so `by_clerk_id` finds them and the id lookup cannot.
- *   3. A legacy user presenting an Auth.js token — the case that appears the
- *      moment anyone migrates, and the reason this is not simply the old query.
- *      Subject is their document id while `clerkId` is still `user_2...`, so
- *      only the id lookup finds them.
- *   4. A Clerk subject that is only present as `legacyClerkId`.
- *
- * Case 4 is defence rather than a live requirement, and the distinction is
- * worth stating plainly because an earlier version of this comment got it
- * wrong. The backfill (Task 14) copies `clerkId` into `legacyClerkId` and
- * `streamUserId`; it does *not* rewrite `clerkId`, precisely because
- * `interviewerIds`, `candidateId` and `auditLogs.actorClerkId` all reference
- * that value across the database. So after the backfill, case 2 still resolves
- * through `by_clerk_id` on its own.
- *
- * The third lookup earns its place at the other end of the migration: Task 16
- * makes `clerkId` optional and then drops it, at which point `legacyClerkId` is
- * the only remaining record of a Clerk id. It costs one indexed read on a path
- * that has already missed twice, and it means the order of those two steps
- * cannot strand anyone.
- *
- * Both fallbacks are removed with the `clerkId` column in the final task of the
- * migration.
+ * `users.clerkId` still exists and is still populated — it is the id that
+ * `interviewerIds`, `candidateId` and `auditLogs.actorClerkId` reference
+ * throughout the database. It is no longer an *authentication* identifier, and
+ * nothing here should read it again.
  */
 
-/**
- * The slice of a Convex ctx this needs, narrow enough for a test to supply.
- *
- * Generic over the user row so the Convex call sites keep inferring whatever
- * they inferred before — authz.ts passes `ctx: any` and reads `user.role` off
- * the result, which a hardcoded `unknown` here would break at every call site.
- */
+/** The slice of a Convex ctx this needs, narrow enough for a test to supply. */
 export type SubjectResolutionCtx<TUser> = {
   db: {
     /** Returns null for a string that is not an id for the table. */
     normalizeId: (table: "users", id: string) => string | null;
     get: (id: string) => Promise<TUser | null>;
-    query: (table: "users") => {
-      withIndex: (
-        index: "by_clerk_id" | "by_legacy_clerk_id",
-        builder: (q: {
-          eq: (field: "clerkId" | "legacyClerkId", value: string) => unknown;
-        }) => unknown,
-      ) => { first: () => Promise<TUser | null> };
-    };
   };
 };
 
@@ -84,42 +48,17 @@ export const resolveUserBySubject = async <TUser = any>(
   ctx: any,
   subject: string,
 ): Promise<TUser | null> => {
-  // An empty subject would otherwise reach the index and match any row whose
-  // clerkId was somehow empty. Nothing should produce one, which is exactly why
-  // it must not resolve to a user if something does.
   if (!subject) return null;
 
   /**
-   * `normalizeId` is what makes trying the id first safe: it returns null for a
-   * string that is not an id for this table, where `db.get` would throw. A
-   * Clerk subject simply falls through to the index below.
+   * `normalizeId` rather than passing the string straight to `db.get`, which
+   * throws on anything that is not a well-formed id for this table. A malformed
+   * subject should resolve to "no such user" rather than to a 500 — the caller
+   * turns the former into a sign-in prompt and the latter into an error page.
    */
   const documentId = ctx.db.normalizeId("users", subject);
 
-  if (documentId) {
-    const user = await ctx.db.get(documentId);
-    // A well-formed id for a row that no longer exists still falls through: a
-    // deleted-and-recreated account should be found by its clerkId rather than
-    // reported as missing.
-    if (user) return user;
-  }
+  if (!documentId) return null;
 
-  const byClerkId = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: { eq: (field: "clerkId", value: string) => unknown }) =>
-      q.eq("clerkId", subject),
-    )
-    .first();
-
-  if (byClerkId) return byClerkId;
-
-  // Case 4: a Clerk token after the backfill has moved the Clerk id here.
-  return await ctx.db
-    .query("users")
-    .withIndex(
-      "by_legacy_clerk_id",
-      (q: { eq: (field: "legacyClerkId", value: string) => unknown }) =>
-        q.eq("legacyClerkId", subject),
-    )
-    .first();
+  return await ctx.db.get(documentId);
 };
