@@ -10,12 +10,14 @@
 
 import type * as admin from "../admin.js";
 import type * as auditLogs from "../auditLogs.js";
+import type * as authAdapter from "../authAdapter.js";
 import type * as calendarEvents from "../calendarEvents.js";
 import type * as comments from "../comments.js";
 import type * as crons from "../crons.js";
 import type * as feedback from "../feedback.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
+import type * as lib_adapterAuth from "../lib/adapterAuth.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_emailTemplates from "../lib/emailTemplates.js";
 import type * as lib_errorUtils from "../lib/errorUtils.js";
@@ -42,12 +44,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auditLogs: typeof auditLogs;
+  authAdapter: typeof authAdapter;
   calendarEvents: typeof calendarEvents;
   comments: typeof comments;
   crons: typeof crons;
   feedback: typeof feedback;
   http: typeof http;
   interviews: typeof interviews;
+  "lib/adapterAuth": typeof lib_adapterAuth;
   "lib/authz": typeof lib_authz;
   "lib/emailTemplates": typeof lib_emailTemplates;
   "lib/errorUtils": typeof lib_errorUtils;

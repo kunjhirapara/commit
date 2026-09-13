@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./password.ts";
+import {
+  equalizePasswordTiming,
+  hashPassword,
+  MIN_PASSWORD_LENGTH,
+  verifyPassword,
+} from "./password.ts";
 
 /**
  * Clerk held these hashes before; now we do. The cases below are the properties
@@ -55,5 +60,34 @@ describe("password hashing", () => {
 
   it("returns false rather than throwing on an empty stored hash", async () => {
     assert.equal(await verifyPassword("anything", ""), false);
+  });
+});
+
+/**
+ * The sign-in timing oracle.
+ *
+ * `getCredentialByEmail` returns null for an address with no account, so the
+ * "no such user" branch would otherwise return in microseconds while a real
+ * account costs a full argon2 verify. That gap is measurable over a network and
+ * enumerates users regardless of how carefully the error message is worded.
+ */
+describe("equalizePasswordTiming", () => {
+  it("spends real work rather than returning immediately", async () => {
+    const started = process.hrtime.bigint();
+    await equalizePasswordTiming("whatever-was-submitted");
+    const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+
+    // The point is not the exact number. A malformed dummy hash would make
+    // verifyPassword catch and return false in well under a millisecond, which
+    // silently removes the protection while every other test still passes —
+    // this is the only thing that would notice.
+    assert.ok(
+      elapsedMs > 5,
+      `expected a real argon2 verify, took ${elapsedMs.toFixed(2)}ms — is DUMMY_PASSWORD_HASH still a valid argon2 encoding?`,
+    );
+  });
+
+  it("resolves rather than throwing, whatever it is given", async () => {
+    assert.equal(await equalizePasswordTiming(""), undefined);
   });
 });

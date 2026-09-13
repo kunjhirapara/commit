@@ -386,3 +386,40 @@ export const resolveEmailTemplate = (
       return null;
   }
 };
+
+/**
+ * The magic-link sign-in email.
+ *
+ * Separate from the notification templates above because it is not a
+ * notification: it is a credential. Two consequences show up in the copy.
+ *
+ * The link is shown as a button and nothing else — no plain-text copy of the
+ * URL beside it. A sign-in link pasted into a chat window by a confused
+ * recipient is a working session for whoever reads it, and a visible URL is an
+ * invitation to paste.
+ *
+ * The expiry is stated, and so is what to do if the mail was unexpected. A
+ * sign-in link nobody asked for is the first thing a victim sees when someone
+ * is probing their address, and "ignore this" is the right advice only if we
+ * also say the link does nothing until it is clicked.
+ */
+export const signInLinkTemplate = (params: {
+  url: string;
+  expiresInMinutes: number;
+}): EmailTemplate => {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:${BRAND_DARK};">Sign in to ${BRAND_NAME}</h1>
+    <p style="margin:20px 0 0;font-size:14px;line-height:1.6;color:${TEXT_COLOR};">
+      Use the button below to sign in. It expires in ${escapeHtml(String(params.expiresInMinutes))} minutes and can only be used once.
+    </p>
+    <div style="text-align:center;margin:28px 0 8px;">${ctaButton(`Sign in to ${BRAND_NAME}`, params.url)}</div>
+    <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:${MUTED_COLOR};">
+      If you did not ask to sign in, you can ignore this email — nothing happens until the button is clicked, and the link expires on its own.
+    </p>
+  `;
+
+  return {
+    subject: `Sign in to ${BRAND_NAME}`,
+    html: wrapLayout(`Sign in to ${BRAND_NAME}`, body),
+  };
+};
