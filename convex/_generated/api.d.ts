@@ -10,12 +10,14 @@
 
 import type * as admin from "../admin.js";
 import type * as auditLogs from "../auditLogs.js";
+import type * as authAdapter from "../authAdapter.js";
 import type * as calendarEvents from "../calendarEvents.js";
 import type * as comments from "../comments.js";
 import type * as crons from "../crons.js";
 import type * as feedback from "../feedback.js";
 import type * as http from "../http.js";
 import type * as interviews from "../interviews.js";
+import type * as lib_adapterAuth from "../lib/adapterAuth.js";
 import type * as lib_authz from "../lib/authz.js";
 import type * as lib_emailTemplates from "../lib/emailTemplates.js";
 import type * as lib_errorUtils from "../lib/errorUtils.js";
@@ -24,7 +26,9 @@ import type * as lib_owner from "../lib/owner.js";
 import type * as lib_permissions from "../lib/permissions.js";
 import type * as lib_retention from "../lib/retention.js";
 import type * as lib_retry from "../lib/retry.js";
+import type * as lib_subjectResolution from "../lib/subjectResolution.js";
 import type * as metrics from "../metrics.js";
+import type * as migrations_authBackfill from "../migrations/authBackfill.js";
 import type * as notifications_emailActions from "../notifications/emailActions.js";
 import type * as notifications_index from "../notifications/index.js";
 import type * as observability from "../observability.js";
@@ -42,12 +46,14 @@ import type {
 declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auditLogs: typeof auditLogs;
+  authAdapter: typeof authAdapter;
   calendarEvents: typeof calendarEvents;
   comments: typeof comments;
   crons: typeof crons;
   feedback: typeof feedback;
   http: typeof http;
   interviews: typeof interviews;
+  "lib/adapterAuth": typeof lib_adapterAuth;
   "lib/authz": typeof lib_authz;
   "lib/emailTemplates": typeof lib_emailTemplates;
   "lib/errorUtils": typeof lib_errorUtils;
@@ -56,7 +62,9 @@ declare const fullApi: ApiFromModules<{
   "lib/permissions": typeof lib_permissions;
   "lib/retention": typeof lib_retention;
   "lib/retry": typeof lib_retry;
+  "lib/subjectResolution": typeof lib_subjectResolution;
   metrics: typeof metrics;
+  "migrations/authBackfill": typeof migrations_authBackfill;
   "notifications/emailActions": typeof notifications_emailActions;
   "notifications/index": typeof notifications_index;
   observability: typeof observability;

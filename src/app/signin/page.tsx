@@ -2,49 +2,24 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { SignIn, SignedIn } from "@clerk/nextjs";
+
 import AuthPageShell from "@/components/auth/AuthPageShell";
 import RedirectAwayFromAuth from "@/components/auth/RedirectAwayFromAuth";
-import { useClerkAppearance } from "@/hooks/useClerkAppearance";
+import SignInForm from "@/components/auth/SignInForm";
+import { SignedIn } from "@/components/auth/SessionGuards";
 import { Skeleton } from "@/components/ui/skeleton";
-
-/**
- * Returns the post-sign-in destination.
- *
- * Middleware attaches `redirect_url` when it bounces a signed-out visitor, and
- * honouring it is the entire point: a session that expires on /dashboard should
- * come back to /dashboard rather than dumping the user on the landing page.
- *
- * Only same-origin relative paths are accepted. `redirect_url` arrives in the
- * query string where anyone can set it, and forwarding an absolute URL after
- * login is an open redirect — a credible phishing step, because the victim has
- * just typed their password on a page that genuinely was ours.
- */
-const useRedirectTarget = () => {
-  const searchParams = useSearchParams();
-  const requested = searchParams.get("redirect_url");
-
-  if (!requested) return "/";
-  // "//evil.com" is protocol-relative and would leave the site.
-  if (!requested.startsWith("/") || requested.startsWith("//")) return "/";
-  return requested;
-};
+import { safeRedirectTarget } from "@/lib/auth/redirectTarget";
 
 function SignInContent() {
-  const redirectTarget = useRedirectTarget();
-  const appearance = useClerkAppearance();
+  const searchParams = useSearchParams();
 
-  return (
-    <SignIn
-      appearance={appearance}
-      // Hash routing keeps this working on a normal route; the alternative is a
-      // catch-all segment existing purely to satisfy Clerk's path routing.
-      routing="hash"
-      signUpUrl="/signup"
-      forceRedirectUrl={redirectTarget}
-      fallbackRedirectUrl={redirectTarget}
-    />
-  );
+  // Middleware attaches redirect_url when it bounces a signed-out visitor, so a
+  // session that expired on /dashboard comes back to /dashboard. The guard is
+  // in its own tested module: an open redirect here inherits the trust of the
+  // page the user has just typed their password into.
+  const redirectTo = safeRedirectTarget(searchParams.get("redirect_url"));
+
+  return <SignInForm redirectTo={redirectTo} />;
 }
 
 export default function SignInPage() {
@@ -61,7 +36,7 @@ export default function SignInPage() {
         failure has already happened once in this codebase, on
         /accept-invitation — see the note there.
       */}
-      <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-xl" />}>
+      <Suspense fallback={<Skeleton className="h-[28rem] w-full rounded-2xl" />}>
         <SignInContent />
       </Suspense>
     </AuthPageShell>

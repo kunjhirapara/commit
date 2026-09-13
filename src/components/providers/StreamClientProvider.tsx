@@ -2,9 +2,11 @@
 
 import { ReactNode } from "react";
 import dynamic from "next/dynamic";
-import { useUser } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
+
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUserRole } from "@/hooks/useUserRole";
+import { resolveStreamUserId } from "@/lib/auth/streamIdentity";
 
 // Deliberately not a static import: this is the whole point of the split. The
 // Stream SDK chunk is fetched only once a route that actually needs video
@@ -20,7 +22,7 @@ const streamRequiredForPath = (pathname: string | null) =>
     pathname.startsWith("/recordings"));
 
 const StreamClientProvider = ({ children }: { children: ReactNode }) => {
-  const { user, isLoaded } = useUser();
+  const { user, isLoaded } = useCurrentUser();
   const pathname = usePathname();
   const {
     canScheduleInterviews,
@@ -38,17 +40,28 @@ const StreamClientProvider = ({ children }: { children: ReactNode }) => {
     !!user &&
     (streamRequiredForPath(pathname) || homeCanStartMeeting);
 
-  if (!shouldInitializeClient || !user) return <>{children}</>;
+  /**
+   * The id Stream knows them by, which is no longer the id the session carries.
+   *
+   * Stream keys calls and recordings by the user_id it was given, and that has
+   * always been the Clerk id. Initialising the client with the Convex document
+   * id instead would connect a user Stream has never seen -- their own past
+   * calls would simply not be there.
+   *
+   * Null means we cannot identify them to Stream at all, which is a reason not
+   * to start the client rather than a reason to invent an id: an invented one
+   * silently creates a second Stream identity for the same person.
+   */
+  const streamUserId = resolveStreamUserId(user);
+
+  if (!shouldInitializeClient || !user || !streamUserId) return <>{children}</>;
 
   return (
     <StreamVideoRuntime
       user={{
-        id: user.id,
-        name:
-          [user.firstName, user.lastName].filter(Boolean).join(" ") ||
-          user.fullName ||
-          user.id,
-        image: user.imageUrl,
+        id: streamUserId,
+        name: user.name || user.email || streamUserId,
+        image: user.image ?? undefined,
       }}>
       {children}
     </StreamVideoRuntime>

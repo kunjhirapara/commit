@@ -17,7 +17,7 @@ import MeetingRoom from "@/components/ui/MeetingRoom";
 import MeetingSetup from "@/components/ui/MeetingSetup";
 import useGetCallById from "@/hooks/useGetCallByUd";
 import { api } from "../../../../../convex/_generated/api";
-import { useUser } from "@clerk/nextjs";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useQuery } from "convex/react";
 import {
   OwnCapability,
@@ -94,7 +94,7 @@ function MeetingLoadingSkeleton() {
 function MeetingPage() {
   const { id } = useParams();
   const router = useRouter();
-  const { isLoaded } = useUser();
+  const { isLoaded } = useCurrentUser();
   const { resolvedTheme } = useTheme();
   const meetingId = typeof id === "string" ? id : "";
 

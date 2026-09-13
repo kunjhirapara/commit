@@ -331,3 +331,54 @@ export const setCredential = mutation({
     });
   },
 });
+
+/**
+ * Records an authentication event that has no authenticated caller.
+ *
+ * `observability.ingestTelemetry` is the usual route from the Next server, but
+ * it calls `requireIdentity` — sensible for a public endpoint, and useless
+ * here, because the events most worth recording are the ones where sign-in
+ * failed and there is no identity by definition. Guarded by the adapter secret
+ * instead, like everything else in this file.
+ *
+ * `source` is "server" rather than "auth": the schema's union does not include
+ * an auth source, and widening it for this would be a migration for no gain.
+ * `provider: "authjs"` is what distinguishes these rows, mirroring the
+ * `provider: "clerk"` the webhook path already writes.
+ */
+export const recordAuthEvent = mutation({
+  args: {
+    ...secretArg,
+    scope: v.string(),
+    level: v.union(
+      v.literal("info"),
+      v.literal("warn"),
+      v.literal("error"),
+      v.literal("critical"),
+    ),
+    message: v.string(),
+    correlationId: v.optional(v.string()),
+    status: v.optional(v.string()),
+    // Deliberately no `email` argument, and callers must not smuggle one into
+    // `metadata`. A rejection log that records the address that was tried is
+    // exactly the user-enumeration oracle the generic error message on the
+    // sign-in form exists to prevent — it just moves the oracle to whoever can
+    // read operational events.
+    metadata: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    assertAdapterSecret(args.secret);
+
+    await ctx.db.insert("operationalEvents", {
+      source: "server",
+      scope: args.scope,
+      level: args.level,
+      message: args.message,
+      correlationId: args.correlationId,
+      provider: "authjs",
+      status: args.status,
+      metadata: args.metadata,
+      createdAt: Date.now(),
+    });
+  },
+});

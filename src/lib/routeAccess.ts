@@ -60,6 +60,9 @@ export const PUBLIC_ROUTES: RegExp[] = [
   // declarations for pages that were never built.
   /^\/signin(\/|$)/,
   /^\/signup(\/|$)/,
+  // Everyone who reaches this is, by definition, unable to sign in. Gating it
+  // would redirect them to /signin, whose only way out is a link back to here.
+  /^\/reset-password(\/|$)/,
   /^\/terms(\/|$)/,
   /^\/privacy(\/|$)/,
   /^\/recording-disclosure(\/|$)/,
@@ -86,6 +89,16 @@ export const PUBLIC_ROUTES: RegExp[] = [
   /^\/apple-icon$/,
   // Health is polled by the container healthcheck, which carries no session.
   /^\/api\/health(\/|$)/,
+  // Auth.js's own endpoints: the sign-in POST, the OAuth callbacks, the session
+  // and CSRF reads. Every one of them is used by someone who is, by definition,
+  // not signed in yet, so gating them behind a session makes signing in
+  // impossible.
+  //
+  // This deliberately also covers /api/auth/convex-token, which does its own
+  // session check and answers 401. That is the right answer there: the caller is
+  // fetch() from the Convex client, and a middleware 307 to /signin would arrive
+  // as opaque HTML that fails to parse as a token.
+  /^\/api\/auth(\/|$)/,
   // Clerk posts here with a webhook signature, not a user session.
   /^\/api\/webhooks(\/|$)/,
 ];

@@ -1,18 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useClerkAppearance } from "@/hooks/useClerkAppearance";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ModeToggle } from "./ModeToggle";
 import { CodeIcon } from "lucide-react";
-import {
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+
+import { SignedIn, SignedOut } from "@/components/auth/SessionGuards";
+import UserMenu from "@/components/auth/UserMenu";
 import { Button } from "./button";
 import { cn } from "@/lib/utils";
 import DasboardBtn from "./DasboardBtn";
@@ -30,7 +25,6 @@ const APP_LINKS = [
 ];
 
 function Navbar() {
-  const clerkAppearance = useClerkAppearance();
   const [isScrolled, setIsScrolled] = useState(false);
   const pathname = usePathname();
 
@@ -113,7 +107,7 @@ function Navbar() {
                       ? "scale-95 transition-transform"
                       : "scale-100 transition-transform"
                   }>
-                  <UserButton appearance={clerkAppearance} />
+                  <UserMenu />
                 </div>
               </div>
             </div>
@@ -122,17 +116,14 @@ function Navbar() {
           <SignedOut>
             <div className="ml-auto flex items-center gap-2 sm:gap-3">
               <ModeToggle />
-              {/* The modal is a Clerk surface too, so it needs the same
-                  appearance as the sign-in page — otherwise it renders Clerk's
-                  default light styling over a dark app. */}
-              <SignInButton mode="modal" appearance={clerkAppearance}>
-                <Button variant="ghost" size="sm">
-                  Sign in
-                </Button>
-              </SignInButton>
-              <SignUpButton mode="modal" appearance={clerkAppearance}>
-                <Button size="sm">Get started</Button>
-              </SignUpButton>
+              {/* Real pages rather than modals now, so these are plain links
+                  and there is no provider styling to keep in sync. */}
+              <Button variant="ghost" size="sm" asChild>
+                <Link href="/signin">Sign in</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/signup">Get started</Link>
+              </Button>
             </div>
           </SignedOut>
         </div>

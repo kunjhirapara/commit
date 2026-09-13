@@ -10,6 +10,71 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-12-custom-auth-design.md`
 
+## Status
+
+Tasks 1-14 are implemented and merged to `feat/authjs-wiring`. Auth.js owns the
+session, the middleware and every call site; Clerk is installed but unreferenced
+except by two dead files Task 16 deletes.
+
+| Phase | Tasks | State |
+|---|---|---|
+| 1 Foundation | 1-7 | Done |
+| 2 Auth.js wiring | 8-10 | Done |
+| 3 UI | 11-12 | Done |
+| 4 Server call sites | 13 | Done |
+| 5 Migration | 14 | Backfill written and verified on dev |
+| 5 Migration | 15 | **Blocked** — see below |
+| 6 Removal | 16 | Not started (irreversible) |
+
+### What Task 15 is waiting on
+
+None of these are code. They are the reason the cutover cannot start.
+
+1. **Production is running an image from before this work.** Nothing here ships
+   until the VM stack is redeployed.
+2. **Environment variables that do not exist in production yet.**
+   `AUTH_ADAPTER_SECRET` must be set to the *same value* in both the Next
+   environment and the Convex deployment — a mismatch fails every sign-in with
+   a bare "Unauthorized". Also `AUTH_SECRET`, `AUTH_GOOGLE_ID`/`SECRET`,
+   `AUTH_GITHUB_ID`/`SECRET`, and `AUTH_JWT_PRIVATE_KEY`/`PUBLIC_KEY`/`KID`.
+   `SITE_URL` on Convex must equal `NEXT_PUBLIC_APP_URL` exactly, or Convex
+   rejects every token and it surfaces as "you must be signed in" to people who
+   are.
+3. **OAuth redirect URIs** registered with Google and GitHub:
+   `/api/auth/callback/google` and `/api/auth/callback/github`.
+4. **Step 4 is a manual gate** that cannot be automated: sign in by each of the
+   four methods, and open a past recording as a migrated user. That last one is
+   the only real test of the Stream identity work, which fails silently.
+
+### Corrections to this plan, found while implementing it
+
+- **Task 8's observability example uses `source: "auth"`**, which is not in the
+  schema's union. These rows are `source: "server"` with `provider: "authjs"`,
+  matching how the Clerk webhook path already tags its own.
+- **Task 8 assumed Auth.js would be told the truth about GitHub emails.** The
+  stock provider calls `/user/emails` only when the profile has no public email,
+  and discards the `verified` flag when it does call it. Since
+  `mayLinkToExistingUser` treats "verified" as permission to attach an identity
+  to an existing account, that gap is account takeover. `auth.config.ts`
+  overrides the userinfo request; the selection rule is
+  `src/lib/auth/githubEmail.ts`, with tests.
+- **Task 9's step 3 (swap the layout provider) moved to Task 13.** `useSession`
+  throws outside a `SessionProvider`, so the provider cannot enter the tree
+  while the call sites still use Clerk. The swap, the call sites and the
+  middleware are one commit because they cannot be several.
+- **Task 10 named `convex/lib/errorUtils.ts`.** The helper is in
+  `convex/lib/authz.ts`, and now in `convex/lib/subjectResolution.ts` so a test
+  can reach it.
+- **Task 12 needed a registration route the plan does not mention.** Auth.js has
+  no sign-up, and the obvious implementation is a trapdoor: `createUser` is
+  idempotent by email, so calling `setCredential` on its result lets anyone set
+  a password on an existing account.
+- **Credentials sign-in was a timing oracle.** A missing account returned in
+  microseconds where a real one cost an argon2 verify. See
+  `equalizePasswordTiming`.
+- **`safeRedirectTarget` accepted `/\evil.com`** in its inline form, which
+  browsers normalise to `//evil.com` and follow off-site.
+
 ## Global Constraints
 
 - Session strategy is **`jwt`**. The Credentials provider does not support database sessions. Never set `strategy: "database"`.

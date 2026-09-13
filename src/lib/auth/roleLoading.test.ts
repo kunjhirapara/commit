@@ -12,20 +12,19 @@ import { isRoleStateLoading } from "./roleLoading.ts";
  * refresh, because Clerk reports `user: undefined` until it has loaded.
  */
 const settled = {
-  isClerkLoaded: true,
+  isSessionLoaded: true,
   hasUser: true,
   isConvexAuthLoading: false,
-  isWaitingForSync: false,
   isQueryingCurrentUser: true,
   hasUserData: true,
 };
 
 describe("isRoleStateLoading", () => {
-  it("is loading before Clerk has resolved, even though there is no user yet", () => {
+  it("is loading before the session has resolved, even though there is no user yet", () => {
     // The bug: `undefined` user was read as "signed out and settled" rather than
     // "we do not know yet", so a refresh looked identical to a denial.
     assert.equal(
-      isRoleStateLoading({ ...settled, isClerkLoaded: false, hasUser: false }),
+      isRoleStateLoading({ ...settled, isSessionLoaded: false, hasUser: false }),
       true,
     );
   });
@@ -37,30 +36,22 @@ describe("isRoleStateLoading", () => {
     );
   });
 
-  it("is loading while the user record is syncing", () => {
-    assert.equal(
-      isRoleStateLoading({ ...settled, isWaitingForSync: true }),
-      true,
-    );
-  });
-
   it("is loading while the current-user query is in flight", () => {
     assert.equal(isRoleStateLoading({ ...settled, hasUserData: false }), true);
   });
 
-  it("is settled once Clerk, Convex, sync and the query have all resolved", () => {
+  it("is settled once the session, Convex and the query have all resolved", () => {
     assert.equal(isRoleStateLoading(settled), false);
   });
 
-  it("is settled for a genuinely signed-out visitor once Clerk has loaded", () => {
+  it("is settled for a genuinely signed-out visitor once the session has loaded", () => {
     // Middleware redirects these to sign-in before a guard sees them, but the
     // predicate must still terminate rather than hang on a spinner.
     assert.equal(
       isRoleStateLoading({
-        isClerkLoaded: true,
+        isSessionLoaded: true,
         hasUser: false,
         isConvexAuthLoading: false,
-        isWaitingForSync: false,
         isQueryingCurrentUser: false,
         hasUserData: false,
       }),

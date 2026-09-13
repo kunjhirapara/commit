@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { mintConvexTokenForCurrentUser } from "@/lib/auth/serverSession";
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../convex/_generated/api";
@@ -31,8 +31,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const { getToken } = await auth();
-    const token = await getToken({ template: "convex" });
+    const token = await mintConvexTokenForCurrentUser();
     const body = await request.json();
     const env = getValidatedServerEnv();
 

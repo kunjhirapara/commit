@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, currentUser } from "@clerk/nextjs/server";
+import {
+  getCurrentConvexUser,
+  mintConvexTokenForCurrentUser,
+} from "@/lib/auth/serverSession";
 import { fetchMutation } from "convex/nextjs";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
@@ -44,10 +47,10 @@ const isCreatedInvitationPayload = (
 };
 
 export async function POST(req: NextRequest) {
-  const { userId, getToken } = await auth();
+  const inviter = await getCurrentConvexUser();
   const env = getValidatedServerEnv();
 
-  if (!userId) {
+  if (!inviter) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -68,13 +71,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const token = await getToken({ template: "convex" });
+  const token = await mintConvexTokenForCurrentUser();
   const convexAuth = {
     token: token ?? undefined,
     url: env.NEXT_PUBLIC_CONVEX_URL,
   };
 
-  const inviter = await currentUser();
   const revokeIfPossible = async (invitationId?: Id<"invitations">) => {
     if (!invitationId) return;
 
@@ -106,8 +108,9 @@ export async function POST(req: NextRequest) {
 
     const template = resolveEmailTemplate("access.role_invitation", {
       recipientEmail: invitation.email,
-      inviterName:
-        inviter?.fullName ?? inviter?.firstName ?? inviter?.primaryEmailAddress?.emailAddress ?? "A team admin",
+      // The Convex record rather than a provider profile, so the name in the
+      // invitation email is the one the rest of the app shows.
+      inviterName: inviter.name || inviter.email || "A team admin",
       invitedRole: invitation.role,
       invitationUrl: absoluteUrl(
         `/accept-invitation?token=${encodeURIComponent(invitation.invitationToken)}`,

@@ -10,6 +10,7 @@ import {
   normalizeEmail,
   requirePermission,
   getCurrentUserRecord,
+  resolveUserBySubject,
 } from "./lib/authz";
 import {
   createServerError,
@@ -264,10 +265,10 @@ export const getCurrentUser = query({
     try {
       const identity = await ctx.auth.getUserIdentity();
       if (!identity) return null;
-      const user = await ctx.db
-        .query("users")
-        .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-        .first();
+      // Shared with getCurrentUserRecord so the two cannot disagree about who
+      // the caller is. See resolveUserBySubject for what identity.subject means
+      // while both auth providers are registered.
+      const user = await resolveUserBySubject(ctx, identity.subject);
       if (!user) return null;
       const customRole = user.customRoleId
         ? await ctx.db.get(user.customRoleId)
