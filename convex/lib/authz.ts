@@ -1,5 +1,6 @@
 import { createServerError, requireIdentity } from "./errorUtils";
 import { isOwnerEmail } from "./owner";
+import { resolveUserBySubject } from "./subjectResolution";
 import {
   PERMISSION_VALUES,
   PRIVILEGED_INVITATION_ROLES,
@@ -71,12 +72,17 @@ export const logAuditEvent = async (
   });
 };
 
+/**
+ * Re-exported so call sites keep importing identity helpers from one place. The
+ * implementation lives in ./subjectResolution.ts, import-free, so it can be
+ * tested without the Convex server runtime — see the comment there for what
+ * `identity.subject` means while both providers are registered.
+ */
+export { resolveUserBySubject };
+
 export const getCurrentUserRecord = async (ctx: any) => {
   const identity = await requireIdentity(ctx);
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
-    .first();
+  const user = await resolveUserBySubject(ctx, identity.subject);
 
   if (!user) {
     throw createServerError(
