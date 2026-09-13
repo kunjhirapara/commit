@@ -7,6 +7,10 @@ import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
 import { getValidatedServerEnv } from "@/lib/env";
 import { siteUrl } from "@/lib/siteUrl";
+import {
+  buildOrganizationSchema,
+  buildSoftwareApplicationSchema,
+} from "@/lib/seo/structuredData";
 
 /**
  * The body face, self-hosted at build time.
@@ -45,8 +49,10 @@ const geistMono = localFont({
   display: "swap",
 });
 
+// 152 characters. Google truncates the snippet around 155-160, so the previous
+// 169-character version lost "for the debrief" in the SERP anyway.
 const siteDescription =
-  "Run technical interviews end to end: HD video, a shared code editor, and a sandboxed runner for JavaScript, Python and Java — plus structured scorecards for the debrief.";
+  "Run technical interviews end to end: HD video, a shared code editor, and a sandboxed runner for JavaScript, Python and Java, plus structured scorecards.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
@@ -70,6 +76,11 @@ export const metadata: Metadata = {
     description: siteDescription,
   },
   robots: { index: true, follow: true },
+  // Without this the live HTML had no rel="canonical" at all, so any URL that
+  // reaches this page — a tracking parameter, a trailing slash variant — is a
+  // separate document as far as a crawler is concerned. Resolved against
+  // metadataBase, so "/" is the site root rather than a relative path.
+  alternates: { canonical: "/" },
 };
 
 /**
@@ -88,6 +99,27 @@ export default function RootLayout({
   return (
     <ConvexClerkProvider>
       <html lang="en" suppressHydrationWarning>
+        <head>
+          {/*
+            JSON-LD for crawlers and AI search engines. The latter do not rank
+            pages, they cite sources, and structured data is how one learns what
+            this product is without inferring it from marketing prose.
+
+            dangerouslySetInnerHTML is the documented way to emit JSON-LD in
+            React: the content is a JSON string built from our own constants,
+            never user input, and React would otherwise HTML-escape the quotes
+            into something no parser accepts.
+          */}
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify([
+                buildOrganizationSchema(siteUrl),
+                buildSoftwareApplicationSchema(siteUrl),
+              ]),
+            }}
+          />
+        </head>
         <body
           className={`${jakartaSans.variable} ${geistMono.variable} antialiased`}>
           <ThemeProvider
