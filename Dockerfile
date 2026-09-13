@@ -33,6 +33,22 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME="0.0.0.0"
 
+# Redeclared because ARGs do not cross build stages, and needed at RUNTIME here
+# rather than at build time.
+#
+# HOSTNAME above is the bind address, and behind the VM's nginx it is also what
+# Auth.js resolves the request origin to, because that proxy does not forward
+# the Host header. Without AUTH_URL, every OAuth redirect and error URL Auth.js
+# builds comes out as https://0.0.0.0:3000/... which the browser cannot reach,
+# so a failed sign-in lands on ERR_ADDRESS_INVALID instead of on our sign-in
+# page with the reason on it.
+#
+# Defaulting it from the build arg means this works behind any proxy with no
+# extra variable to set, which is the fix docs/HANDOFF.md prefers over depending
+# on `proxy_set_header Host $host`. docker-compose.yml can still override it.
+ARG NEXT_PUBLIC_APP_URL
+ENV AUTH_URL=$NEXT_PUBLIC_APP_URL
+
 # Required so /api/execute can spawn ephemeral runtime containers via the
 # mounted /var/run/docker.sock. Without this the spawn fails with ENOENT.
 RUN apk add --no-cache docker-cli
