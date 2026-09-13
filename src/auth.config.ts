@@ -30,6 +30,35 @@ import { pickVerifiedGitHubEmail, type GitHubEmail } from "@/lib/auth/githubEmai
  * middleware only ever *reads* an existing session.
  */
 
+/**
+ * WHY `allowDangerousEmailAccountLinking` IS SET, AND WHAT MAKES IT SAFE
+ *
+ * Without it, Auth.js refuses outright to attach an OAuth identity to an
+ * existing account with the same email, and answers OAuthAccountNotLinked. That
+ * is the correct default for an app with no opinion of its own — but it is
+ * fatal here, because every account that predates this migration already exists
+ * with an email address, so every one of those users would be permanently
+ * locked out of Google and GitHub sign-in.
+ *
+ * The flag is named "dangerous" because Auth.js cannot tell whether the
+ * provider verified the address. Turning it on alone would mean anyone able to
+ * add a victim's address to their own Google or GitHub account inherits the
+ * victim's Commit account and its role.
+ *
+ * What makes it safe is that we answer that question ourselves, before Auth.js
+ * acts on it. The `signIn` callback in src/auth.ts applies
+ * `mayLinkToExistingUser`, which refuses unless the provider positively asserts
+ * the address is verified — and @auth/core runs `handleAuthorized` (the signIn
+ * callback) before `handleLoginOrRegister` (the linking), so returning false
+ * there is a prevention rather than a post-mortem.
+ *
+ * These two are therefore a pair. Removing the signIn callback, or weakening
+ * mayLinkToExistingUser, silently turns this flag back into what its name says
+ * it is. The GitHub userinfo override below exists for the same reason: the
+ * stock provider discards the verified flag, and a guess in that argument
+ * defeats the guard entirely.
+ */
+
 const GITHUB_API = "https://api.github.com";
 
 export const authConfig = {
@@ -40,9 +69,11 @@ export const authConfig = {
   providers: [
     // Google is an OIDC provider, so `email_verified` arrives as a standard
     // claim and needs no help.
-    Google,
+    Google({ allowDangerousEmailAccountLinking: true }),
 
     GitHub({
+      allowDangerousEmailAccountLinking: true,
+
       userinfo: {
         url: `${GITHUB_API}/user`,
 
