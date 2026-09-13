@@ -34,6 +34,32 @@ services:
       SMTP_PASS: ${SMTP_PASS}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL}
 
+      # Auth.js — authentication
+      #
+      # Every one of these has to be listed here, not merely present in the VM's
+      # .env: compose passes nothing to a container that is not named in this
+      # block. Their absence is invisible from outside — the app boots, serves
+      # every page and reports healthy, and nobody can sign in.
+      AUTH_SECRET: ${AUTH_SECRET}
+      # Must be the SAME value as `npx convex env set AUTH_ADAPTER_SECRET` on the
+      # Convex deployment. A mismatch rejects every adapter call with a bare
+      # "Unauthorized", which surfaces as sign-in failing for everyone.
+      AUTH_ADAPTER_SECRET: ${AUTH_ADAPTER_SECRET}
+      AUTH_JWT_PRIVATE_KEY: ${AUTH_JWT_PRIVATE_KEY}
+      AUTH_JWT_PUBLIC_KEY: ${AUTH_JWT_PUBLIC_KEY}
+      AUTH_JWT_KID: ${AUTH_JWT_KID}
+      AUTH_GOOGLE_ID: ${AUTH_GOOGLE_ID}
+      AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET}
+      AUTH_GITHUB_ID: ${AUTH_GITHUB_ID}
+      AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET}
+      # Overrides the origin Auth.js builds redirect and error URLs from.
+      #
+      # The image already defaults this to the NEXT_PUBLIC_APP_URL it was built
+      # with, so it normally needs no value here. Left overridable because the
+      # image default is baked at build time and a deployment may need to differ
+      # from it without a rebuild.
+      AUTH_URL: ${AUTH_URL:-}
+
       # App
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}

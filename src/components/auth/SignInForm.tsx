@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { GithubIcon, GoogleIcon } from "@/components/auth/ProviderIcons";
+import { describeSignInError } from "@/lib/auth/signInError";
 
 /**
  * The sign-in form.
@@ -30,7 +31,20 @@ const GENERIC_CREDENTIAL_ERROR =
 
 type Mode = "password" | "link";
 
-export function SignInForm({ redirectTo }: { redirectTo: string }) {
+export function SignInForm({
+  redirectTo,
+  /**
+   * Auth.js error code from the query string.
+   *
+   * `pages.error` points back at this page, so a failed OAuth round trip
+   * returns here as `?error=<code>` and nothing else. Rendering it is what
+   * separates "the provider refused" from "the button did nothing".
+   */
+  errorCode,
+}: {
+  redirectTo: string;
+  errorCode?: string | null;
+}) {
   const [mode, setMode] = useState<Mode>("password");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,6 +53,15 @@ export function SignInForm({ redirectTo }: { redirectTo: string }) {
   const [linkSent, setLinkSent] = useState(false);
 
   const busy = pending !== null;
+
+  // An error from the redirect, shown until the user does something that could
+  // clear it. A local error from a submit takes precedence, because it is the
+  // more recent thing that happened.
+  const inbound = describeSignInError(errorCode);
+  const shownError = error ?? inbound?.message ?? null;
+  // Nothing here can succeed while the server is misconfigured, so the form is
+  // not offered as though it might.
+  const disableSubmit = busy || inbound?.retryable === false;
 
   const startOAuth = async (provider: "google" | "github") => {
     setError(null);
@@ -137,7 +160,7 @@ export function SignInForm({ redirectTo }: { redirectTo: string }) {
           variant="outline"
           size="lg"
           className="w-full justify-center"
-          disabled={busy}
+          disabled={disableSubmit}
           onClick={() => startOAuth("google")}>
           <GoogleIcon className="size-4" aria-hidden="true" />
           Continue with Google
@@ -147,7 +170,7 @@ export function SignInForm({ redirectTo }: { redirectTo: string }) {
           variant="outline"
           size="lg"
           className="w-full justify-center"
-          disabled={busy}
+          disabled={disableSubmit}
           onClick={() => startOAuth("github")}>
           <GithubIcon className="size-4" aria-hidden="true" />
           Continue with GitHub
@@ -199,15 +222,19 @@ export function SignInForm({ redirectTo }: { redirectTo: string }) {
           </div>
         )}
 
-        {error && (
+        {shownError && (
           // role="alert" so it is announced. A sighted user sees it appear; a
           // screen-reader user otherwise gets no indication the submit failed.
           <p role="alert" className="text-sm text-destructive">
-            {error}
+            {shownError}
           </p>
         )}
 
-        <Button type="submit" size="lg" className="w-full justify-center" disabled={busy}>
+        <Button
+          type="submit"
+          size="lg"
+          className="w-full justify-center"
+          disabled={disableSubmit}>
           {busy && <LoaderCircleIcon className="size-4 animate-spin" aria-hidden="true" />}
           {mode === "password" ? "Sign in" : "Email me a sign-in link"}
         </Button>

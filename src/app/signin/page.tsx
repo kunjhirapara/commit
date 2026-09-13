@@ -19,7 +19,12 @@ function SignInContent() {
   // page the user has just typed their password into.
   const redirectTo = safeRedirectTarget(searchParams.get("redirect_url"));
 
-  return <SignInForm redirectTo={redirectTo} />;
+  // Auth.js sends failures back here as ?error=<code>, because pages.error
+  // points at this route. Without passing it on, the page renders identically
+  // to a fresh visit and the failure is invisible.
+  return (
+    <SignInForm redirectTo={redirectTo} errorCode={searchParams.get("error")} />
+  );
 }
 
 export default function SignInPage() {
