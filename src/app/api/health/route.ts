@@ -30,7 +30,7 @@ export async function GET() {
 
     if (!auth.ready) {
       console.error(
-        `[health] auth is not configured; sign-in will fail. Missing: ${auth.missing.join(", ")}`,
+        `[health] auth is not configured; sign-in will fail: ${auth.problems.join("; ")}`,
       );
     }
 

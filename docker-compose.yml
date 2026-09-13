@@ -52,13 +52,24 @@ services:
       AUTH_GOOGLE_SECRET: ${AUTH_GOOGLE_SECRET}
       AUTH_GITHUB_ID: ${AUTH_GITHUB_ID}
       AUTH_GITHUB_SECRET: ${AUTH_GITHUB_SECRET}
-      # Overrides the origin Auth.js builds redirect and error URLs from.
+      # The origin Auth.js builds redirect and error URLs from.
       #
-      # The image already defaults this to the NEXT_PUBLIC_APP_URL it was built
-      # with, so it normally needs no value here. Left overridable because the
-      # image default is baked at build time and a deployment may need to differ
-      # from it without a rebuild.
-      AUTH_URL: ${AUTH_URL:-}
+      # MUST NOT be empty. `${AUTH_URL:-}` was the obvious way to make this
+      # optional and it took the whole auth system down: an empty string is
+      # still a set variable, so it both shadows the image's own default and
+      # stops @auth/core's
+      #
+      #   trustHost ??= !!(AUTH_URL ?? AUTH_TRUST_HOST ?? VERCEL ?? ...)
+      #
+      # at the first term -- `??` only falls through on null/undefined, and
+      # `!!""` is false. trustHost:false makes every Auth.js route answer
+      # UntrustedHost, rendered as "There was a problem with the server
+      # configuration", which reads like a missing secret rather than an empty
+      # one.
+      #
+      # Defaulting to NEXT_PUBLIC_APP_URL keeps it overridable without ever
+      # being blank.
+      AUTH_URL: ${AUTH_URL:-$NEXT_PUBLIC_APP_URL}
 
       # App
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
