@@ -277,6 +277,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
      * `handleLoginOrRegister` in the @auth/core callback route, which is what
      * makes returning false here a prevention rather than a post-mortem.
      *
+     * THIS FUNCTION IS LOAD-BEARING. Both providers in src/auth.config.ts set
+     * `allowDangerousEmailAccountLinking: true`, which switches off Auth.js's
+     * own refusal to attach an OAuth identity to an existing account. That flag
+     * is only safe because this callback answers the question Auth.js cannot:
+     * whether the provider actually verified the address. Delete or weaken this
+     * and the flag becomes exactly what its name says.
+     *
      * The rule itself lives in src/lib/auth/linking.ts with its own tests. This
      * function's only job is to feed it honest inputs — which is also why
      * src/auth.config.ts overrides the GitHub userinfo request. The stock
