@@ -28,8 +28,12 @@ function MeetingModal({
 
   const handleStart = async () => {
     if (isJoinMeeting) {
-      const meetingId = meetingUrl.split("/").pop();
-      if (meetingId) joinMeeting(meetingId);
+      // Passed through even when empty — a URL ending in "/" yields "", and
+      // the guard that used to sit here turned that into a button that
+      // silently did nothing. joinMeeting reports it instead.
+      const meetingId = meetingUrl.split("/").pop() ?? "";
+
+      joinMeeting(meetingId);
       setMeetingUrl("");
       onClose();
       return;
