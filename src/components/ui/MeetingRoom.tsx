@@ -58,6 +58,7 @@ import { useProctoring } from "@/hooks/useProctoring";
 import { useFullscreenGuard } from "@/hooks/useFullscreenGuard";
 import FullscreenGuardOverlay from "./FullscreenGuardOverlay";
 import { resolveEnforcement } from "@/lib/proctoring/enforcement";
+import { getHostControlsAvailability } from "@/lib/hostControls";
 import IntegrityReport from "@/components/interviews/IntegrityReport";
 import { cn, getInterviewEndTimeMs } from "@/lib/utils";
 import { getDisplayErrorMessage, logError } from "@/lib/errors";
@@ -203,6 +204,26 @@ function MeetingRoom({
         isRecruiter ||
         interview.interviewerIds.includes(currentUser.clerkId) ||
         interview.interviewerIds.includes(localParticipant?.userId ?? "")));
+  /**
+   * The people removal can target: everyone but the local participant, and only
+   * those Stream has given a userId.
+   */
+  const removableParticipants = useMemo(
+    () => participants.filter((p) => !p.isLocalParticipant && p.userId),
+    [participants],
+  );
+
+  /**
+   * One answer to "what may this host do", shared by the menu and the handlers.
+   * They used to decide separately and disagree — see src/lib/hostControls.ts.
+   */
+  const hostControls = getHostControlsAvailability({
+    isHost,
+    canMuteUsers,
+    canBlockUsers,
+    removableParticipantCount: removableParticipants.length,
+  });
+
   /**
    * Integrity monitoring runs for the candidate and nobody else.
    *
@@ -443,21 +464,43 @@ function MeetingRoom({
   }
 
   /* ── host actions ── */
+
+  /**
+   * Best-effort audit trail, matching how participant join/leave is logged
+   * above: a failed write must never turn a host action that succeeded into an
+   * error toast, and an ad-hoc call with no interviews row simply has nothing
+   * to write against.
+   */
+  const logHostAction = (event: {
+    type: string;
+    detail: string;
+    metadata?: string;
+  }) => {
+    if (!interview) return;
+
+    void logSessionEvent({
+      interviewId: interview._id,
+      streamCallId: interview.streamCallId,
+      ...event,
+    }).catch(() => undefined);
+  };
+
   const handleMuteAll = async () => {
-    if (!call || !interview) return;
+    // Only `call` is required. An instant meeting has no interviews row, and
+    // refusing to mute because there is nowhere to file the audit entry is what
+    // made this button inert — see src/lib/hostControls.ts.
+    if (!call) return;
     setHostActionLoading("mute");
     try {
       await call.muteAllUsers("audio");
-      await logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
+      toast.success("Muted all participants.");
+      logHostAction({
         type: "host.muted_all",
         detail: "Muted all participants",
       });
-      toast.success("Muted all participants.");
     } catch (error) {
       logError("MeetingRoom.handleMuteAll", error, {
-        interviewId: interview._id,
+        interviewId: interview?._id,
       });
       toast.error(getDisplayErrorMessage(error, "Unable to mute everyone."));
     } finally {
@@ -466,21 +509,19 @@ function MeetingRoom({
   };
 
   const handleRemoveParticipant = async (userId: string) => {
-    if (!call || !interview) return;
+    if (!call) return;
     setHostActionLoading("remove");
     try {
       await call.blockUser(userId);
-      await logSessionEvent({
-        interviewId: interview._id,
-        streamCallId: interview.streamCallId,
+      toast.success("Participant removed from the session.");
+      logHostAction({
         type: "host.removed_participant",
         detail: userId,
         metadata: JSON.stringify({ participantId: userId }),
       });
-      toast.success("Participant removed from the session.");
     } catch (error) {
       logError("MeetingRoom.handleRemoveParticipant", error, {
-        interviewId: interview._id,
+        interviewId: interview?._id,
         participantId: userId,
       });
       toast.error(
@@ -712,7 +753,7 @@ function MeetingRoom({
                 {/* Host controls. Requires both the app-level role and the
                     Stream capability that authorises the request — the role
                     alone rendered a menu whose every action Stream rejected. */}
-                {isHost && (canMuteUsers || canBlockUsers) && (
+                {hostControls.anyAvailable && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -738,7 +779,7 @@ function MeetingRoom({
                       </DropdownMenuLabel>
                       <DropdownMenuSeparator />
 
-                      {canMuteUsers && (
+                      {hostControls.muteAll && (
                         <DropdownMenuItem
                           onClick={handleMuteAll}
                           disabled={!!hostActionLoading}
@@ -751,17 +792,13 @@ function MeetingRoom({
                         </DropdownMenuItem>
                       )}
 
-                      {canBlockUsers &&
-                        participants.filter((p) => !p.isLocalParticipant)
-                          .length > 0 && (
+                      {hostControls.removeParticipants && (
                         <>
                           <DropdownMenuSeparator />
                           <DropdownMenuLabel className="text-xs text-muted-foreground">
                             Remove participant
                           </DropdownMenuLabel>
-                          {participants
-                            .filter((p) => !p.isLocalParticipant && p.userId)
-                            .map((p) => (
+                          {removableParticipants.map((p) => (
                               <DropdownMenuItem
                                 key={p.sessionId}
                                 onClick={() =>

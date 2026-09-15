@@ -2,6 +2,8 @@ import { useRouter } from "next/navigation";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { toast } from "sonner";
 
+import { resolveJoinTarget } from "@/lib/meetingNavigation";
+
 const useMeetingActions = () => {
   const router = useRouter();
   const client = useStreamVideoClient();
@@ -30,10 +32,20 @@ const useMeetingActions = () => {
     router.push(`/meeting/${call.id}`);
   };
 
+  /**
+   * Navigation only, and deliberately not gated on `client`.
+   *
+   * The Stream client belongs to the page being left, not the one being opened:
+   * /meeting/[id] mounts its own provider and waits for the connection there.
+   * Requiring it here meant the button failed on the home page while pasting
+   * the same link worked. See src/lib/meetingNavigation.ts.
+   */
   const joinMeeting = (callId: string) => {
-    if (!client)
-      return toast.error("Failed to join meeting. Please try again.");
-    router.push(`/meeting/${callId}`);
+    const target = resolveJoinTarget(callId);
+
+    if (!target.ok) return toast.error(target.message);
+
+    router.push(target.href);
   };
   return { createInstantMeeting, joinMeeting };
 };
