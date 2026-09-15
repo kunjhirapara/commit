@@ -420,10 +420,72 @@ export const getMyNotifications = query({
       .order("desc")
       .take(75);
 
-    return notifications.filter(
+    const inAppNotifications = notifications.filter(
       (notification) =>
         notification.channel === undefined || notification.channel === "in_app",
     );
+
+    /**
+     * Each row is joined to the slice of its interview the UI needs to offer a
+     * destination — chiefly `streamCallId`, without which "Join interview"
+     * cannot be built at all.
+     *
+     * Read once per interview rather than once per notification: a scheduled
+     * round fans out a create, a reminder and a feedback nudge, so the same
+     * interview is referenced several times in one page of results.
+     *
+     * On access: the recipient was a participant of this interview when the
+     * notification was written, and the title and time are already in the
+     * message text on the row. `streamCallId` is the one genuinely new field,
+     * and it is not a capability — joining requires a Stream token minted for
+     * the caller's own `streamUserId`, and Stream enforces call membership. So
+     * this hands out a destination, not access to it.
+     *
+     * `resolveNotificationActions` on the client still filters destinations by
+     * role, and every Convex function behind those pages re-checks regardless.
+     */
+    const interviewIds = Array.from(
+      new Set(
+        inAppNotifications
+          .map((notification) => notification.interviewId)
+          .filter((interviewId): interviewId is NonNullable<typeof interviewId> =>
+            Boolean(interviewId),
+          ),
+      ),
+    );
+
+    const interviewEntries = await Promise.all(
+      interviewIds.map(async (interviewId) => {
+        const interview = await ctx.db.get(interviewId);
+        if (!interview) return null;
+
+        return [
+          interviewId,
+          {
+            streamCallId: interview.streamCallId,
+            status: interview.status,
+            title: interview.title,
+            startTime: interview.scheduledStartTime ?? interview.startTime,
+            endTime: interview.scheduledEndTime ?? interview.endTime ?? null,
+          },
+        ] as const;
+      }),
+    );
+
+    const interviewsById = new Map(
+      interviewEntries.filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== null,
+      ),
+    );
+
+    return inAppNotifications.map((notification) => ({
+      ...notification,
+      // Null rather than undefined so the client can tell "no interview
+      // attached" from "the interview was deleted or purged by retention".
+      interview: notification.interviewId
+        ? interviewsById.get(notification.interviewId) ?? null
+        : null,
+    }));
   },
 });
 
