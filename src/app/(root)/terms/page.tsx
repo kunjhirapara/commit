@@ -13,6 +13,9 @@ export const metadata: Metadata = {
   title: "Terms of Service",
   description:
     "The terms that govern use of Commit, including what it does not promise and what you may not do with it.",
+  // The layout's canonical is "/", which every page inherits unless it
+  // overrides it, and pointed Google at the homepage instead of this page.
+  alternates: { canonical: "/terms" },
 };
 
 /**
