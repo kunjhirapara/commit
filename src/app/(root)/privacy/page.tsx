@@ -15,6 +15,7 @@ export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
     "Who runs Commit, exactly what it stores, who else processes it, how long it is kept, and how to have it deleted.",
+  alternates: { canonical: "/privacy" },
 };
 
 /**

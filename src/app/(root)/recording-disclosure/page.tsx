@@ -5,6 +5,7 @@ import { LEGAL_VERSION } from "@/lib/legal";
 export const metadata: Metadata = {
   title: "Recording Disclosure",
   description: "How interview recordings are captured, disclosed and retained.",
+  alternates: { canonical: "/recording-disclosure" },
 };
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
